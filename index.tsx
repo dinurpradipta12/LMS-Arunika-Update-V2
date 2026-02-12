@@ -35,6 +35,20 @@ import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types
 import { initialCourses, initialMentor, initialBranding } from './mockData';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
 
+// --- Helper for Persistence ---
+const getStorageItem = (key: string, defaultValue: any) => {
+  const saved = localStorage.getItem(key);
+  try {
+    return saved ? JSON.parse(saved) : defaultValue;
+  } catch (e) {
+    return defaultValue;
+  }
+};
+
+const setStorageItem = (key: string, value: any) => {
+  localStorage.setItem(key, JSON.stringify(value));
+};
+
 // --- Components ---
 
 const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void; label?: string; children?: React.ReactNode; variant?: 'default' | 'minimal' }> = ({ value, onChange, label, children, variant = 'default' }) => {
@@ -610,11 +624,9 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                <p>Pilih materi di samping untuk mulai belajar</p>
             </div>
           )}
-          {/* Box "Tentang Kursus Ini" dihilangkan sesuai permintaan */}
         </div>
 
         <div className="lg:col-span-1 space-y-6">
-          {/* Card Mentor Updated: Photo Inside & New Button Label */}
           <Card className="flex flex-col items-center p-6 text-center featured">
              <img 
                src={mentor.photo} 
@@ -709,11 +721,30 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
 // --- App Entry ---
 const App: React.FC = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [courses, setCourses] = useState<Course[]>(initialCourses);
-  const [mentor, setMentor] = useState<Mentor>(initialMentor);
-  const [branding, setBranding] = useState<Branding>(initialBranding);
-  const [supabase, setSupabase] = useState<SupabaseConfig>({ url: '', anonKey: '' });
+  const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
+  const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
+  const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', initialMentor));
+  const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
+  const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
+
+  // Listen for changes and persist
+  useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
+  useEffect(() => setStorageItem('courses', courses), [courses]);
+  useEffect(() => setStorageItem('mentor', mentor), [mentor]);
+  useEffect(() => setStorageItem('branding', branding), [branding]);
+  useEffect(() => setStorageItem('supabase', supabase), [supabase]);
+
+  // Handle updates from other tabs (critical for Share Link / Public View consistency)
+  useEffect(() => {
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === 'branding' && e.newValue) setBranding(JSON.parse(e.newValue));
+      if (e.key === 'courses' && e.newValue) setCourses(JSON.parse(e.newValue));
+      if (e.key === 'mentor' && e.newValue) setMentor(JSON.parse(e.newValue));
+      if (e.key === 'supabase' && e.newValue) setSupabase(JSON.parse(e.newValue));
+    };
+    window.addEventListener('storage', handleStorageChange);
+    return () => window.removeEventListener('storage', handleStorageChange);
+  }, []);
 
   const updateCourse = (updated: Course) => {
     setCourses(prev => prev.map(c => c.id === updated.id ? updated : c));
