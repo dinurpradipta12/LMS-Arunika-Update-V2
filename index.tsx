@@ -13,15 +13,12 @@ import {
   Video, 
   FileText, 
   Globe,
-  Linkedin,
   ExternalLink,
   ChevronRight,
   Database,
   X,
   Upload,
   Link as LinkIcon,
-  Camera,
-  Music,
   Bold,
   Italic,
   List,
@@ -29,9 +26,7 @@ import {
   Copy,
   Wifi,
   WifiOff,
-  CloudUpload,
   Save,
-  Instagram,
   RefreshCw,
   Check
 } from 'lucide-react';
@@ -49,6 +44,7 @@ import { Button, Card, Input, Textarea, Badge } from './components/UI';
 // --- Utils ---
 const encodeConfig = (cfg: SupabaseConfig) => {
   try {
+    if (!cfg.url || !cfg.anonKey) return '';
     return btoa(JSON.stringify(cfg));
   } catch (e) {
     return '';
@@ -57,6 +53,7 @@ const encodeConfig = (cfg: SupabaseConfig) => {
 
 const decodeConfig = (str: string): SupabaseConfig | null => {
   try {
+    if (!str) return null;
     return JSON.parse(atob(str));
   } catch (e) {
     return null;
@@ -254,8 +251,9 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
 
   const generateShareLink = (courseId: string) => {
     const cfgStr = encodeConfig(supabase);
-    const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    // Link format: #/course/:id?cfg=BASE64
+    const baseUrl = window.location.origin + window.location.pathname;
+    // Link structure: site.com/#/course/ID?cfg=BASE64
+    // This format works best with HashRouter and React Router
     return `${baseUrl}#/course/${courseId}?cfg=${cfgStr}`;
   };
 
@@ -289,7 +287,7 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
                 onClick={() => {
                   const url = generateShareLink(course.id);
                   navigator.clipboard.writeText(url);
-                  alert('Link publik (cross-device ready) berhasil disalin!');
+                  alert('Link publik (Cross-Device Realtime) berhasil disalin!');
                 }} 
                 variant="green" className="text-xs col-span-2" icon={Share2}
               >
@@ -316,17 +314,12 @@ const Settings: React.FC<{
 
   const sqlScript = `
 -- SETUP DATABASE ARUNIKA LMS (REAL-TIME CONFIG)
--- Jalankan di SQL Editor Supabase Anda
-
--- 1. Tabel Branding
 CREATE TABLE IF NOT EXISTS public.branding (
   id TEXT PRIMARY KEY DEFAULT 'config',
   site_name TEXT NOT NULL,
   logo TEXT,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
--- 2. Tabel Mentor
 CREATE TABLE IF NOT EXISTS public.mentor (
   id TEXT PRIMARY KEY DEFAULT 'profile',
   name TEXT NOT NULL,
@@ -336,8 +329,6 @@ CREATE TABLE IF NOT EXISTS public.mentor (
   socials JSONB,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
--- 3. Tabel Courses
 CREATE TABLE IF NOT EXISTS public.courses (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -349,8 +340,6 @@ CREATE TABLE IF NOT EXISTS public.courses (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
--- 4. Enable Realtime Replication
 ALTER PUBLICATION supabase_realtime ADD TABLE public.branding;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.mentor;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
@@ -371,7 +360,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
     setTimeout(() => {
       setIsConnecting(false);
       setDbStatus('connected');
-      alert('Terhubung ke Supabase! Data disinkronkan realtime.');
+      alert('Terhubung ke Supabase! Perubahan akan langsung sinkron secara realtime.');
     }, 1500);
   };
 
@@ -658,8 +647,10 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   if (isInitialLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5]">
-        <RefreshCw size={64} className="text-[#8B5CF6] animate-spin mb-4" />
-        <p className="font-extrabold text-xl animate-pulse">Menghubungkan ke Arunika LMS...</p>
+        <div className="bg-white p-12 rounded-[40px] border-4 border-[#1E293B] hard-shadow flex flex-col items-center gap-6">
+          <RefreshCw size={64} className="text-[#8B5CF6] animate-spin" />
+          <p className="font-extrabold text-2xl animate-pulse text-[#1E293B]">Menghubungkan Database...</p>
+        </div>
       </div>
     );
   }
@@ -667,10 +658,14 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   if (!course) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5] p-8 text-center">
-        <X size={64} className="text-red-400 mb-4" />
-        <h1 className="text-3xl font-extrabold text-[#1E293B] mb-2">Materi Tidak Ditemukan</h1>
-        <p className="text-[#64748B] max-w-md">Pastikan link yang Anda gunakan benar atau tanyakan kembali kepada pengelola kelas.</p>
-        <Link to="/" className="mt-8 text-[#8B5CF6] font-bold border-b-2 border-[#8B5CF6]">Kembali ke Beranda</Link>
+        <Card className="max-w-md p-12 flex flex-col items-center">
+          <div className="bg-red-50 p-6 rounded-full border-4 border-[#1E293B] mb-6">
+            <X size={64} className="text-red-500" />
+          </div>
+          <h1 className="text-3xl font-extrabold text-[#1E293B] mb-4">Materi Tidak Ditemukan</h1>
+          <p className="text-[#64748B] mb-8 font-bold">Pastikan link Anda benar atau hubungi administrator untuk memastikan materi telah dipublikasi.</p>
+          <Link to="/" className="text-[#8B5CF6] font-extrabold border-b-4 border-[#8B5CF6] text-xl pb-1 hover:text-[#1E293B] hover:border-[#1E293B] transition-all">Kembali ke Beranda</Link>
+        </Card>
       </div>
     );
   }
@@ -857,18 +852,22 @@ const App: React.FC = () => {
   
   const location = useLocation();
 
-  // --- Initial Config Recovery from URL (Public View) ---
+  // --- Initial Recovery for Realtime Sync via URL (Cross-Device Support) ---
   useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const cfgStr = params.get('cfg');
-    if (cfgStr) {
-      const decoded = decodeConfig(cfgStr);
+    // Memeriksa parameter cfg di URL segera setelah aplikasi dimuat
+    const searchParams = new URLSearchParams(location.search);
+    const cfgParam = searchParams.get('cfg');
+    
+    if (cfgParam) {
+      const decoded = decodeConfig(cfgParam);
       if (decoded && decoded.url && decoded.anonKey) {
-        console.log("Supabase config recovered from URL");
+        console.log("Supabase config recovered from URL share");
         setSupabase(decoded);
+        // Penting: pastikan loading tetap true saat konfigurasi baru ditemukan
+        setIsInitialLoading(true);
       }
     }
-  }, [location]);
+  }, [location.search]);
 
   // Persistence to LocalStorage (Immediate feedback)
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
@@ -931,6 +930,7 @@ const App: React.FC = () => {
       setIsInitialLoading(false);
       return;
     }
+    
     const client = createClient(supabase.url, supabase.anonKey);
     
     const initialFetch = async () => {
@@ -962,14 +962,12 @@ const App: React.FC = () => {
     
     // Subscribe to realtime updates for cross-device sync
     const sub = client.channel('all_changes').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
-       // Hanya update jika kita BUKAN admin yang sedang push data (mencegah loop/reset)
        if (!isSyncingRef.current) {
           if (payload.table === 'branding') {
             setBranding(prev => (prev.logo !== payload.new.logo || prev.siteName !== payload.new.site_name) ? { siteName: payload.new.site_name, logo: payload.new.logo } : prev);
           }
           if (payload.table === 'mentor') setMentor(prev => JSON.stringify(prev) !== JSON.stringify(payload.new) ? payload.new : prev);
           if (payload.table === 'courses') {
-             // Jika ada perubahan kursus, re-fetch list untuk memastikan urutan dan data terbaru
              client.from('courses').select('*').then(({data}) => {
                 if(data) {
                   const mapped = data.map((item: any) => ({
