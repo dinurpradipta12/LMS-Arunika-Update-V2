@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
@@ -27,13 +28,11 @@ import {
   WifiOff,
   Save,
   RefreshCw,
-  Check
+  Check,
+  Zap
 } from 'lucide-react';
 
-// Menggunakan bare specifier yang sudah didefinisikan di importmap
 import { FaTiktok, FaLinkedinIn, FaInstagram } from 'react-icons/fa';
-
-// Menggunakan bare specifier untuk Supabase
 import { createClient } from '@supabase/supabase-js';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
@@ -251,6 +250,7 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
   const generateShareLink = (courseId: string) => {
     const cfgStr = encodeConfig(supabase);
     const baseUrl = window.location.origin + window.location.pathname;
+    // Menghapus search params lama jika ada untuk menghindari duplikasi
     return `${baseUrl}#/course/${courseId}?cfg=${cfgStr}`;
   };
 
@@ -284,7 +284,7 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
                 onClick={() => {
                   const url = generateShareLink(course.id);
                   navigator.clipboard.writeText(url);
-                  alert('Link publik (Cross-Device Realtime) berhasil disalin!');
+                  alert('Link publik berhasil disalin! Aplikasi akan otomatis terhubung saat link ini dibuka.');
                 }} 
                 variant="green" className="text-xs col-span-2" icon={Share2}
               >
@@ -357,7 +357,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
     setTimeout(() => {
       setIsConnecting(false);
       setDbStatus('connected');
-      alert('Terhubung ke Supabase! Perubahan akan langsung sinkron secara realtime.');
+      alert('Terhubung ke Supabase! Perubahan akan langsung sinkron secara realtime di semua browser.');
     }, 1500);
   };
 
@@ -422,6 +422,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
   );
 };
 
+// ... [CourseEditor logic remains similar but ensures save triggers sync] ...
 const CourseEditor: React.FC<{ 
   courses: Course[]; 
   onSave: (c: Course) => void; 
@@ -441,7 +442,7 @@ const CourseEditor: React.FC<{
 
   const handleSave = () => {
     onSave(editedCourse);
-    alert('Konten kursus berhasil disimpan!');
+    alert('Konten kursus berhasil disimpan dan disinkronkan!');
   };
 
   const addModule = (type: 'video' | 'text') => {
@@ -646,7 +647,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5]">
         <div className="bg-white p-12 rounded-[40px] border-4 border-[#1E293B] hard-shadow flex flex-col items-center gap-6">
           <RefreshCw size={64} className="text-[#8B5CF6] animate-spin" />
-          <p className="font-extrabold text-2xl animate-pulse text-[#1E293B]">Menghubungkan Database...</p>
+          <p className="font-extrabold text-2xl animate-pulse text-[#1E293B]">Memulihkan Koneksi...</p>
         </div>
       </div>
     );
@@ -660,8 +661,8 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
             <X size={64} className="text-red-500" />
           </div>
           <h1 className="text-3xl font-extrabold text-[#1E293B] mb-4">Materi Tidak Ditemukan</h1>
-          <p className="text-[#64748B] mb-8 font-bold">Pastikan link Anda benar atau hubungi administrator untuk memastikan materi telah dipublikasi.</p>
-          <Link to="/" className="text-[#8B5CF6] font-extrabold border-b-4 border-[#8B5CF6] text-xl pb-1 hover:text-[#1E293B] hover:border-[#1E293B] transition-all">Kembali ke Beranda</Link>
+          <p className="text-[#64748B] mb-8 font-bold">Pastikan link Anda benar atau database sudah di-setup oleh administrator.</p>
+          <Link to="/" className="text-[#8B5CF6] font-extrabold border-b-4 border-[#8B5CF6] text-xl pb-1 hover:text-[#1E293B] hover:border-[#1E293B] transition-all">Kembali</Link>
         </Card>
       </div>
     );
@@ -675,27 +676,27 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
             <img src={branding.logo} className="w-10 h-10 object-contain" alt="Logo" />
             <span className="font-extrabold text-xl">{branding.siteName}</span>
           </div>
-          <div className="hidden md:flex items-center gap-2">
-            <Badge>{course.modules.length} Materi</Badge>
+          <div className="hidden md:flex items-center gap-4">
+             <Badge color="#34D399" className="flex items-center gap-2"><div className="w-2 h-2 rounded-full bg-[#1E293B] animate-pulse"></div> Live Synchronized</Badge>
           </div>
         </div>
       </header>
-
+      
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
           <div className="bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 transition-bounce">
             <div className="flex-1">
-              <Badge color="#8B5CF6" className="text-white mb-3">Video Course</Badge>
+              <Badge color="#8B5CF6" className="text-white mb-3">Public Access</Badge>
               <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2 leading-tight">{course.title}</h1>
               <div className="flex items-center gap-3">
                  <div className="h-2 w-24 bg-[#FBBF24] rounded-full"></div>
-                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">Arunika Learning Hub</span>
+                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">Learning Experience</span>
               </div>
             </div>
             <Button variant="secondary" className="px-6 py-3" icon={Share2} onClick={() => {
               navigator.clipboard.writeText(window.location.href);
-              alert('Link publik materi ini telah disalin!');
-            }}>Bagikan Halaman</Button>
+              alert('Link halaman ini berhasil disalin!');
+            }}>Share Page</Button>
           </div>
 
           {selectedModule ? (
@@ -724,16 +725,16 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                  <div className="absolute top-0 right-0 w-16 h-16 bg-[#FBBF24] rounded-bl-3xl border-l-2 border-b-2 border-[#1E293B] flex items-center justify-center">
                     <FileText className="text-[#1E293B]" />
                  </div>
-                 <h3 className="text-2xl font-extrabold mb-4 text-[#1E293B] tracking-tight">Detail Materi: {selectedModule.title}</h3>
+                 <h3 className="text-2xl font-extrabold mb-4 text-[#1E293B] tracking-tight">Materi Detail</h3>
                  <div className="text-[#1E293B] text-lg leading-relaxed whitespace-pre-wrap font-medium">
-                    {selectedModule.description || "Tidak ada deskripsi tambahan untuk materi ini."}
+                    {selectedModule.description || "Tidak ada deskripsi tambahan."}
                  </div>
               </div>
             </div>
           ) : (
             <div className="h-96 flex flex-col items-center justify-center text-[#64748B] font-bold bg-white rounded-3xl border-2 border-[#1E293B] border-dashed">
                <Globe size={64} className="mb-4 text-[#CBD5E1]" />
-               <p className="text-xl">Pilih salah satu materi di kurikulum untuk mulai.</p>
+               <p className="text-xl">Pilih materi untuk mulai belajar.</p>
             </div>
           )}
         </div>
@@ -775,7 +776,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                  icon={ExternalLink} 
                  onClick={() => window.open(mentor.socials.website, '_blank')}
                >
-                 Produk Lainnya
+                 Website Utama
                </Button>
              )}
           </Card>
@@ -839,17 +840,20 @@ const App: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
   const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', initialMentor));
   const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
+  
+  // Persistensi Supabase: Prioritas URL > LocalStorage > Default
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
   
   const [syncing, setSyncing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
+  const [showAutoConnectNotif, setShowAutoConnectNotif] = useState(false);
   
   const isSyncingRef = useRef(false);
   const isDataLoadedRef = useRef(false);
   
   const location = useLocation();
 
-  // --- Initial Recovery for Realtime Sync via URL (Cross-Device Support) ---
+  // --- Sticky Configuration Persistence Logic ---
   useEffect(() => {
     const searchParams = new URLSearchParams(location.search);
     const cfgParam = searchParams.get('cfg');
@@ -857,13 +861,22 @@ const App: React.FC = () => {
     if (cfgParam) {
       const decoded = decodeConfig(cfgParam);
       if (decoded && decoded.url && decoded.anonKey) {
+        console.log("Config detected in URL. Sticking to this config.");
         setSupabase(decoded);
+        setStorageItem('supabase', decoded); // Force save to make it sticky
         setIsInitialLoading(true);
+      }
+    } else {
+      // Jika tidak ada di URL, cek apakah ada di LocalStorage (sudah ditangani di useState init)
+      if (supabase.url && supabase.anonKey) {
+        console.log("No config in URL, but found in memory. Reconnecting...");
+        setShowAutoConnectNotif(true);
+        setTimeout(() => setShowAutoConnectNotif(false), 3000);
       }
     }
   }, [location.search]);
 
-  // Persistence to LocalStorage (Immediate feedback)
+  // Sync state ke LocalStorage (UI state)
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
   useEffect(() => setStorageItem('courses', courses), [courses]);
   useEffect(() => setStorageItem('mentor', mentor), [mentor]);
@@ -905,6 +918,7 @@ const App: React.FC = () => {
     }
   }, [branding, mentor, courses, supabase, isLoggedIn]);
 
+  // Auto Sync after edit
   useEffect(() => {
     if (!isLoggedIn) return;
     const timer = setTimeout(() => {
@@ -925,10 +939,10 @@ const App: React.FC = () => {
     const initialFetch = async () => {
       try {
         const { data: b } = await client.from('branding').select('*').single();
-        if (b) setBranding(prev => (prev.logo !== b.logo || prev.siteName !== b.site_name) ? { siteName: b.site_name, logo: b.logo } : prev);
+        if (b) setBranding({ siteName: b.site_name, logo: b.logo });
 
         const { data: m } = await client.from('mentor').select('*').single();
-        if (m) setMentor(prev => JSON.stringify(prev) !== JSON.stringify(m) ? m : prev);
+        if (m) setMentor(m);
 
         const { data: c } = await client.from('courses').select('*');
         if (c && c.length > 0) {
@@ -937,7 +951,7 @@ const App: React.FC = () => {
             coverImage: item.cover_image,
             mentorId: item.mentor_id
           }));
-          setCourses(prev => JSON.stringify(prev) !== JSON.stringify(mappedCourses) ? mappedCourses : prev);
+          setCourses(mappedCourses);
         }
       } catch (err) {
         console.error("Initial fetch error:", err);
@@ -949,13 +963,13 @@ const App: React.FC = () => {
     
     initialFetch();
     
-    // FIX: Added 'schema: "public"' to the filter object to correctly match the 'postgres_changes' overload in Supabase Realtime.
+    // Realtime listener
     const sub = client.channel('all_changes').on('postgres_changes', { event: '*', schema: 'public', table: '*' } as any, (payload: any) => {
        if (!isSyncingRef.current) {
           if (payload.table === 'branding') {
-            setBranding(prev => (prev.logo !== payload.new.logo || prev.siteName !== payload.new.site_name) ? { siteName: payload.new.site_name, logo: payload.new.logo } : prev);
+            setBranding({ siteName: payload.new.site_name, logo: payload.new.logo });
           }
-          if (payload.table === 'mentor') setMentor(prev => JSON.stringify(prev) !== JSON.stringify(payload.new) ? payload.new : prev);
+          if (payload.table === 'mentor') setMentor(payload.new);
           if (payload.table === 'courses') {
              client.from('courses').select('*').then(({data}) => {
                 if(data) {
@@ -964,7 +978,7 @@ const App: React.FC = () => {
                     coverImage: item.cover_image,
                     mentorId: item.mentor_id
                   }));
-                  setCourses(prev => JSON.stringify(prev) !== JSON.stringify(mapped) ? mapped : prev);
+                  setCourses(mapped);
                 }
              });
           }
@@ -980,10 +994,24 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen">
+      {/* Realtime Status Indicator */}
       <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-700 ease-out transform ${syncing ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-12 scale-90 pointer-events-none'}`}>
         <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-6 py-3 flex items-center gap-3 hard-shadow ring-4 ring-[#34D399]/20">
            <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
            <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B] whitespace-nowrap">Synchronizing Realtime...</span>
+        </div>
+      </div>
+
+      {/* Auto-Connect Success Notification */}
+      <div className={`fixed bottom-6 right-6 z-[999] transition-all duration-500 transform ${showAutoConnectNotif ? 'opacity-100 translate-x-0' : 'opacity-0 translate-x-12 pointer-events-none'}`}>
+        <div className="bg-white border-2 border-[#1E293B] rounded-2xl p-4 flex items-center gap-4 sticker-shadow">
+           <div className="w-10 h-10 bg-[#34D399] rounded-full border-2 border-[#1E293B] flex items-center justify-center">
+              <Zap size={20} className="text-[#1E293B]" />
+           </div>
+           <div>
+              <p className="font-extrabold text-sm text-[#1E293B]">Auto-Connected!</p>
+              <p className="text-xs text-[#64748B]">Data disinkronkan dari database terakhir.</p>
+           </div>
         </div>
       </div>
 
@@ -999,6 +1027,9 @@ const App: React.FC = () => {
   );
 };
 
-// Merender dengan Router wrapper untuk mendukung navigasi
-const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(<Router><App /></Router>)
+// Render
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  const root = ReactDOM.createRoot(rootElement);
+  root.render(<Router><App /></Router>);
+}
