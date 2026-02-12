@@ -21,6 +21,7 @@ import {
   Upload,
   Link as LinkIcon,
   Camera,
+  Music,
   Bold,
   Italic,
   List,
@@ -35,9 +36,6 @@ import {
   Check
 } from 'lucide-react';
 
-// Mengimpor FaTiktok dari react-icons via esm.sh
-import { FaTiktok } from 'https://esm.sh/react-icons@5.0.1/fa';
-
 // Use dynamic ESM import for Supabase client
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
 
@@ -48,7 +46,6 @@ import { Button, Card, Input, Textarea, Badge } from './components/UI';
 // --- Utils ---
 const encodeConfig = (cfg: SupabaseConfig) => {
   try {
-    if (!cfg.url || !cfg.anonKey) return '';
     return btoa(JSON.stringify(cfg));
   } catch (e) {
     return '';
@@ -255,9 +252,8 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
   const generateShareLink = (courseId: string) => {
     const cfgStr = encodeConfig(supabase);
     const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    // Memastikan share link menyertakan konfigurasi agar cross-device ready
-    const sep = baseUrl.includes('?') ? '&' : '?';
-    return `${baseUrl}#/course/${courseId}${sep}cfg=${cfgStr}`;
+    // Link format: #/course/:id?cfg=BASE64
+    return `${baseUrl}#/course/${courseId}?cfg=${cfgStr}`;
   };
 
   return (
@@ -290,7 +286,7 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
                 onClick={() => {
                   const url = generateShareLink(course.id);
                   navigator.clipboard.writeText(url);
-                  alert('Link publik (Cross-Device Realtime) berhasil disalin!');
+                  alert('Link publik (cross-device ready) berhasil disalin!');
                 }} 
                 variant="green" className="text-xs col-span-2" icon={Share2}
               >
@@ -372,7 +368,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
     setTimeout(() => {
       setIsConnecting(false);
       setDbStatus('connected');
-      alert('Terhubung ke Supabase! Data disinkronkan secara otomatis.');
+      alert('Terhubung ke Supabase! Data disinkronkan realtime.');
     }, 1500);
   };
 
@@ -600,7 +596,7 @@ const CourseEditor: React.FC<{
               <Textarea label="Bio" value={mentor.bio} onChange={e => setMentor({...mentor, bio: e.target.value})} />
               <div className="grid grid-cols-1 gap-4">
                 <Input label="LinkedIn" value={mentor.socials.linkedin} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
-                <Input label="TikTok" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={FaTiktok} />
+                <Input label="TikTok" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={Music} />
                 <Input label="Instagram" value={mentor.socials.instagram} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} />
                 <Input label="Website" value={mentor.socials.website} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} icon={ExternalLink} />
               </div>
@@ -670,7 +666,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5] p-8 text-center">
         <X size={64} className="text-red-400 mb-4" />
         <h1 className="text-3xl font-extrabold text-[#1E293B] mb-2">Materi Tidak Ditemukan</h1>
-        <p className="text-[#64748B] max-w-md">Konfigurasi atau Materi ini mungkin belum dipublikasi oleh Admin.</p>
+        <p className="text-[#64748B] max-w-md">Pastikan link yang Anda gunakan benar atau tanyakan kembali kepada pengelola kelas.</p>
         <Link to="/" className="mt-8 text-[#8B5CF6] font-bold border-b-2 border-[#8B5CF6]">Kembali ke Beranda</Link>
       </div>
     );
@@ -694,11 +690,11 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
         <div className="lg:col-span-3 space-y-6">
           <div className="bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 transition-bounce">
             <div className="flex-1">
-              <Badge color="#8B5CF6" className="text-white mb-3">PUBLIC PUBLICATION</Badge>
+              <Badge color="#8B5CF6" className="text-white mb-3">Video Course</Badge>
               <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2 leading-tight">{course.title}</h1>
               <div className="flex items-center gap-3">
                  <div className="h-2 w-24 bg-[#FBBF24] rounded-full"></div>
-                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">LMS Arunika Platform</span>
+                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">Arunika Learning Hub</span>
               </div>
             </div>
             <Button variant="secondary" className="px-6 py-3" icon={Share2} onClick={() => {
@@ -767,7 +763,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                 )}
                 {mentor.socials.tiktok && (
                    <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-black hover:text-white transition-all hard-shadow-hover">
-                      <FaTiktok size={20} />
+                      <Music size={20} />
                    </a>
                 )}
                 {mentor.socials.instagram && (
@@ -784,7 +780,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                  icon={ExternalLink} 
                  onClick={() => window.open(mentor.socials.website, '_blank')}
                >
-                 PORTFOLIO MENTOR
+                 Produk Lainnya
                </Button>
              )}
           </Card>
@@ -858,18 +854,18 @@ const App: React.FC = () => {
   
   const location = useLocation();
 
-  // --- Initial Config Recovery from URL (Public View Sync Ready) ---
+  // --- Initial Config Recovery from URL (Public View) ---
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const cfgStr = params.get('cfg');
     if (cfgStr) {
       const decoded = decodeConfig(cfgStr);
       if (decoded && decoded.url && decoded.anonKey) {
-        console.log("Config recovered from Share URL");
+        console.log("Supabase config recovered from URL");
         setSupabase(decoded);
       }
     }
-  }, [location.search]);
+  }, [location]);
 
   // Persistence to LocalStorage (Immediate feedback)
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
@@ -895,7 +891,7 @@ const App: React.FC = () => {
       // Force sync mentor
       await client.from('mentor').upsert({ id: 'profile', ...mentor });
       
-      // Force sync all courses (including new ones)
+      // Force sync all courses
       for (const course of courses) {
         await client.from('courses').upsert({
           id: course.id,
@@ -963,14 +959,14 @@ const App: React.FC = () => {
     
     // Subscribe to realtime updates for cross-device sync
     const sub = client.channel('all_changes').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
-       // Hanya update jika kita BUKAN admin yang sedang push data (mencegah loop/reset logo)
+       // Hanya update jika kita BUKAN admin yang sedang push data (mencegah loop/reset)
        if (!isSyncingRef.current) {
           if (payload.table === 'branding') {
             setBranding(prev => (prev.logo !== payload.new.logo || prev.siteName !== payload.new.site_name) ? { siteName: payload.new.site_name, logo: payload.new.logo } : prev);
           }
           if (payload.table === 'mentor') setMentor(prev => JSON.stringify(prev) !== JSON.stringify(payload.new) ? payload.new : prev);
           if (payload.table === 'courses') {
-             // Jika ada perubahan kursus di device lain, re-fetch list
+             // Jika ada perubahan kursus, re-fetch list untuk memastikan urutan dan data terbaru
              client.from('courses').select('*').then(({data}) => {
                 if(data) {
                   const mapped = data.map((item: any) => ({
