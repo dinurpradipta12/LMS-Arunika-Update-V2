@@ -1,0 +1,7 @@
+{
+  "name": "Arunika LMS - Playful Geometric Edition",
+  "description": "A high-customization LMS SaaS with shareable public views, mentor profiles, and real-time database sync capabilities, designed with a vibrant Playful Geometric aesthetic.",
+  "requestFramePermissions": [
+    "camera"
+  ]
+}
