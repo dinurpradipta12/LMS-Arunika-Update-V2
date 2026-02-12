@@ -32,7 +32,8 @@ import {
   Save,
   Instagram,
   RefreshCw,
-  Check
+  Check,
+  AlertCircle
 } from 'lucide-react';
 
 // Mengimpor FaTiktok dari react-icons via esm.sh
@@ -254,8 +255,8 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
 
   const generateShareLink = (courseId: string) => {
     const cfgStr = encodeConfig(supabase);
-    // Standardizing Share URL with cfg at the very end of the hash path
     const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    // Memastikan hash router tetap bekerja dengan query params di akhir
     return `${baseUrl}#/course/${courseId}?cfg=${cfgStr}`;
   };
 
@@ -478,7 +479,7 @@ const CourseEditor: React.FC<{
       type: type,
       url: ''
     };
-    setEditedCourse({...editedCourse, assets: [...editedCourse.assets, newAsset]});
+    setEditedCourse({...editedCourse, assets: [...(editedCourse.assets || []), newAsset]});
   };
 
   const handleAssetFileUpload = (index: number) => {
@@ -489,7 +490,7 @@ const CourseEditor: React.FC<{
       if (file) {
         const reader = new FileReader();
         reader.onloadend = () => {
-          const updatedAssets = [...editedCourse.assets];
+          const updatedAssets = [...(editedCourse.assets || [])];
           updatedAssets[index] = {
             ...updatedAssets[index],
             name: file.name,
@@ -506,7 +507,7 @@ const CourseEditor: React.FC<{
   };
 
   const updateModule = (index: number, field: string, value: any) => {
-    const newModules = [...editedCourse.modules];
+    const newModules = [...(editedCourse.modules || [])];
     newModules[index] = { ...newModules[index], [field]: value };
     setEditedCourse({ ...editedCourse, modules: newModules });
   };
@@ -553,7 +554,7 @@ const CourseEditor: React.FC<{
             </div>
 
             <div className="space-y-4">
-              {editedCourse.modules.map((mod, idx) => (
+              {editedCourse.modules?.map((mod, idx) => (
                 <Card key={mod.id} className="relative group p-6">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
@@ -579,6 +580,11 @@ const CourseEditor: React.FC<{
                   </div>
                 </Card>
               ))}
+              {(!editedCourse.modules || editedCourse.modules.length === 0) && (
+                <div className="p-12 border-2 border-dashed border-[#CBD5E1] rounded-3xl text-center text-[#64748B] font-bold">
+                   Belum ada materi. Klik "Tambah Materi" di atas.
+                </div>
+              )}
             </div>
           </div>
         </div>
@@ -615,7 +621,7 @@ const CourseEditor: React.FC<{
                 </div>
              </div>
              <div className="space-y-3">
-                {editedCourse.assets.map((asset, aidx) => (
+                {editedCourse.assets?.map((asset, aidx) => (
                   <Card key={asset.id} className="p-4 flex flex-col gap-2">
                      <div className="flex justify-between items-center">
                         <Badge color={asset.type === 'link' ? '#FBBF24' : '#34D399'}>{asset.type.toUpperCase()}</Badge>
@@ -646,20 +652,40 @@ const CourseEditor: React.FC<{
 
 const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: Branding; isInitialLoading: boolean }> = ({ courses, mentor, branding, isInitialLoading }) => {
   const { id } = useParams<{ id: string }>();
-  const course = courses.find(c => c.id === id);
+  // Pencarian course yang lebih aman
+  const course = useMemo(() => courses.find(c => c.id === id), [courses, id]);
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
 
   useEffect(() => {
-    if (course && course.modules.length > 0 && !selectedModule) {
+    if (course && course.modules && course.modules.length > 0 && !selectedModule) {
       setSelectedModule(course.modules[0]);
     }
   }, [course, selectedModule]);
 
+  // Handler URL Youtube yang lebih aman
+  const getYoutubeEmbedUrl = (content: string) => {
+    if (!content) return "";
+    try {
+      const videoId = content.includes('v=') 
+        ? content.split('v=')[1]?.split('&')[0] 
+        : content.split('/').pop()?.split('?')[0];
+      return videoId ? `https://www.youtube.com/embed/${videoId}` : "";
+    } catch (e) {
+      return "";
+    }
+  };
+
   if (isInitialLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5]">
-        <RefreshCw size={64} className="text-[#8B5CF6] animate-spin mb-4" />
-        <p className="font-extrabold text-xl animate-pulse">Menghubungkan ke Arunika LMS...</p>
+        <div className="relative">
+          <RefreshCw size={64} className="text-[#8B5CF6] animate-spin mb-6" />
+          <div className="absolute inset-0 flex items-center justify-center">
+             <div className="w-4 h-4 bg-[#FBBF24] rounded-full animate-ping"></div>
+          </div>
+        </div>
+        <p className="font-extrabold text-2xl tracking-tight text-[#1E293B]">Memuat Platform Arunika...</p>
+        <p className="text-[#64748B] mt-2 font-medium">Sinkronisasi data realtime sedang berjalan.</p>
       </div>
     );
   }
@@ -667,10 +693,18 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   if (!course) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5] p-8 text-center">
-        <X size={64} className="text-red-400 mb-4" />
-        <h1 className="text-3xl font-extrabold text-[#1E293B] mb-2">Materi Tidak Ditemukan</h1>
-        <p className="text-[#64748B] max-w-md">Konfigurasi atau Materi ini mungkin belum dipublikasi oleh Admin atau Link Salah.</p>
-        <Link to="/" className="mt-8 text-[#8B5CF6] font-bold border-b-2 border-[#8B5CF6]">Kembali ke Beranda</Link>
+        <div className="w-32 h-32 bg-red-50 rounded-full border-2 border-red-200 flex items-center justify-center mb-6 hard-shadow">
+          <AlertCircle size={64} className="text-red-500" />
+        </div>
+        <h1 className="text-4xl font-extrabold text-[#1E293B] mb-4">Materi Tidak Ditemukan</h1>
+        <p className="text-[#64748B] max-w-lg text-lg mb-8 leading-relaxed font-medium">
+          Maaf, halaman ini mungkin telah dipindahkan atau konfigurasi database admin belum disinkronkan dengan benar. Silakan cek kembali link Anda.
+        </p>
+        <div className="flex gap-4">
+           <Link to="/">
+             <Button variant="yellow" icon={ChevronRight}>Kembali ke Beranda</Button>
+           </Link>
+        </div>
       </div>
     );
   }
@@ -684,7 +718,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
             <span className="font-extrabold text-xl">{branding.siteName}</span>
           </div>
           <div className="hidden md:flex items-center gap-2">
-            <Badge>{course.modules.length} Materi</Badge>
+            <Badge>{course.modules?.length || 0} Materi</Badge>
           </div>
         </div>
       </header>
@@ -710,20 +744,30 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
             <div className="space-y-6">
               <div className="bg-white border-2 border-[#1E293B] rounded-3xl overflow-hidden hard-shadow">
                 {selectedModule.type === 'video' ? (
-                  <div className="aspect-video bg-black">
-                    <iframe 
-                      className="w-full h-full"
-                      src={`https://www.youtube.com/embed/${selectedModule.content.split('v=')[1]?.split('&')[0] || selectedModule.content.split('/').pop()}`}
-                      title={selectedModule.title}
-                      frameBorder="0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                      allowFullScreen
-                    ></iframe>
+                  <div className="aspect-video bg-black flex items-center justify-center">
+                    {getYoutubeEmbedUrl(selectedModule.content) ? (
+                      <iframe 
+                        className="w-full h-full"
+                        src={getYoutubeEmbedUrl(selectedModule.content)}
+                        title={selectedModule.title}
+                        frameBorder="0"
+                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                        allowFullScreen
+                      ></iframe>
+                    ) : (
+                      <div className="text-white text-center p-8">
+                         <Video size={48} className="mx-auto mb-4 text-[#FBBF24]" />
+                         <p className="font-bold text-xl">URL Video Tidak Valid</p>
+                         <p className="text-white/60 text-sm">Pastikan Admin menginput link Youtube yang benar.</p>
+                      </div>
+                    )}
                   </div>
                 ) : (
                   <div className="p-10 prose prose-slate max-w-none">
                     <h2 className="text-4xl font-extrabold mb-6 text-[#1E293B] border-b-4 border-[#FBBF24] inline-block">{selectedModule.title}</h2>
-                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-xl leading-relaxed">{selectedModule.content}</div>
+                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-xl leading-relaxed">
+                      {selectedModule.content || "Konten teks sedang disiapkan oleh pengajar."}
+                    </div>
                   </div>
                 )}
               </div>
@@ -741,7 +785,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
           ) : (
             <div className="h-96 flex flex-col items-center justify-center text-[#64748B] font-bold bg-white rounded-3xl border-2 border-[#1E293B] border-dashed">
                <Globe size={64} className="mb-4 text-[#CBD5E1]" />
-               <p className="text-xl">Pilih salah satu materi di kurikulum untuk mulai.</p>
+               <p className="text-xl">Pilih salah satu materi di kurikulum untuk mulai belajar.</p>
             </div>
           )}
         </div>
@@ -793,7 +837,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
               <BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum Materi
             </h3>
             <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {course.modules.map((mod, i) => (
+              {course.modules?.map((mod, i) => (
                 <button 
                   key={mod.id} 
                   onClick={() => setSelectedModule(mod)} 
@@ -811,9 +855,12 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                   </div>
                 </button>
               ))}
+              {(!course.modules || course.modules.length === 0) && (
+                <p className="text-center p-8 text-[#64748B] font-bold text-sm">Belum ada materi.</p>
+              )}
             </div>
 
-            {course.assets.length > 0 && (
+            {course.assets && course.assets.length > 0 && (
               <div className="mt-10 border-t-2 border-[#E2E8F0] pt-6">
                 <h3 className="font-extrabold text-xl mb-4 flex items-center gap-2 tracking-tight">
                   <Upload size={20} className="text-[#34D399]" /> Asset Download
@@ -857,7 +904,6 @@ const App: React.FC = () => {
     if (cfgStr) {
       const decoded = decodeConfig(cfgStr);
       if (decoded?.url && decoded?.anonKey) {
-        console.log("Config recovered instantly from URL");
         return decoded;
       }
     }
@@ -926,7 +972,7 @@ const App: React.FC = () => {
     if (!isLoggedIn) return;
     const timer = setTimeout(() => {
        triggerForcedSync();
-    }, 1500); 
+    }, 2000); 
     return () => clearTimeout(timer);
   }, [branding, mentor, courses, triggerForcedSync, isLoggedIn]);
 
@@ -938,7 +984,7 @@ const App: React.FC = () => {
     }
     
     const client = createClient(supabase.url, supabase.anonKey);
-    setIsInitialLoading(true); // Ensure loading is active during re-fetches
+    setIsInitialLoading(true);
     
     const initialFetch = async () => {
       try {
@@ -949,14 +995,15 @@ const App: React.FC = () => {
         if (m) setMentor(m);
 
         const { data: c } = await client.from('courses').select('*');
-        if (c && c.length > 0) {
-          const mappedCourses = c.map((item: any) => ({
-            ...item,
-            coverImage: item.cover_image,
-            mentorId: item.mentor_id
-          }));
-          setCourses(mappedCourses);
-        }
+        // Tetap setCourses meskipun kosong untuk sinkronisasi antar perangkat
+        const mappedCourses = (c || []).map((item: any) => ({
+          ...item,
+          coverImage: item.cover_image,
+          mentorId: item.mentor_id,
+          modules: item.modules || [],
+          assets: item.assets || []
+        }));
+        setCourses(mappedCourses);
       } catch (err) {
         console.error("Initial fetch error:", err);
       } finally {
@@ -976,14 +1023,14 @@ const App: React.FC = () => {
           if (payload.table === 'mentor') setMentor(payload.new);
           if (payload.table === 'courses') {
              client.from('courses').select('*').then(({data}) => {
-                if(data) {
-                  const mapped = data.map((item: any) => ({
-                    ...item,
-                    coverImage: item.cover_image,
-                    mentorId: item.mentor_id
-                  }));
-                  setCourses(mapped);
-                }
+                const mapped = (data || []).map((item: any) => ({
+                  ...item,
+                  coverImage: item.cover_image,
+                  mentorId: item.mentor_id,
+                  modules: item.modules || [],
+                  assets: item.assets || []
+                }));
+                setCourses(mapped);
              });
           }
        }
@@ -998,11 +1045,11 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      {/* SYNC POPUP: TOP CENTER WITH SMOOTH ANIMATION */}
+      {/* SYNC POPUP */}
       <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-700 ease-out transform ${syncing ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-12 scale-90 pointer-events-none'}`}>
         <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-6 py-3 flex items-center gap-3 hard-shadow ring-4 ring-[#34D399]/20">
            <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
-           <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B] whitespace-nowrap">Synchronizing Realtime...</span>
+           <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B] whitespace-nowrap">Sinkronisasi Cloud...</span>
         </div>
       </div>
 
@@ -1013,6 +1060,8 @@ const App: React.FC = () => {
         <Route path="/settings" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} /></main></div> : <Navigate to="/login" />} />
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} isInitialLoading={isInitialLoading} />} />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
+        {/* Catch-all untuk menghindari blank page */}
+        <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </div>
   );
