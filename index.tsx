@@ -650,11 +650,11 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
           {/* JUDUL KURSUS DI ATAS VIDEO/TEKS */}
           <div className="bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 transition-bounce">
             <div className="flex-1">
-              <Badge color="#8B5CF6" className="text-white mb-3">PUBLIC PUBLICATION</Badge>
+              <Badge color="#8B5CF6" className="text-white mb-3">Video Course</Badge>
               <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2 leading-tight">{course.title}</h1>
               <div className="flex items-center gap-3">
                  <div className="h-2 w-24 bg-[#FBBF24] rounded-full"></div>
-                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">LMS Arunika Platform</span>
+                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">Arunika Learning Hub</span>
               </div>
             </div>
             <Button variant="secondary" className="px-6 py-3" icon={Share2} onClick={() => {
@@ -740,7 +740,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                  icon={ExternalLink} 
                  onClick={() => window.open(mentor.socials.website, '_blank')}
                >
-                 PORTFOLIO MENTOR
+                 Link Produk Lainnya
                </Button>
              )}
           </Card>
