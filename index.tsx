@@ -1,7 +1,7 @@
 
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
-import { HashRouter as Router, Routes, Route, Link, useNavigate, useLocation, Navigate, useParams } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams } from 'react-router-dom';
 import { 
   Layout, 
   Settings as SettingsIcon, 
@@ -13,17 +13,13 @@ import {
   Video, 
   FileText, 
   Globe,
-  Instagram,
   Linkedin,
-  Twitter,
   ExternalLink,
   ChevronRight,
   Database,
   X,
   Upload,
   Link as LinkIcon,
-  Pencil,
-  Check,
   Camera,
   Music,
   Bold,
@@ -33,13 +29,17 @@ import {
   Copy,
   Wifi,
   WifiOff,
-  RefreshCw,
-  ArrowUpRight,
   CloudUpload,
-  Save
+  Save,
+  Instagram,
+  RefreshCw,
+  // Added Check to imports
+  Check
 } from 'lucide-react';
-// Import Supabase client via ESM
+
+// Use standard Supabase import if possible, but keeping URL import as requested/provided
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
+
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
@@ -647,19 +647,20 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
-          {/* COURSE TITLE HEADER ADDED ABOVE VIDEO */}
+          {/* JUDUL KURSUS DI ATAS VIDEO/TEKS */}
           <div className="bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 transition-bounce">
-            <div>
-              <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2">{course.title}</h1>
+            <div className="flex-1">
+              <Badge color="#8B5CF6" className="text-white mb-3">PUBLIC PUBLICATION</Badge>
+              <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2 leading-tight">{course.title}</h1>
               <div className="flex items-center gap-3">
                  <div className="h-2 w-24 bg-[#FBBF24] rounded-full"></div>
-                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">Edisi Publik</span>
+                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">LMS Arunika Platform</span>
               </div>
             </div>
             <Button variant="secondary" className="px-6 py-3" icon={Share2} onClick={() => {
               navigator.clipboard.writeText(window.location.href);
-              alert('Link kursus disalin!');
-            }}>Share Link</Button>
+              alert('Link publik materi ini telah disalin!');
+            }}>Bagikan Halaman</Button>
           </div>
 
           {selectedModule ? (
@@ -677,51 +678,91 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                     ></iframe>
                   </div>
                 ) : (
-                  <div className="p-8 prose prose-slate max-w-none">
+                  <div className="p-10 prose prose-slate max-w-none">
                     <h2 className="text-4xl font-extrabold mb-6 text-[#1E293B] border-b-4 border-[#FBBF24] inline-block">{selectedModule.title}</h2>
-                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-lg leading-relaxed">{selectedModule.content}</div>
+                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-xl leading-relaxed">{selectedModule.content}</div>
                   </div>
                 )}
               </div>
               
-              <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow">
-                 <h3 className="text-xl font-extrabold mb-4 flex items-center gap-2 tracking-tight"><FileText size={20} className="text-[#8B5CF6]"/> Deskripsi Materi</h3>
+              <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow relative overflow-hidden">
+                 <div className="absolute top-0 right-0 w-16 h-16 bg-[#FBBF24] rounded-bl-3xl border-l-2 border-b-2 border-[#1E293B] flex items-center justify-center">
+                    <FileText className="text-[#1E293B]" />
+                 </div>
+                 <h3 className="text-2xl font-extrabold mb-4 text-[#1E293B] tracking-tight">Detail Materi: {selectedModule.title}</h3>
                  <div className="text-[#1E293B] text-lg leading-relaxed whitespace-pre-wrap font-medium">
-                    {selectedModule.description || "Tidak ada deskripsi untuk materi ini."}
+                    {selectedModule.description || "Tidak ada deskripsi tambahan untuk materi ini."}
                  </div>
               </div>
             </div>
           ) : (
-            <div className="h-96 flex flex-col items-center justify-center text-[#64748B] font-bold">
+            <div className="h-96 flex flex-col items-center justify-center text-[#64748B] font-bold bg-white rounded-3xl border-2 border-[#1E293B] border-dashed">
                <Globe size={64} className="mb-4 text-[#CBD5E1]" />
-               <p>Pilih materi untuk mulai belajar</p>
+               <p className="text-xl">Pilih salah satu materi di kurikulum untuk mulai.</p>
             </div>
           )}
         </div>
 
         <div className="lg:col-span-1 space-y-6">
-          <Card className="flex flex-col items-center p-6 text-center featured">
-             <img src={mentor.photo} className="w-24 h-24 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover mb-4" alt={mentor.name} />
-             <h3 className="text-xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
-             <p className="font-bold text-[#8B5CF6] text-xs uppercase mb-4">{mentor.role}</p>
-             <p className="text-[#64748B] text-sm leading-relaxed mb-6">{mentor.bio}</p>
-             <div className="flex justify-center gap-2 flex-wrap mb-6">
-                {mentor.socials.linkedin && <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl"><Linkedin size={18} /></a>}
-                {mentor.socials.tiktok && <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl"><Music size={18} /></a>}
+          <Card className="flex flex-col items-center p-8 text-center featured">
+             <div className="relative mb-6">
+                <img src={mentor.photo} className="w-28 h-28 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover" alt={mentor.name} />
+                <div className="absolute -bottom-2 -right-2 bg-[#FBBF24] p-2 rounded-xl border-2 border-[#1E293B] hard-shadow">
+                   <Check size={16} className="text-[#1E293B]" />
+                </div>
              </div>
-             {mentor.socials.website && <Button variant="yellow" className="w-full text-xs font-bold" icon={ExternalLink} onClick={() => window.open(mentor.socials.website, '_blank')}>link produk lainnya</Button>}
+             <h3 className="text-2xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
+             <Badge color="#F472B6" className="text-white mb-4 uppercase text-[10px] tracking-widest">{mentor.role}</Badge>
+             <p className="text-[#64748B] text-sm leading-relaxed mb-6 font-medium italic">"{mentor.bio}"</p>
+             
+             <div className="flex justify-center gap-3 flex-wrap mb-8">
+                {mentor.socials.linkedin && (
+                   <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-[#0077b5] hover:text-white transition-all hard-shadow-hover">
+                      <Linkedin size={20} />
+                   </a>
+                )}
+                {mentor.socials.tiktok && (
+                   <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-black hover:text-white transition-all hard-shadow-hover">
+                      <Music size={20} />
+                   </a>
+                )}
+                {mentor.socials.instagram && (
+                   <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-pink-500 hover:text-white transition-all hard-shadow-hover">
+                      <Instagram size={20} />
+                   </a>
+                )}
+             </div>
+
+             {mentor.socials.website && (
+               <Button 
+                 variant="yellow" 
+                 className="w-full text-xs font-bold py-2" 
+                 icon={ExternalLink} 
+                 onClick={() => window.open(mentor.socials.website, '_blank')}
+               >
+                 PORTFOLIO MENTOR
+               </Button>
+             )}
           </Card>
 
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 hard-shadow">
-            <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2 tracking-tight"><BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum</h3>
-            <div className="space-y-3">
+            <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2 tracking-tight">
+              <BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum Materi
+            </h3>
+            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
               {course.modules.map((mod, i) => (
-                <button key={mod.id} onClick={() => setSelectedModule(mod)} className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${selectedModule?.id === mod.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow translate-x-1' : 'bg-white border-transparent hover:bg-[#F1F5F9]'}`}>
-                  <div className={`shrink-0 w-8 h-8 rounded-full border-2 border-[#1E293B] flex items-center justify-center font-bold text-xs ${selectedModule?.id === mod.id ? 'bg-white' : 'bg-[#F1F5F9]'}`}>{i+1}</div>
+                <button 
+                  key={mod.id} 
+                  onClick={() => setSelectedModule(mod)} 
+                  className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${selectedModule?.id === mod.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow translate-x-1' : 'bg-white border-transparent hover:bg-[#F1F5F9]'}`}
+                >
+                  <div className={`shrink-0 w-8 h-8 rounded-full border-2 border-[#1E293B] flex items-center justify-center font-bold text-xs ${selectedModule?.id === mod.id ? 'bg-white' : 'bg-[#F1F5F9]'}`}>
+                    {i+1}
+                  </div>
                   <div className="flex-1">
                     <p className="text-sm font-extrabold leading-tight">{mod.title}</p>
                     <div className="flex items-center gap-2 mt-1">
-                       {mod.type === 'video' ? <Video size={12} /> : <FileText size={12} />}
+                       {mod.type === 'video' ? <Video size={12} className="text-[#8B5CF6]" /> : <FileText size={12} className="text-[#F472B6]" />}
                        <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">{mod.duration}</span>
                     </div>
                   </div>
@@ -731,10 +772,18 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
             {course.assets.length > 0 && (
               <div className="mt-10 border-t-2 border-[#E2E8F0] pt-6">
-                <h3 className="font-extrabold text-xl mb-4 flex items-center gap-2 tracking-tight"><Upload size={20} className="text-[#34D399]" /> Assets</h3>
+                <h3 className="font-extrabold text-xl mb-4 flex items-center gap-2 tracking-tight">
+                  <Upload size={20} className="text-[#34D399]" /> Asset Download
+                </h3>
                 <div className="space-y-2">
                   {course.assets.map(asset => (
-                    <a key={asset.id} href={asset.url} target="_blank" className="flex items-center justify-between p-4 rounded-xl bg-white border-2 border-[#1E293B] hover:bg-[#34D399] transition-all group" download={asset.type === 'file' ? asset.fileName : undefined}>
+                    <a 
+                      key={asset.id} 
+                      href={asset.url} 
+                      target="_blank" 
+                      className="flex items-center justify-between p-4 rounded-xl bg-white border-2 border-[#1E293B] hover:bg-[#34D399] transition-all group" 
+                      download={asset.type === 'file' ? (asset.fileName || asset.name) : undefined}
+                    >
                       <span className="text-sm font-bold truncate pr-2 group-hover:text-white">{asset.name}</span>
                       <ExternalLink size={14} className="shrink-0 group-hover:text-white" />
                     </a>
@@ -749,7 +798,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   );
 };
 
-// --- App Entry with Forced Realtime Sync Logic ---
+// --- Main Application with Forced Realtime Logic ---
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
   const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
@@ -758,12 +807,57 @@ const App: React.FC = () => {
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
   const [syncing, setSyncing] = useState(false);
 
-  // Initial Data Fetch from Supabase if connected
+  // Persistence to LocalStorage (Always up to date locally)
+  useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
+  useEffect(() => setStorageItem('courses', courses), [courses]);
+  useEffect(() => setStorageItem('mentor', mentor), [mentor]);
+  useEffect(() => setStorageItem('branding', branding), [branding]);
+  useEffect(() => setStorageItem('supabase', supabase), [supabase]);
+
+  // FORCED REALTIME SYNC FUNCTION
+  const triggerForcedSync = useCallback(async () => {
+    if (!supabase.url || !supabase.anonKey) return;
+    setSyncing(true);
+    try {
+      const client = createClient(supabase.url, supabase.anonKey);
+      
+      // Force sync branding
+      await client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo });
+      
+      // Force sync mentor
+      await client.from('mentor').upsert({ id: 'profile', ...mentor });
+      
+      // Force sync all courses
+      for (const course of courses) {
+        await client.from('courses').upsert({
+          id: course.id,
+          title: course.title,
+          description: course.description,
+          cover_image: course.coverImage,
+          modules: course.modules,
+          assets: course.assets,
+          mentor_id: course.mentorId
+        });
+      }
+    } catch (err) {
+      console.error("Supabase Realtime Sync Failed:", err);
+    } finally {
+      setTimeout(() => setSyncing(false), 500);
+    }
+  }, [branding, mentor, courses, supabase]);
+
+  // Automatic Trigger on any change
+  useEffect(() => {
+    const timer = setTimeout(triggerForcedSync, 1000); // 1s debounce to allow multiple quick inputs
+    return () => clearTimeout(timer);
+  }, [branding, mentor, courses, triggerForcedSync]);
+
+  // Initial Fetch from Supabase
   useEffect(() => {
     if (!supabase.url || !supabase.anonKey) return;
     const client = createClient(supabase.url, supabase.anonKey);
     
-    const fetchAll = async () => {
+    const initialFetch = async () => {
       const { data: b } = await client.from('branding').select('*').single();
       if (b) setBranding({ siteName: b.site_name, logo: b.logo });
 
@@ -771,56 +865,25 @@ const App: React.FC = () => {
       if (m) setMentor(m);
 
       const { data: c } = await client.from('courses').select('*');
-      if (c) setCourses(c.map((item: any) => ({
-        ...item,
-        coverImage: item.cover_image,
-        mentorId: item.mentor_id
-      })));
-    };
-    fetchAll();
-  }, [supabase]);
-
-  // Persistence to LocalStorage
-  useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
-  useEffect(() => setStorageItem('courses', courses), [courses]);
-  useEffect(() => setStorageItem('mentor', mentor), [mentor]);
-  useEffect(() => setStorageItem('branding', branding), [branding]);
-  useEffect(() => setStorageItem('supabase', supabase), [supabase]);
-
-  // Realtime Sync FORCE TO SUPABASE
-  useEffect(() => {
-    if (!supabase.url || !supabase.anonKey) return;
-    const client = createClient(supabase.url, supabase.anonKey);
-
-    const performSync = async () => {
-      setSyncing(true);
-      try {
-        // Sync Branding
-        await client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo });
-        // Sync Mentor
-        await client.from('mentor').upsert({ id: 'profile', ...mentor });
-        // Sync Courses (Iterate and force upsert)
-        for (const course of courses) {
-          await client.from('courses').upsert({
-            id: course.id,
-            title: course.title,
-            description: course.description,
-            cover_image: course.coverImage,
-            modules: course.modules,
-            assets: course.assets,
-            mentor_id: course.mentorId
-          });
-        }
-      } catch (err) {
-        console.error("Supabase Forced Sync Error:", err);
-      } finally {
-        setTimeout(() => setSyncing(false), 800);
+      if (c && c.length > 0) {
+        setCourses(c.map((item: any) => ({
+          ...item,
+          coverImage: item.cover_image,
+          mentorId: item.mentor_id
+        })));
       }
     };
+    initialFetch();
+    
+    // Subscribe to realtime updates if any (for external changes)
+    const sub = client.channel('public_updates').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
+       // Refresh local state if remote table branding or mentor changed
+       if(payload.table === 'branding') setBranding({siteName: payload.new.site_name, logo: payload.new.logo});
+       if(payload.table === 'mentor') setMentor(payload.new);
+    }).subscribe();
 
-    const timer = setTimeout(performSync, 1000); // 1s Debounce
-    return () => clearTimeout(timer);
-  }, [branding, mentor, courses, supabase]);
+    return () => { client.removeChannel(sub); };
+  }, [supabase.url, supabase.anonKey]);
 
   const updateCourse = (updated: Course) => {
     setCourses(prev => prev.map(c => c.id === updated.id ? updated : c));
@@ -829,9 +892,9 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen">
       {syncing && (
-        <div className="fixed bottom-4 left-4 z-[999] bg-[#34D399] border-2 border-[#1E293B] rounded-full px-4 py-2 flex items-center gap-2 hard-shadow">
-           <CloudUpload size={16} className="text-[#1E293B]" />
-           <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#1E293B]">Supabase Realtime Sync...</span>
+        <div className="fixed bottom-6 left-6 z-[999] bg-[#34D399] border-2 border-[#1E293B] rounded-full px-5 py-2 flex items-center gap-3 hard-shadow animate-bounce">
+           <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
+           <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B]">Syncing Realtime...</span>
         </div>
       )}
       <Routes>
