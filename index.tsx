@@ -20,7 +20,6 @@ import {
   X,
   Upload,
   Link as LinkIcon,
-  Camera,
   Music,
   Bold,
   Italic,
@@ -29,14 +28,17 @@ import {
   Copy,
   Wifi,
   WifiOff,
-  CloudUpload,
   Save,
   Instagram,
   RefreshCw,
-  Check
+  Check,
+  BarChart2,
+  TrendingUp,
+  Users,
+  Eye
 } from 'lucide-react';
 
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1?external=react,react-dom';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
@@ -131,10 +133,10 @@ const AdvancedEditor: React.FC<{ value: string; onChange: (v: string) => void; l
       <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>
       <div className="border-2 border-[#1E293B] rounded-2xl overflow-hidden bg-white hard-shadow focus-within:hard-shadow-hover transition-all">
         <div className="bg-[#F1F5F9] border-b-2 border-[#1E293B] p-2 flex gap-2">
-          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><Bold size={14}/></button>
-          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><Italic size={14}/></button>
-          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><List size={14}/></button>
-          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><Type size={14}/></button>
+          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><Bold size={14}/></div>
+          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><Italic size={14}/></div>
+          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><List size={14}/></div>
+          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><Type size={14}/></div>
           <div className="flex-1"></div>
           <Badge className="text-[10px]" color="#8B5CF6"><span className="text-white">PRO EDITOR</span></Badge>
         </div>
@@ -201,6 +203,9 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void }> = ({ brand
         <Link to="/admin" className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#F1F5F9] font-bold text-[#1E293B]">
           <BookOpen size={20} /> Kursus Saya
         </Link>
+        <Link to="/analytics" className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#F1F5F9] font-bold text-[#1E293B]">
+          <BarChart2 size={20} /> Analitik Pengunjung
+        </Link>
         <Link to="/settings" className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#F1F5F9] font-bold text-[#1E293B]">
           <SettingsIcon size={20} /> Branding & Settings
         </Link>
@@ -209,6 +214,110 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void }> = ({ brand
         <Button variant="secondary" className="w-full justify-start" onClick={onLogout}>
           <LogOut size={18} className="mr-2" /> Logout
         </Button>
+      </div>
+    </div>
+  );
+};
+
+const AnalyticsPage: React.FC<{ courses: Course[] }> = ({ courses }) => {
+  // Mock data for analytics
+  const totalVisitors = 1245;
+  const growth = 12.5;
+  const courseVisits = courses.map(c => ({
+    name: c.title,
+    visits: Math.floor(Math.random() * 500) + 50
+  })).sort((a, b) => b.visits - a.visits);
+
+  return (
+    <div className="p-8 max-w-6xl mx-auto space-y-8">
+      <div>
+        <h1 className="text-4xl font-extrabold mb-2 text-[#1E293B]">Analitik Pengunjung</h1>
+        <p className="text-[#64748B]">Pantau performa traffic dari "Share Page Kursus" Anda.</p>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <Card className="featured border-[#8B5CF6]">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-[#8B5CF6]/10 rounded-2xl text-[#8B5CF6]">
+              <Users size={24} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Total Pengunjung</p>
+              <h2 className="text-3xl font-extrabold">{totalVisitors}</h2>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-[#34D399] font-bold text-sm">
+            <TrendingUp size={16} />
+            <span>+{growth}% bulan ini</span>
+          </div>
+        </Card>
+
+        <Card className="border-[#FBBF24]">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-[#FBBF24]/10 rounded-2xl text-[#FBBF24]">
+              <Eye size={24} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Total Page Views</p>
+              <h2 className="text-3xl font-extrabold">3,892</h2>
+            </div>
+          </div>
+          <div className="flex items-center gap-1 text-[#34D399] font-bold text-sm">
+            <TrendingUp size={16} />
+            <span>+5.2% bulan ini</span>
+          </div>
+        </Card>
+
+        <Card className="border-[#34D399]">
+          <div className="flex items-center gap-4 mb-4">
+            <div className="p-3 bg-[#34D399]/10 rounded-2xl text-[#34D399]">
+              <Share2 size={24} />
+            </div>
+            <div>
+              <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">CTR Share Link</p>
+              <h2 className="text-3xl font-extrabold">18.4%</h2>
+            </div>
+          </div>
+          <p className="text-xs font-medium text-[#64748B]">Rata-rata klik per share link.</p>
+        </Card>
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <Card>
+          <h3 className="text-xl font-extrabold mb-6">Traffic 7 Hari Terakhir</h3>
+          <div className="h-64 flex items-end gap-3 px-2">
+            {[45, 67, 43, 89, 120, 95, 110].map((val, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-help">
+                <div 
+                  className="w-full bg-[#8B5CF6] rounded-t-lg transition-all group-hover:bg-[#FBBF24] hard-shadow"
+                  style={{ height: `${(val / 120) * 100}%` }}
+                ></div>
+                <span className="text-[10px] font-bold text-[#64748B]">Day {i+1}</span>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card>
+          <h3 className="text-xl font-extrabold mb-6">Kursus Paling Populer</h3>
+          <div className="space-y-4">
+            {courseVisits.slice(0, 5).map((cv, i) => (
+              <div key={i} className="flex items-center gap-4">
+                <div className="w-8 h-8 rounded-full border-2 border-[#1E293B] bg-[#FBBF24] flex items-center justify-center font-bold text-xs">{i+1}</div>
+                <div className="flex-1">
+                  <p className="font-bold text-sm truncate">{cv.name}</p>
+                  <div className="w-full bg-[#F1F5F9] h-2 rounded-full overflow-hidden mt-1 border border-[#E2E8F0]">
+                    <div 
+                      className="bg-[#34D399] h-full" 
+                      style={{ width: `${(cv.visits / courseVisits[0].visits) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <span className="text-xs font-extrabold text-[#64748B]">{cv.visits} view</span>
+              </div>
+            ))}
+          </div>
+        </Card>
       </div>
     </div>
   );
@@ -231,6 +340,12 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
     navigate(`/admin/course/${newCourse.id}`);
   };
 
+  const handleDeleteCourse = (id: string, title: string) => {
+    if(confirm(`Apakah Anda yakin ingin menghapus kursus "${title}"?`)) {
+      setCourses(courses.filter(c => c.id !== id));
+    }
+  };
+
   return (
     <div className="p-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-12">
@@ -242,7 +357,15 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {courses.map((course) => (
-          <Card key={course.id} className="group overflow-hidden flex flex-col">
+          <Card key={course.id} className="group overflow-hidden flex flex-col relative">
+            {/* DELETE BUTTON */}
+            <button 
+              onClick={() => handleDeleteCourse(course.id, course.title)}
+              className="absolute top-4 right-4 z-10 p-2 bg-red-50 text-red-500 rounded-xl border-2 border-transparent hover:border-red-500 transition-all opacity-0 group-hover:opacity-100"
+            >
+              <Trash2 size={18} />
+            </button>
+
             <div className="relative aspect-video mb-4 rounded-lg overflow-hidden border-2 border-[#1E293B] bg-[#F1F5F9] flex items-center justify-center">
               {course.coverImage ? (
                 <img src={course.coverImage} className="w-full h-full object-cover" alt={course.title} />
@@ -280,34 +403,34 @@ const Settings: React.FC<{
   setBranding: React.Dispatch<React.SetStateAction<Branding>>;
   supabase: SupabaseConfig;
   setSupabase: React.Dispatch<React.SetStateAction<SupabaseConfig>>;
-}> = ({ branding, setBranding, supabase, setSupabase }) => {
-  // --- Fix Cursor Jump: Use Local Draft State ---
-  const [localBranding, setLocalBranding] = useState<Branding>(branding);
+  onLocalUpdate: () => void;
+}> = ({ branding, setBranding, supabase, setSupabase, onLocalUpdate }) => {
+  const [localSiteName, setLocalSiteName] = useState(branding.siteName);
   const [isConnecting, setIsConnecting] = useState(false);
   const [dbStatus, setDbStatus] = useState<'connected' | 'disconnected' | 'connecting'>(() => {
     return (supabase.url && supabase.anonKey) ? 'connected' : 'disconnected';
   });
 
-  // Keep local state in sync with parent when parent changes from OUTSIDE (e.g. database fetch)
-  // But NOT while typing
+  // Keep local state in sync ONLY if it's not the user currently typing
   useEffect(() => {
-    setLocalBranding(branding);
-  }, [branding.logo]); // Only sync logo or other props if needed, siteName is usually handled by debounce
+    if (branding.siteName !== localSiteName) {
+      setLocalSiteName(branding.siteName);
+    }
+  }, [branding.siteName]);
 
-  // Debounced update to parent state for siteName
+  // Debounced update to the parent (and thus DB)
   useEffect(() => {
     const timer = setTimeout(() => {
-      if (localBranding.siteName !== branding.siteName) {
-        setBranding(localBranding);
+      if (localSiteName !== branding.siteName) {
+        onLocalUpdate(); // Signal that a local change is happening
+        setBranding({...branding, siteName: localSiteName});
       }
-    }, 500);
+    }, 800);
     return () => clearTimeout(timer);
-  }, [localBranding.siteName]);
+  }, [localSiteName]);
 
   const sqlScript = `
 -- SETUP DATABASE ARUNIKA LMS (REAL-TIME CONFIG)
--- Jalankan di SQL Editor Supabase Anda
-
 -- 1. Tabel Branding
 CREATE TABLE IF NOT EXISTS public.branding (
   id TEXT PRIMARY KEY DEFAULT 'config',
@@ -315,7 +438,6 @@ CREATE TABLE IF NOT EXISTS public.branding (
   logo TEXT,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
 -- 2. Tabel Mentor
 CREATE TABLE IF NOT EXISTS public.mentor (
   id TEXT PRIMARY KEY DEFAULT 'profile',
@@ -326,7 +448,6 @@ CREATE TABLE IF NOT EXISTS public.mentor (
   socials JSONB,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
 -- 3. Tabel Courses
 CREATE TABLE IF NOT EXISTS public.courses (
   id TEXT PRIMARY KEY,
@@ -339,17 +460,17 @@ CREATE TABLE IF NOT EXISTS public.courses (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
-
--- 4. Enable Realtime Replication
+-- 4. Tabel Analytics (Optional for tracking)
+CREATE TABLE IF NOT EXISTS public.analytics (
+  id BIGSERIAL PRIMARY KEY,
+  course_id TEXT REFERENCES public.courses(id),
+  visitor_count INT DEFAULT 0,
+  last_visited TIMESTAMPTZ DEFAULT now()
+);
+-- 5. Enable Realtime Replication
 ALTER PUBLICATION supabase_realtime ADD TABLE public.branding;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.mentor;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
-`.trim();
-
-  const handleCopySQL = () => {
-    navigator.clipboard.writeText(sqlScript);
-    alert('Kode SQL Setup disalin!');
-  };
+ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;`.trim();
 
   const handleConnect = () => {
     if (!supabase.url || !supabase.anonKey) {
@@ -361,7 +482,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
     setTimeout(() => {
       setIsConnecting(false);
       setDbStatus('connected');
-      alert('Terhubung ke Supabase! Data disinkronkan realtime.');
+      alert('Terhubung ke Supabase!');
     }, 1500);
   };
 
@@ -386,11 +507,13 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
         </h2>
         <Card className="grid grid-cols-1 md:grid-cols-2 gap-8 featured shadow-[#8B5CF6]">
           <div className="space-y-4">
-            {/* USE LOCAL BRANDING STATE FOR SNAPPY INPUT */}
             <Input 
               label="Nama Platform" 
-              value={localBranding.siteName} 
-              onChange={e => setLocalBranding({...localBranding, siteName: e.target.value})} 
+              value={localSiteName} 
+              onChange={e => {
+                setLocalSiteName(e.target.value);
+                onLocalUpdate(); // Reset guard timer while typing
+              }} 
               icon={Layout} 
             />
           </div>
@@ -398,10 +521,10 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
             <ImageUpload 
               label="Logo Platform (PNG)" 
               variant="minimal" 
-              value={localBranding.logo} 
+              value={branding.logo} 
               onChange={logo => {
-                setLocalBranding({...localBranding, logo});
-                setBranding({...branding, logo}); // Update parent immediately for images
+                onLocalUpdate();
+                setBranding({...branding, logo});
               }} 
             />
           </div>
@@ -428,7 +551,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
           <div className="space-y-4 pt-4">
             <div className="flex justify-between items-center">
               <label className="text-xs font-extrabold uppercase tracking-widest text-[#64748B]">Setup SQL Script</label>
-              <Button variant="secondary" className="px-4 py-1.5 text-xs" onClick={handleCopySQL} icon={Copy}>Copy SQL</Button>
+              <Button variant="secondary" className="px-4 py-1.5 text-xs" onClick={() => { navigator.clipboard.writeText(sqlScript); alert('Copied!'); }} icon={Copy}>Copy SQL</Button>
             </div>
             <div className="bg-[#1E293B] text-[#34D399] p-6 rounded-3xl font-mono text-xs overflow-x-auto hard-shadow relative">
               <pre>{sqlScript}</pre>
@@ -672,7 +795,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
             <Badge className="hidden md:inline-block">{course.modules.length} Materi</Badge>
             <Button variant="secondary" className="px-4 py-2 text-xs" icon={Share2} onClick={() => {
               navigator.clipboard.writeText(window.location.href);
-              alert('Link publik materi ini telah disalin!');
+              alert('Link disalin!');
             }}>Bagikan</Button>
           </div>
         </div>
@@ -680,15 +803,10 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
-          {/* JUDUL KURSUS DI ATAS VIDEO/TEKS */}
-          <div className="bg-white border-2 border-[#1E293B] p-6 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-4 transition-bounce">
+          <div className="bg-white border-2 border-[#1E293B] p-6 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex-1">
-              <Badge color="#8B5CF6" className="text-white mb-2">Video Course</Badge>
+              <Badge color="#8B5CF6" className="text-white mb-2">Public Course</Badge>
               <h1 className="text-2xl font-extrabold text-[#1E293B] leading-tight">{course.title}</h1>
-              <div className="flex items-center gap-2 mt-1">
-                 <div className="h-1.5 w-16 bg-[#FBBF24] rounded-full"></div>
-                 <span className="text-[#64748B] font-bold text-[10px] tracking-widest uppercase">Arunika Learning Hub</span>
-              </div>
             </div>
           </div>
 
@@ -702,32 +820,25 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                       src={`https://www.youtube.com/embed/${selectedModule.content.split('v=')[1]?.split('&')[0] || selectedModule.content.split('/').pop()}`}
                       title={selectedModule.title}
                       frameBorder="0"
-                      allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
                       allowFullScreen
                     ></iframe>
                   </div>
                 ) : (
                   <div className="p-10 prose prose-slate max-w-none">
-                    <h2 className="text-3xl font-extrabold mb-6 text-[#1E293B] border-b-4 border-[#FBBF24] inline-block">{selectedModule.title}</h2>
+                    <h2 className="text-3xl font-extrabold mb-6 text-[#1E293B]">{selectedModule.title}</h2>
                     <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-lg leading-relaxed">{selectedModule.content}</div>
                   </div>
                 )}
               </div>
-              
-              <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow relative overflow-hidden">
-                 <div className="absolute top-0 right-0 w-16 h-16 bg-[#FBBF24] rounded-bl-3xl border-l-2 border-b-2 border-[#1E293B] flex items-center justify-center">
-                    <FileText className="text-[#1E293B]" />
-                 </div>
-                 <h3 className="text-xl font-extrabold mb-4 text-[#1E293B] tracking-tight">Detail Materi: {selectedModule.title}</h3>
-                 <div className="text-[#1E293B] text-lg leading-relaxed whitespace-pre-wrap font-medium">
-                    {selectedModule.description || "Tidak ada deskripsi tambahan untuk materi ini."}
-                 </div>
+              <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow">
+                 <h3 className="text-xl font-extrabold mb-4">Detail Materi</h3>
+                 <div className="text-[#1E293B] text-lg whitespace-pre-wrap">{selectedModule.description || "Tidak ada deskripsi."}</div>
               </div>
             </div>
           ) : (
             <div className="h-96 flex flex-col items-center justify-center text-[#64748B] font-bold bg-white rounded-3xl border-2 border-[#1E293B] border-dashed">
                <Globe size={64} className="mb-4 text-[#CBD5E1]" />
-               <p className="text-xl">Pilih salah satu materi di kurikulum untuk mulai.</p>
+               <p className="text-xl">Pilih materi.</p>
             </div>
           )}
         </div>
@@ -736,90 +847,32 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
           <Card className="flex flex-col items-center p-8 text-center featured">
              <div className="relative mb-6">
                 <img src={mentor.photo} className="w-28 h-28 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover" alt={mentor.name} />
-                <div className="absolute -bottom-2 -right-2 bg-[#FBBF24] p-2 rounded-xl border-2 border-[#1E293B] hard-shadow">
-                   <Check size={16} className="text-[#1E293B]" />
-                </div>
              </div>
              <h3 className="text-2xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
              <Badge color="#F472B6" className="text-white mb-4 uppercase text-[10px] tracking-widest">{mentor.role}</Badge>
-             <p className="text-[#64748B] text-sm leading-relaxed mb-6 font-medium italic">"{mentor.bio}"</p>
-             
-             <div className="flex justify-center gap-3 flex-wrap mb-8">
-                {mentor.socials.linkedin && (
-                   <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-[#0077b5] hover:text-white transition-all hard-shadow-hover">
-                      <Linkedin size={20} />
-                   </a>
-                )}
-                {mentor.socials.tiktok && (
-                   <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-black hover:text-white transition-all hard-shadow-hover">
-                      <Music size={20} />
-                   </a>
-                )}
-                {mentor.socials.instagram && (
-                   <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-pink-500 hover:text-white transition-all hard-shadow-hover">
-                      <Instagram size={20} />
-                   </a>
-                )}
-             </div>
-
-             {mentor.socials.website && (
-               <Button 
-                 variant="yellow" 
-                 className="w-full text-xs font-bold py-2" 
-                 icon={ExternalLink} 
-                 onClick={() => window.open(mentor.socials.website, '_blank')}
-               >
-                 Link Produk Lainnya
-               </Button>
-             )}
+             <p className="text-[#64748B] text-sm italic">"{mentor.bio}"</p>
           </Card>
 
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 hard-shadow">
             <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2 tracking-tight">
-              <BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum Materi
+              <BookOpen size={24} className="text-[#8B5CF6]" /> Materi
             </h3>
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
+            <div className="space-y-3">
               {course.modules.map((mod, i) => (
                 <button 
                   key={mod.id} 
                   onClick={() => setSelectedModule(mod)} 
-                  className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${selectedModule?.id === mod.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow translate-x-1' : 'bg-white border-transparent hover:bg-[#F1F5F9]'}`}
+                  className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${selectedModule?.id === mod.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow' : 'bg-white border-transparent hover:bg-[#F1F5F9]'}`}
                 >
                   <div className={`shrink-0 w-8 h-8 rounded-full border-2 border-[#1E293B] flex items-center justify-center font-bold text-xs ${selectedModule?.id === mod.id ? 'bg-white' : 'bg-[#F1F5F9]'}`}>
                     {i+1}
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-extrabold leading-tight">{mod.title}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                       {mod.type === 'video' ? <Video size={12} className="text-[#8B5CF6]" /> : <FileText size={12} className="text-[#F472B6]" />}
-                       <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">{mod.duration}</span>
-                    </div>
                   </div>
                 </button>
               ))}
             </div>
-
-            {course.assets.length > 0 && (
-              <div className="mt-10 border-t-2 border-[#E2E8F0] pt-6">
-                <h3 className="font-extrabold text-xl mb-4 flex items-center gap-2 tracking-tight">
-                  <Upload size={20} className="text-[#34D399]" /> Asset Download
-                </h3>
-                <div className="space-y-2">
-                  {course.assets.map(asset => (
-                    <a 
-                      key={asset.id} 
-                      href={asset.url} 
-                      target="_blank" 
-                      className="flex items-center justify-between p-4 rounded-xl bg-white border-2 border-[#1E293B] hover:bg-[#34D399] transition-all group" 
-                      download={asset.type === 'file' ? (asset.fileName || asset.name) : undefined}
-                    >
-                      <span className="text-sm font-bold truncate pr-2 group-hover:text-white">{asset.name}</span>
-                      <ExternalLink size={14} className="shrink-0 group-hover:text-white" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </main>
@@ -827,7 +880,6 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   );
 };
 
-// --- Main Application with Forced Realtime Logic ---
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
   const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
@@ -836,35 +888,33 @@ const App: React.FC = () => {
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
   const [syncing, setSyncing] = useState(false);
   
-  // Guard for realtime feedback loops
   const isSyncingRef = useRef(false);
-  const lastUpdateRef = useRef<number>(0);
+  const lastLocalUpdateRef = useRef<number>(0);
 
-  // Persistence to LocalStorage (Always up to date locally)
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
   useEffect(() => setStorageItem('courses', courses), [courses]);
   useEffect(() => setStorageItem('mentor', mentor), [mentor]);
   useEffect(() => setStorageItem('branding', branding), [branding]);
   useEffect(() => setStorageItem('supabase', supabase), [supabase]);
 
-  // FORCED REALTIME SYNC FUNCTION
+  const updateLastLocalUpdate = useCallback(() => {
+    lastLocalUpdateRef.current = Date.now();
+  }, []);
+
   const triggerForcedSync = useCallback(async () => {
     if (!supabase.url || !supabase.anonKey || isSyncingRef.current) return;
     
     setSyncing(true);
     isSyncingRef.current = true;
-    lastUpdateRef.current = Date.now();
+    updateLastLocalUpdate();
     
     try {
       const client = createClient(supabase.url, supabase.anonKey);
-      
-      // Batch sync
       const promises = [
         client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo }),
         client.from('mentor').upsert({ id: 'profile', ...mentor })
       ];
-      
-      for (const course of courses) {
+      courses.forEach(course => {
         promises.push(client.from('courses').upsert({
           id: course.id,
           title: course.title,
@@ -874,27 +924,23 @@ const App: React.FC = () => {
           assets: course.assets,
           mentor_id: course.mentorId
         }));
-      }
-      
+      });
       await Promise.all(promises);
     } catch (err) {
-      console.error("Supabase Realtime Sync Failed:", err);
+      console.error("Sync Error:", err);
     } finally {
-      // Small timeout to prevent UI flickering and allow local state to settle
       setTimeout(() => {
         setSyncing(false);
         isSyncingRef.current = false;
-      }, 800);
+      }, 1000);
     }
-  }, [branding, mentor, courses, supabase]);
+  }, [branding, mentor, courses, supabase, updateLastLocalUpdate]);
 
-  // Automatic Trigger on any change with debounce
   useEffect(() => {
-    const timer = setTimeout(triggerForcedSync, 2000); 
+    const timer = setTimeout(triggerForcedSync, 3000);
     return () => clearTimeout(timer);
   }, [branding, mentor, courses, triggerForcedSync]);
 
-  // Initial Fetch from Supabase
   useEffect(() => {
     if (!supabase.url || !supabase.anonKey) return;
     const client = createClient(supabase.url, supabase.anonKey);
@@ -902,10 +948,8 @@ const App: React.FC = () => {
     const initialFetch = async () => {
       const { data: b } = await client.from('branding').select('*').single();
       if (b) setBranding({ siteName: b.site_name, logo: b.logo });
-
       const { data: m } = await client.from('mentor').select('*').single();
       if (m) setMentor(m);
-
       const { data: c } = await client.from('courses').select('*');
       if (c && c.length > 0) {
         setCourses(c.map((item: any) => ({
@@ -917,24 +961,22 @@ const App: React.FC = () => {
     };
     initialFetch();
     
-    // Subscribe to realtime updates
     const sub = client.channel('public_updates').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
-       // IGNORE IF WE JUST UPDATED (fixes the "revert" jump)
-       const now = Date.now();
-       if (isSyncingRef.current || (now - lastUpdateRef.current < 5000)) {
-         return;
-       }
+       const timeSinceLastLocalUpdate = Date.now() - lastLocalUpdateRef.current;
+       if (isSyncingRef.current || timeSinceLastLocalUpdate < 5000) return;
 
        if(payload.table === 'branding') {
-         if (payload.new.site_name !== branding.siteName || payload.new.logo !== branding.logo) {
-           setBranding({siteName: payload.new.site_name, logo: payload.new.logo});
-         }
+         setBranding(prev => ({...prev, siteName: payload.new.site_name, logo: payload.new.logo}));
        }
        if(payload.table === 'mentor') setMentor(payload.new);
+       if(payload.table === 'courses') {
+         const newCourse = { ...payload.new, coverImage: payload.new.cover_image, mentorId: payload.new.mentor_id };
+         setCourses(prev => prev.map(c => c.id === newCourse.id ? newCourse : c));
+       }
     }).subscribe();
 
     return () => { client.removeChannel(sub); };
-  }, [supabase.url, supabase.anonKey, branding.siteName, branding.logo]);
+  }, [supabase.url, supabase.anonKey]);
 
   const updateCourse = (updated: Course) => {
     setCourses(prev => prev.map(c => c.id === updated.id ? updated : c));
@@ -942,11 +984,10 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      {/* NOTIFICATION: TOP CENTER */}
-      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-500 transform ${syncing ? 'translate-y-0 opacity-100' : '-translate-y-12 opacity-0'}`}>
+      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-500 ease-in-out transform ${syncing ? 'translate-y-0 opacity-100' : '-translate-y-12 opacity-0'}`}>
         <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-5 py-2 flex items-center gap-3 hard-shadow">
            <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
-           <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B]">Syncing Realtime...</span>
+           <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B]">Sinkronisasi...</span>
         </div>
       </div>
       
@@ -954,7 +995,8 @@ const App: React.FC = () => {
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
         <Route path="/admin" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AdminDashboard courses={courses} setCourses={setCourses} /></main></div> : <Navigate to="/login" />} />
         <Route path="/admin/course/:id" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></main></div> : <Navigate to="/login" />} />
-        <Route path="/settings" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} /></main></div> : <Navigate to="/login" />} />
+        <Route path="/analytics" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AnalyticsPage courses={courses} /></main></div> : <Navigate to="/login" />} />
+        <Route path="/settings" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalUpdate={updateLastLocalUpdate} /></main></div> : <Navigate to="/login" />} />
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} />} />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>
@@ -963,4 +1005,4 @@ const App: React.FC = () => {
 };
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(<React.StrictMode><Router><App /></Router></React.StrictMode>);
+root.render(<Router><App /></Router>);
