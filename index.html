@@ -4,7 +4,7 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Arunika LMS</title>
+    <title>Arunika LMS - Playful Geometric</title>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -39,6 +39,11 @@
       .transition-bounce {
         transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
       }
+      /* Custom selection color */
+      ::selection {
+        background: #FBBF24;
+        color: #1E293B;
+      }
     </style>
   <script type="importmap">
 {
@@ -56,5 +61,6 @@
 </head>
   <body class="dot-grid min-h-screen">
     <div id="root"></div>
+    <script type="module" src="/index.tsx"></script>
   </body>
 </html>

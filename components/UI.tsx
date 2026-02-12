@@ -71,8 +71,9 @@ export const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement
   );
 };
 
-export const Badge: React.FC<{ children: React.ReactNode; color?: string }> = ({ children, color = '#FBBF24' }) => (
-  <span className="px-3 py-1 rounded-full text-xs font-bold border-2 border-[#1E293B] shadow-[2px 2px 0px 0px_#1E293B]" style={{ backgroundColor: color }}>
+// Added className to Badge component props to support custom styling and fix TS error
+export const Badge: React.FC<{ children: React.ReactNode; color?: string; className?: string }> = ({ children, color = '#FBBF24', className = '' }) => (
+  <span className={`px-3 py-1 rounded-full text-xs font-bold border-2 border-[#1E293B] shadow-[2px 2px 0px 0px_#1E293B] ${className}`} style={{ backgroundColor: color }}>
     {children}
   </span>
 );
