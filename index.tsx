@@ -33,11 +33,10 @@ import {
   Save,
   Instagram,
   RefreshCw,
-  // Added Check to imports
   Check
 } from 'lucide-react';
 
-// Use standard Supabase import if possible, but keeping URL import as requested/provided
+// Use dynamic ESM import for Supabase client
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
@@ -230,6 +229,7 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
       assets: []
     };
     setCourses([...courses, newCourse]);
+    // Navigate to editor immediately
     navigate(`/admin/course/${newCourse.id}`);
   };
 
@@ -647,7 +647,6 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
-          {/* JUDUL KURSUS DI ATAS VIDEO/TEKS */}
           <div className="bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 transition-bounce">
             <div className="flex-1">
               <Badge color="#8B5CF6" className="text-white mb-3">PUBLIC PUBLICATION</Badge>
@@ -798,7 +797,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   );
 };
 
-// --- Main Application with Forced Realtime Logic ---
+// --- Main Application with Optimized Forced Realtime Logic ---
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
   const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
@@ -806,8 +805,9 @@ const App: React.FC = () => {
   const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
   const [syncing, setSyncing] = useState(false);
+  const isSyncingRef = useRef(false);
 
-  // Persistence to LocalStorage (Always up to date locally)
+  // Persistence to LocalStorage (Immediate feedback)
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
   useEffect(() => setStorageItem('courses', courses), [courses]);
   useEffect(() => setStorageItem('mentor', mentor), [mentor]);
@@ -817,7 +817,12 @@ const App: React.FC = () => {
   // FORCED REALTIME SYNC FUNCTION
   const triggerForcedSync = useCallback(async () => {
     if (!supabase.url || !supabase.anonKey) return;
+    
+    // Prevent sync if already syncing to avoid circular conflicts
+    if (isSyncingRef.current) return;
+
     setSyncing(true);
+    isSyncingRef.current = true;
     try {
       const client = createClient(supabase.url, supabase.anonKey);
       
@@ -827,7 +832,7 @@ const App: React.FC = () => {
       // Force sync mentor
       await client.from('mentor').upsert({ id: 'profile', ...mentor });
       
-      // Force sync all courses
+      // Force sync all courses (including new ones)
       for (const course of courses) {
         await client.from('courses').upsert({
           id: course.id,
@@ -842,44 +847,57 @@ const App: React.FC = () => {
     } catch (err) {
       console.error("Supabase Realtime Sync Failed:", err);
     } finally {
-      setTimeout(() => setSyncing(false), 500);
+      // Small timeout for UI feedback and safety
+      setTimeout(() => {
+        setSyncing(false);
+        isSyncingRef.current = false;
+      }, 1000);
     }
   }, [branding, mentor, courses, supabase]);
 
-  // Automatic Trigger on any change
+  // Automatic Trigger on any local change
   useEffect(() => {
-    const timer = setTimeout(triggerForcedSync, 1000); // 1s debounce to allow multiple quick inputs
+    const timer = setTimeout(() => {
+       triggerForcedSync();
+    }, 1500); // Debounce to allow user to finish typing/editing
     return () => clearTimeout(timer);
   }, [branding, mentor, courses, triggerForcedSync]);
 
-  // Initial Fetch from Supabase
+  // Initial Fetch & Subscription
   useEffect(() => {
     if (!supabase.url || !supabase.anonKey) return;
     const client = createClient(supabase.url, supabase.anonKey);
     
     const initialFetch = async () => {
       const { data: b } = await client.from('branding').select('*').single();
-      if (b) setBranding({ siteName: b.site_name, logo: b.logo });
+      if (b) setBranding(prev => (prev.logo !== b.logo || prev.siteName !== b.site_name) ? { siteName: b.site_name, logo: b.logo } : prev);
 
       const { data: m } = await client.from('mentor').select('*').single();
-      if (m) setMentor(m);
+      if (m) setMentor(prev => JSON.stringify(prev) !== JSON.stringify(m) ? m : prev);
 
       const { data: c } = await client.from('courses').select('*');
       if (c && c.length > 0) {
-        setCourses(c.map((item: any) => ({
+        const mappedCourses = c.map((item: any) => ({
           ...item,
           coverImage: item.cover_image,
           mentorId: item.mentor_id
-        })));
+        }));
+        setCourses(prev => JSON.stringify(prev) !== JSON.stringify(mappedCourses) ? mappedCourses : prev);
       }
     };
     initialFetch();
     
-    // Subscribe to realtime updates if any (for external changes)
-    const sub = client.channel('public_updates').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
-       // Refresh local state if remote table branding or mentor changed
-       if(payload.table === 'branding') setBranding({siteName: payload.new.site_name, logo: payload.new.logo});
-       if(payload.table === 'mentor') setMentor(payload.new);
+    // Subscribe to realtime updates for other devices
+    const sub = client.channel('all_changes').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
+       // Only update if WE are not the one currently pushing data
+       if (!isSyncingRef.current) {
+          if (payload.table === 'branding') setBranding({ siteName: payload.new.site_name, logo: payload.new.logo });
+          if (payload.table === 'mentor') setMentor(payload.new);
+          if (payload.table === 'courses') {
+             // Re-fetch courses to get the latest list properly if something changed
+             initialFetch();
+          }
+       }
     }).subscribe();
 
     return () => { client.removeChannel(sub); };
@@ -891,12 +909,14 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      {syncing && (
-        <div className="fixed bottom-6 left-6 z-[999] bg-[#34D399] border-2 border-[#1E293B] rounded-full px-5 py-2 flex items-center gap-3 hard-shadow animate-bounce">
+      {/* SYNC POPUP: TOP CENTER WITH SMOOTH ANIMATION */}
+      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-700 ease-out ${syncing ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-8 scale-95 pointer-events-none'}`}>
+        <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-6 py-2.5 flex items-center gap-3 hard-shadow">
            <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
-           <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B]">Syncing Realtime...</span>
+           <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B] whitespace-nowrap">Synchronizing Realtime...</span>
         </div>
-      )}
+      </div>
+
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
         <Route path="/admin" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AdminDashboard courses={courses} setCourses={setCourses} /></main></div> : <Navigate to="/login" />} />
