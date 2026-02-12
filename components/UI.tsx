@@ -1,10 +1,10 @@
-
 import React from 'react';
 import { ArrowRight, LucideIcon } from 'lucide-react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'accent' | 'pink' | 'yellow' | 'green';
-  icon?: LucideIcon;
+  // Use React.ComponentType to allow any valid React component as an icon, including custom SVGs
+  icon?: React.ComponentType<any>;
   isLoading?: boolean;
 }
 
@@ -47,7 +47,8 @@ export const Card: React.FC<{ children: React.ReactNode; className?: string; fea
   );
 };
 
-export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string; icon?: LucideIcon }> = ({ label, icon: Icon, className = '', ...props }) => {
+// Use React.ComponentType for the icon prop to avoid strict LucideIcon type mismatch errors when using custom components
+export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string; icon?: React.ComponentType<any> }> = ({ label, icon: Icon, className = '', ...props }) => {
   return (
     <div className="flex flex-col gap-2">
       {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}

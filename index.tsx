@@ -41,6 +41,22 @@ import {
   Activity
 } from 'lucide-react';
 
+// Custom TikTok SVG Icon since it might not be in all Lucide versions
+const TiktokIcon = ({ size = 18 }) => (
+  <svg 
+    width={size} 
+    height={size} 
+    viewBox="0 0 24 24" 
+    fill="none" 
+    stroke="currentColor" 
+    strokeWidth="2" 
+    strokeLinecap="round" 
+    strokeLinejoin="round"
+  >
+    <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
+  </svg>
+);
+
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1?external=react,react-dom';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
@@ -260,7 +276,6 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
 
 const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> = ({ courses, supabase }) => {
   const [views, setViews] = useState<any[]>([]);
-  const [loading, setLoading] = useState(false);
   const [isLive, setIsLive] = useState(false);
 
   // Helper function to process views data
@@ -285,22 +300,27 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
     const client = createClient(supabase.url, supabase.anonKey);
     
     const fetchInitial = async () => {
-      setLoading(true);
-      const { data, error } = await client.from('course_views').select('*');
+      const { data } = await client.from('course_views').select('*');
       if (data) setViews(data);
-      setLoading(false);
     };
 
     fetchInitial();
 
     // REAL-TIME SUBSCRIPTION
     const channel = client.channel('analytics_realtime')
-      .on('postgres_changes', { event: 'INSERT', table: 'course_views', schema: 'public' }, (payload) => {
-        console.log('Kunjungan Baru Terdeteksi!', payload);
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        table: 'course_views', 
+        schema: 'public' 
+      }, (payload) => {
+        console.log('Kunjungan Real-time Baru!', payload.new);
         setViews(prev => [...prev, payload.new]);
       })
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') setIsLive(true);
+        if (status === 'SUBSCRIBED') {
+          setIsLive(true);
+          console.log("Real-time Tracking Terhubung!");
+        }
       });
 
     return () => {
@@ -320,7 +340,7 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
         <Badge color={isLive ? '#34D399' : '#E2E8F0'} className="h-10">
           <div className="flex items-center gap-2 px-1">
              <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-white animate-pulse' : 'bg-[#94A3B8]'}`} />
-             <span className={isLive ? 'text-white' : 'text-[#64748B]'}>{isLive ? 'LIVE TRACKING AKTIF' : 'OFFLINE'}</span>
+             <span className={isLive ? 'text-white' : 'text-[#64748B]'}>{isLive ? 'LIVE TRACKING AKTIF' : 'MENYAMBUNGKAN...'}</span>
           </div>
         </Badge>
       </div>
@@ -356,8 +376,8 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
               <Activity size={24} className="md:w-8 md:h-8" />
             </div>
             <div>
-              <p className="text-[10px] md:text-xs font-bold text-[#64748B] uppercase tracking-wider">Real-time Pulse</p>
-              <h2 className="text-lg md:text-xl font-extrabold">{isLive ? 'AKTIF' : 'MENUNGGU'}</h2>
+              <p className="text-[10px] md:text-xs font-bold text-[#64748B] uppercase tracking-wider">Status Sinkron</p>
+              <h2 className="text-lg md:text-xl font-extrabold">{isLive ? 'SINKRON' : 'LOKAL'}</h2>
             </div>
           </div>
         </Card>
@@ -510,7 +530,7 @@ const Settings: React.FC<{
   }, [localSiteName]);
 
   const sqlScript = `
--- SETUP DATABASE ARUNIKA LMS (IDEMPOTENT CONFIG)
+-- SETUP DATABASE ARUNIKA LMS (REAL-TIME ENABLED)
 -- 1. Tabel Branding
 CREATE TABLE IF NOT EXISTS public.branding (
   id TEXT PRIMARY KEY DEFAULT 'config',
@@ -547,24 +567,20 @@ CREATE TABLE IF NOT EXISTS public.course_views (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 5. Enable Realtime Replication Secara Aman
--- Jalankan blok di bawah ini di SQL Editor Supabase Anda:
+-- 5. PENTING: Aktifkan Realtime Untuk Semua Tabel
+-- Jalankan kode di bawah ini di SQL Editor Supabase:
 
 DO $$ 
 BEGIN
-  -- Tambahkan tabel ke publikasi jika belum ada
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'branding') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE branding;
   END IF;
-  
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'mentor') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE mentor;
   END IF;
-
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'courses') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE courses;
   END IF;
-
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'course_views') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE course_views;
   END IF;
@@ -820,7 +836,7 @@ const CourseEditor: React.FC<{
               <Textarea label="Bio" value={mentor.bio} onChange={e => setMentor({...mentor, bio: e.target.value})} />
               <div className="grid grid-cols-1 gap-4">
                 <Input label="LinkedIn" value={mentor.socials.linkedin} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
-                <Input label="TikTok" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={Music} />
+                <Input label="TikTok" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={TiktokIcon} />
                 <Input label="Instagram" value={mentor.socials.instagram} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} icon={Instagram} />
                 <Input label="Website" value={mentor.socials.website} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} icon={ExternalLink} />
               </div>
@@ -884,11 +900,12 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
         trackAttempted.current = true;
         try {
           const client = createClient(supabase.url, supabase.anonKey);
+          // INSERT visit record to course_views
           const { error } = await client.from('course_views').insert({ course_id: id });
-          if (error) console.error("Tracking Error:", error);
-          else console.log("Kunjungan Berhasil Dicatat ke DB");
+          if (error) console.error("Real-time Tracking Error:", error);
+          else console.log("Real-time Visit Tracked Successfully");
         } catch (e) {
-          console.error("Tracking Exception:", e);
+          console.error("Tracking System Exception:", e);
         }
       }
     };
@@ -959,6 +976,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
         </div>
 
         <div className="lg:col-span-1 space-y-6">
+          {/* MENTOR CARD WITH SOCIALS */}
           <Card className="flex flex-col items-center p-6 md:p-8 text-center featured">
              <div className="relative mb-4 md:mb-6">
                 <img src={mentor.photo} className="w-24 h-24 md:w-28 md:h-28 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover" alt={mentor.name} />
@@ -966,33 +984,35 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
              <h3 className="text-xl md:text-2xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
              <Badge color="#F472B6" className="text-white mb-4 uppercase text-[8px] md:text-[10px] tracking-widest">{mentor.role}</Badge>
              <p className="text-[#64748B] text-xs md:text-sm italic mb-6">"{mentor.bio}"</p>
-             <div className="flex gap-3 md:gap-4">
-                {mentor.socials.instagram && <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce"><Instagram size={18}/></a>}
-                {mentor.socials.linkedin && <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce"><Linkedin size={18}/></a>}
-                {mentor.socials.tiktok && <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce"><Music size={18}/></a>}
-                {mentor.socials.website && <a href={mentor.socials.website} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce"><Globe size={18}/></a>}
+             
+             {/* SOCIAL MEDIA ROW */}
+             <div className="flex gap-3 md:gap-4 mb-6">
+                {mentor.socials.instagram && (
+                  <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce" title="Instagram">
+                    <Instagram size={18}/>
+                  </a>
+                )}
+                {mentor.socials.linkedin && (
+                  <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce" title="LinkedIn">
+                    <Linkedin size={18}/>
+                  </a>
+                )}
+                {mentor.socials.tiktok && (
+                  <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce" title="TikTok">
+                    <TiktokIcon size={18}/>
+                  </a>
+                )}
              </div>
+
+             {/* WEBSITE BUTTON */}
+             {mentor.socials.website && (
+               <a href={mentor.socials.website} target="_blank" className="w-full">
+                 <Button variant="secondary" className="w-full h-10 text-xs" icon={ExternalLink}>Link produk lainnya</Button>
+               </a>
+             )}
           </Card>
 
-          <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-4 md:p-6 hard-shadow">
-            <h3 className="font-extrabold text-lg md:text-xl mb-4 flex items-center gap-2 tracking-tight">
-              <Download size={24} className="text-[#34D399]" /> Asset Belajar
-            </h3>
-            <div className="space-y-2 md:space-y-3">
-              {course.assets && course.assets.length > 0 ? course.assets.map(asset => (
-                <a 
-                  key={asset.id} 
-                  href={asset.url} 
-                  target="_blank" 
-                  className="flex items-center gap-3 p-3 bg-[#F1F5F9] rounded-xl border-2 border-transparent hover:border-[#1E293B] transition-all font-bold text-[10px] md:text-xs"
-                >
-                  {asset.type === 'file' ? <FileText size={16} className="text-[#8B5CF6]"/> : <LinkIcon size={16} className="text-[#34D399]"/>}
-                  <span className="truncate flex-1">{asset.name}</span>
-                </a>
-              )) : <p className="text-[10px] md:text-xs text-[#94A3B8] italic">Tidak ada asset tersedia.</p>}
-            </div>
-          </div>
-
+          {/* CURRICULUM LIST (NOW ABOVE ASSETS) */}
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-4 md:p-6 hard-shadow">
             <h3 className="font-extrabold text-lg md:text-xl mb-4 md:mb-6 flex items-center gap-2 tracking-tight">
               <BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum
@@ -1013,6 +1033,26 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                   </div>
                 </button>
               ))}
+            </div>
+          </div>
+
+          {/* ASSETS CARD (NOW BELOW CURRICULUM) */}
+          <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-4 md:p-6 hard-shadow">
+            <h3 className="font-extrabold text-lg md:text-xl mb-4 flex items-center gap-2 tracking-tight">
+              <Download size={24} className="text-[#34D399]" /> Asset Belajar
+            </h3>
+            <div className="space-y-2 md:space-y-3">
+              {course.assets && course.assets.length > 0 ? course.assets.map(asset => (
+                <a 
+                  key={asset.id} 
+                  href={asset.url} 
+                  target="_blank" 
+                  className="flex items-center gap-3 p-3 bg-[#F1F5F9] rounded-xl border-2 border-transparent hover:border-[#1E293B] transition-all font-bold text-[10px] md:text-xs"
+                >
+                  {asset.type === 'file' ? <FileText size={16} className="text-[#8B5CF6]"/> : <LinkIcon size={16} className="text-[#34D399]"/>}
+                  <span className="truncate flex-1">{asset.name}</span>
+                </a>
+              )) : <p className="text-[10px] md:text-xs text-[#94A3B8] italic">Tidak ada asset tersedia.</p>}
             </div>
           </div>
         </div>
