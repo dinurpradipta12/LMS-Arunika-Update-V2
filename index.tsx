@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
@@ -950,7 +949,8 @@ const App: React.FC = () => {
     
     initialFetch();
     
-    const sub = client.channel('all_changes').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
+    // FIX: Added 'schema: "public"' to the filter object to correctly match the 'postgres_changes' overload in Supabase Realtime.
+    const sub = client.channel('all_changes').on('postgres_changes', { event: '*', schema: 'public', table: '*' } as any, (payload: any) => {
        if (!isSyncingRef.current) {
           if (payload.table === 'branding') {
             setBranding(prev => (prev.logo !== payload.new.logo || prev.siteName !== payload.new.site_name) ? { siteName: payload.new.site_name, logo: payload.new.logo } : prev);
@@ -999,6 +999,6 @@ const App: React.FC = () => {
   );
 };
 
-// Merender langsung tanpa menyertakan Router lagi karena sudah dibungkus di level atas atau sebaliknya
+// Merender dengan Router wrapper untuk mendukung navigasi
 const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(<App />);
+root.render(<Router><App /></Router>)
