@@ -37,7 +37,8 @@ import {
   Users,
   Eye,
   Menu,
-  Download
+  Download,
+  Activity
 } from 'lucide-react';
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1?external=react,react-dom';
@@ -175,7 +176,6 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      {/* Container max-w-md membatasi lebar card agar tidak stretch */}
       <div className="w-full max-w-md">
         <Card className="p-8">
           <div className="flex flex-col items-center mb-8">
@@ -202,7 +202,6 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
   
   return (
     <>
-      {/* Mobile Overlay */}
       {isOpen && (
         <div 
           className="fixed inset-0 bg-black/40 z-[100] md:hidden backdrop-blur-sm transition-opacity"
@@ -210,7 +209,6 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
         />
       )}
       
-      {/* Sidebar Container */}
       <div className={`
         fixed inset-y-0 left-0 z-[101] w-64 bg-white border-r-2 border-[#1E293B] flex flex-col transition-transform duration-300 ease-in-out
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
@@ -261,47 +259,70 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
 };
 
 const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> = ({ courses, supabase }) => {
-  const [data, setData] = useState<{ course_id: string, count: number }[]>([]);
-  const [total, setTotal] = useState(0);
+  const [views, setViews] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [isLive, setIsLive] = useState(false);
+
+  // Helper function to process views data
+  const processData = (allViews: any[]) => {
+    const counts = allViews.reduce((acc: any, curr: any) => {
+      acc[curr.course_id] = (acc[curr.course_id] || 0) + 1;
+      return acc;
+    }, {});
+    
+    return Object.entries(counts).map(([id, count]) => ({
+      course_id: id as string,
+      count: count as number
+    })).sort((a, b) => b.count - a.count);
+  };
+
+  const sortedData = processData(views);
+  const total = views.length;
 
   useEffect(() => {
-    const fetchAnalytics = async () => {
-      if (!supabase.url || !supabase.anonKey) return;
+    if (!supabase.url || !supabase.anonKey) return;
+    
+    const client = createClient(supabase.url, supabase.anonKey);
+    
+    const fetchInitial = async () => {
       setLoading(true);
-      const client = createClient(supabase.url, supabase.anonKey);
-      
-      const { data: views, error } = await client
-        .from('course_views')
-        .select('course_id');
-      
-      if (views) {
-        setTotal(views.length);
-        const counts = views.reduce((acc: any, curr: any) => {
-          acc[curr.course_id] = (acc[curr.course_id] || 0) + 1;
-          return acc;
-        }, {});
-        
-        const sorted = Object.entries(counts).map(([id, count]) => ({
-          course_id: id as string,
-          count: count as number
-        })).sort((a, b) => b.count - a.count);
-        
-        setData(sorted);
-      }
+      const { data, error } = await client.from('course_views').select('*');
+      if (data) setViews(data);
       setLoading(false);
     };
 
-    fetchAnalytics();
-  }, [supabase]);
+    fetchInitial();
+
+    // REAL-TIME SUBSCRIPTION
+    const channel = client.channel('analytics_realtime')
+      .on('postgres_changes', { event: 'INSERT', table: 'course_views', schema: 'public' }, (payload) => {
+        console.log('Kunjungan Baru Terdeteksi!', payload);
+        setViews(prev => [...prev, payload.new]);
+      })
+      .subscribe((status) => {
+        if (status === 'SUBSCRIBED') setIsLive(true);
+      });
+
+    return () => {
+      client.removeChannel(channel);
+    };
+  }, [supabase.url, supabase.anonKey]);
 
   const getCourseTitle = (id: string) => courses.find(c => c.id === id)?.title || "Unknown Course";
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 md:space-y-8">
-      <div>
-        <h1 className="text-3xl md:text-4xl font-extrabold mb-2 text-[#1E293B]">Analitik Pengunjung</h1>
-        <p className="text-sm md:text-base text-[#64748B]">Data kunjungan realtime dari link yang Anda bagikan.</p>
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <h1 className="text-3xl md:text-4xl font-extrabold mb-2 text-[#1E293B]">Analitik Pengunjung</h1>
+          <p className="text-sm md:text-base text-[#64748B]">Pantau performa publikasi Anda secara langsung.</p>
+        </div>
+        <Badge color={isLive ? '#34D399' : '#E2E8F0'} className="h-10">
+          <div className="flex items-center gap-2 px-1">
+             <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-white animate-pulse' : 'bg-[#94A3B8]'}`} />
+             <span className={isLive ? 'text-white' : 'text-[#64748B]'}>{isLive ? 'LIVE TRACKING AKTIF' : 'OFFLINE'}</span>
+          </div>
+        </Badge>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4 md:gap-6">
@@ -323,8 +344,8 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
               <TrendingUp size={24} className="md:w-8 md:h-8" />
             </div>
             <div>
-              <p className="text-[10px] md:text-xs font-bold text-[#64748B] uppercase tracking-wider">Konversi Klik</p>
-              <h2 className="text-2xl md:text-4xl font-extrabold">{total > 0 ? (total * 0.15).toFixed(0) : 0}</h2>
+              <p className="text-[10px] md:text-xs font-bold text-[#64748B] uppercase tracking-wider">Prakiraan Konversi</p>
+              <h2 className="text-2xl md:text-4xl font-extrabold">{total > 0 ? (total * 0.12).toFixed(0) : 0}</h2>
             </div>
           </div>
         </Card>
@@ -332,11 +353,11 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
         <Card className="border-[#34D399]">
           <div className="flex items-center gap-4">
             <div className="p-3 md:p-4 bg-[#34D399]/10 rounded-2xl text-[#34D399]">
-              <Globe size={24} className="md:w-8 md:h-8" />
+              <Activity size={24} className="md:w-8 md:h-8" />
             </div>
             <div>
-              <p className="text-[10px] md:text-xs font-bold text-[#64748B] uppercase tracking-wider">Sumber Traffic</p>
-              <h2 className="text-lg md:text-xl font-extrabold">Halaman Publik</h2>
+              <p className="text-[10px] md:text-xs font-bold text-[#64748B] uppercase tracking-wider">Real-time Pulse</p>
+              <h2 className="text-lg md:text-xl font-extrabold">{isLive ? 'AKTIF' : 'MENUNGGU'}</h2>
             </div>
           </div>
         </Card>
@@ -344,9 +365,9 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 md:gap-8">
         <Card className="flex flex-col">
-          <h3 className="text-xl font-extrabold mb-4 md:mb-6">Paling Sering Dikunjungi</h3>
+          <h3 className="text-xl font-extrabold mb-4 md:mb-6">Kursus Terpopuler</h3>
           <div className="space-y-4 flex-1">
-            {data.slice(0, 5).map((item, i) => (
+            {sortedData.slice(0, 5).map((item, i) => (
               <div key={item.course_id} className="flex items-center gap-4">
                 <div className="w-8 h-8 rounded-full border-2 border-[#1E293B] bg-[#FBBF24] flex items-center justify-center font-bold text-xs">{i+1}</div>
                 <div className="flex-1">
@@ -354,19 +375,19 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
                   <div className="w-full bg-[#F1F5F9] h-2 rounded-full overflow-hidden mt-1 border border-[#E2E8F0]">
                     <div 
                       className="bg-[#8B5CF6] h-full transition-all duration-1000" 
-                      style={{ width: `${(item.count / (data[0]?.count || 1)) * 100}%` }}
+                      style={{ width: `${(item.count / (sortedData[0]?.count || 1)) * 100}%` }}
                     ></div>
                   </div>
                 </div>
                 <span className="text-[10px] md:text-xs font-extrabold text-[#64748B] whitespace-nowrap">{item.count} Views</span>
               </div>
             ))}
-            {data.length === 0 && <p className="text-center py-12 text-[#64748B] italic">Belum ada data kunjungan.</p>}
+            {sortedData.length === 0 && <p className="text-center py-12 text-[#64748B] italic">Belum ada kunjungan tercatat.</p>}
           </div>
         </Card>
 
         <Card>
-          <h3 className="text-xl font-extrabold mb-4 md:mb-6">Grafik Aktivitas</h3>
+          <h3 className="text-xl font-extrabold mb-4 md:mb-6">Distribusi Traffic</h3>
           <div className="h-48 md:h-64 flex items-end gap-2 md:gap-3 px-1 md:px-2">
             {[30, 45, 25, 60, 80, 55, 90].map((val, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-help">
@@ -489,7 +510,7 @@ const Settings: React.FC<{
   }, [localSiteName]);
 
   const sqlScript = `
--- SETUP DATABASE ARUNIKA LMS (REAL-TIME CONFIG)
+-- SETUP DATABASE ARUNIKA LMS (IDEMPOTENT CONFIG)
 -- 1. Tabel Branding
 CREATE TABLE IF NOT EXISTS public.branding (
   id TEXT PRIMARY KEY DEFAULT 'config',
@@ -525,12 +546,29 @@ CREATE TABLE IF NOT EXISTS public.course_views (
   course_id TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
--- 5. Enable Realtime Replication
--- CATATAN: Jalankan perintah di bawah ini SATU PER SATU. 
--- Jika muncul error "relation already member", abaikan saja karena berarti sudah aktif.
--- ALTER PUBLICATION supabase_realtime ADD TABLE public.branding;
--- ALTER PUBLICATION supabase_realtime ADD TABLE public.mentor;
--- ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;`.trim();
+
+-- 5. Enable Realtime Replication Secara Aman
+-- Jalankan blok di bawah ini di SQL Editor Supabase Anda:
+
+DO $$ 
+BEGIN
+  -- Tambahkan tabel ke publikasi jika belum ada
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'branding') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE branding;
+  END IF;
+  
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'mentor') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE mentor;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'courses') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE courses;
+  END IF;
+
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'course_views') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE course_views;
+  END IF;
+END $$;`.trim();
 
   const handleConnect = () => {
     if (!supabase.url || !supabase.anonKey) {
@@ -831,6 +869,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   const { id } = useParams<{ id: string }>();
   const course = courses.find(c => c.id === id);
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
+  const trackAttempted = useRef(false);
 
   useEffect(() => {
     if (course && course.modules.length > 0) {
@@ -841,9 +880,16 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   // ANALYTICS TRACKING: Record visit to Supabase
   useEffect(() => {
     const trackVisit = async () => {
-      if (supabase.url && supabase.anonKey && id) {
-        const client = createClient(supabase.url, supabase.anonKey);
-        await client.from('course_views').insert({ course_id: id });
+      if (supabase.url && supabase.anonKey && id && !trackAttempted.current) {
+        trackAttempted.current = true;
+        try {
+          const client = createClient(supabase.url, supabase.anonKey);
+          const { error } = await client.from('course_views').insert({ course_id: id });
+          if (error) console.error("Tracking Error:", error);
+          else console.log("Kunjungan Berhasil Dicatat ke DB");
+        } catch (e) {
+          console.error("Tracking Exception:", e);
+        }
       }
     };
     trackVisit();
@@ -1097,7 +1143,6 @@ const App: React.FC = () => {
         onClose={() => setIsSidebarOpen(false)} 
       />
       <main className="flex-1 min-w-0 bg-[#FFFDF5] dot-grid flex flex-col">
-        {/* Mobile Header */}
         <header className="md:hidden bg-white border-b-2 border-[#1E293B] p-4 flex items-center justify-between sticky top-0 z-30 h-16">
           <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-[#1E293B] hover:bg-[#F1F5F9] rounded-xl transition-colors">
             <Menu size={24} />
