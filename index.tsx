@@ -36,6 +36,9 @@ import {
   Check
 } from 'lucide-react';
 
+// Mengimpor ikon media sosial dari react-icons via esm.sh
+import { FaTiktok, FaLinkedinIn, FaInstagram } from 'https://esm.sh/react-icons@5.0.1/fa';
+
 // Use dynamic ESM import for Supabase client
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
 
@@ -595,9 +598,9 @@ const CourseEditor: React.FC<{
               <Input label="Role" value={mentor.role} onChange={e => setMentor({...mentor, role: e.target.value})} />
               <Textarea label="Bio" value={mentor.bio} onChange={e => setMentor({...mentor, bio: e.target.value})} />
               <div className="grid grid-cols-1 gap-4">
-                <Input label="LinkedIn" value={mentor.socials.linkedin} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
-                <Input label="TikTok" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={Music} />
-                <Input label="Instagram" value={mentor.socials.instagram} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} />
+                <Input label="LinkedIn" value={mentor.socials.linkedin} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={FaLinkedinIn} />
+                <Input label="TikTok" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={FaTiktok} />
+                <Input label="Instagram" value={mentor.socials.instagram} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} icon={FaInstagram} />
                 <Input label="Website" value={mentor.socials.website} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} icon={ExternalLink} />
               </div>
             </div>
@@ -758,17 +761,17 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
              <div className="flex justify-center gap-3 flex-wrap mb-8">
                 {mentor.socials.linkedin && (
                    <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-[#0077b5] hover:text-white transition-all hard-shadow-hover">
-                      <Linkedin size={20} />
+                      <FaLinkedinIn size={20} />
                    </a>
                 )}
                 {mentor.socials.tiktok && (
                    <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-black hover:text-white transition-all hard-shadow-hover">
-                      <Music size={20} />
+                      <FaTiktok size={20} />
                    </a>
                 )}
                 {mentor.socials.instagram && (
                    <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-pink-500 hover:text-white transition-all hard-shadow-hover">
-                      <Instagram size={20} />
+                      <FaInstagram size={20} />
                    </a>
                 )}
              </div>
