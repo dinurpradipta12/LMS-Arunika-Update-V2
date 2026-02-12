@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
-import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams } from 'react-router-dom';
+import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
 import { 
   Layout, 
   Settings as SettingsIcon, 
@@ -42,6 +42,23 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
+
+// --- Utils ---
+const encodeConfig = (cfg: SupabaseConfig) => {
+  try {
+    return btoa(JSON.stringify(cfg));
+  } catch (e) {
+    return '';
+  }
+};
+
+const decodeConfig = (str: string): SupabaseConfig | null => {
+  try {
+    return JSON.parse(atob(str));
+  } catch (e) {
+    return null;
+  }
+};
 
 // --- Storage Helpers ---
 const getStorageItem = <T,>(key: string, defaultValue: T): T => {
@@ -215,7 +232,7 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void }> = ({ brand
   );
 };
 
-const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<React.SetStateAction<Course[]>> }> = ({ courses, setCourses }) => {
+const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<React.SetStateAction<Course[]>>; supabase: SupabaseConfig }> = ({ courses, setCourses, supabase }) => {
   const navigate = useNavigate();
 
   const handleAddCourse = () => {
@@ -229,8 +246,14 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
       assets: []
     };
     setCourses([...courses, newCourse]);
-    // Navigate to editor immediately
     navigate(`/admin/course/${newCourse.id}`);
+  };
+
+  const generateShareLink = (courseId: string) => {
+    const cfgStr = encodeConfig(supabase);
+    const baseUrl = `${window.location.origin}${window.location.pathname}`;
+    // Link format: #/course/:id?cfg=BASE64
+    return `${baseUrl}#/course/${courseId}?cfg=${cfgStr}`;
   };
 
   return (
@@ -258,12 +281,12 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
             </div>
             <div className="grid grid-cols-2 gap-3 mt-4">
               <Button onClick={() => navigate(`/admin/course/${course.id}`)} variant="secondary" className="text-xs">Edit Content</Button>
-              <Button onClick={() => window.open(`#/course/${course.id}`, '_blank')} variant="yellow" className="text-xs" icon={Globe}>Public View</Button>
+              <Button onClick={() => window.open(generateShareLink(course.id), '_blank')} variant="yellow" className="text-xs" icon={Globe}>Public View</Button>
               <Button 
                 onClick={() => {
-                  const url = `${window.location.origin}${window.location.pathname}#/course/${course.id}`;
+                  const url = generateShareLink(course.id);
                   navigator.clipboard.writeText(url);
-                  alert('Link publik berhasil disalin!');
+                  alert('Link publik (cross-device ready) berhasil disalin!');
                 }} 
                 variant="green" className="text-xs col-span-2" icon={Share2}
               >
@@ -618,7 +641,7 @@ const CourseEditor: React.FC<{
   );
 };
 
-const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: Branding }> = ({ courses, mentor, branding }) => {
+const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: Branding; isInitialLoading: boolean }> = ({ courses, mentor, branding, isInitialLoading }) => {
   const { id } = useParams<{ id: string }>();
   const course = courses.find(c => c.id === id);
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
@@ -629,16 +652,34 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
     }
   }, [course]);
 
-  if (!course) return <div className="h-screen flex items-center justify-center font-bold">Materi tidak ditemukan</div>;
+  if (isInitialLoading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5]">
+        <RefreshCw size={64} className="text-[#8B5CF6] animate-spin mb-4" />
+        <p className="font-extrabold text-xl animate-pulse">Menghubungkan ke Arunika LMS...</p>
+      </div>
+    );
+  }
+
+  if (!course) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5] p-8 text-center">
+        <X size={64} className="text-red-400 mb-4" />
+        <h1 className="text-3xl font-extrabold text-[#1E293B] mb-2">Materi Tidak Ditemukan</h1>
+        <p className="text-[#64748B] max-w-md">Pastikan link yang Anda gunakan benar atau tanyakan kembali kepada pengelola kelas.</p>
+        <Link to="/" className="mt-8 text-[#8B5CF6] font-bold border-b-2 border-[#8B5CF6]">Kembali ke Beranda</Link>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[#FFFDF5] flex flex-col">
       <header className="bg-white border-b-2 border-[#1E293B] p-4 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
             <img src={branding.logo} className="w-10 h-10 object-contain" alt="Logo" />
             <span className="font-extrabold text-xl">{branding.siteName}</span>
-          </Link>
+          </div>
           <div className="hidden md:flex items-center gap-2">
             <Badge>{course.modules.length} Materi</Badge>
           </div>
@@ -804,8 +845,27 @@ const App: React.FC = () => {
   const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', initialMentor));
   const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
+  
   const [syncing, setSyncing] = useState(false);
+  const [isInitialLoading, setIsInitialLoading] = useState(true);
+  
   const isSyncingRef = useRef(false);
+  const isDataLoadedRef = useRef(false);
+  
+  const location = useLocation();
+
+  // --- Initial Config Recovery from URL (Public View) ---
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const cfgStr = params.get('cfg');
+    if (cfgStr) {
+      const decoded = decodeConfig(cfgStr);
+      if (decoded && decoded.url && decoded.anonKey) {
+        console.log("Supabase config recovered from URL");
+        setSupabase(decoded);
+      }
+    }
+  }, [location]);
 
   // Persistence to LocalStorage (Immediate feedback)
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
@@ -814,11 +874,10 @@ const App: React.FC = () => {
   useEffect(() => setStorageItem('branding', branding), [branding]);
   useEffect(() => setStorageItem('supabase', supabase), [supabase]);
 
-  // FORCED REALTIME SYNC FUNCTION
+  // FORCED REALTIME SYNC FUNCTION (ADMIN ONLY)
   const triggerForcedSync = useCallback(async () => {
-    if (!supabase.url || !supabase.anonKey) return;
+    if (!supabase.url || !supabase.anonKey || !isLoggedIn || !isDataLoadedRef.current) return;
     
-    // Prevent sync if already syncing to avoid circular conflicts
     if (isSyncingRef.current) return;
 
     setSyncing(true);
@@ -832,7 +891,7 @@ const App: React.FC = () => {
       // Force sync mentor
       await client.from('mentor').upsert({ id: 'profile', ...mentor });
       
-      // Force sync all courses (including new ones)
+      // Force sync all courses
       for (const course of courses) {
         await client.from('courses').upsert({
           id: course.id,
@@ -847,55 +906,77 @@ const App: React.FC = () => {
     } catch (err) {
       console.error("Supabase Realtime Sync Failed:", err);
     } finally {
-      // Small timeout for UI feedback and safety
       setTimeout(() => {
         setSyncing(false);
         isSyncingRef.current = false;
       }, 1000);
     }
-  }, [branding, mentor, courses, supabase]);
+  }, [branding, mentor, courses, supabase, isLoggedIn]);
 
-  // Automatic Trigger on any local change
+  // Automatic Trigger on local change (Admin only)
   useEffect(() => {
+    if (!isLoggedIn) return;
     const timer = setTimeout(() => {
        triggerForcedSync();
-    }, 1500); // Debounce to allow user to finish typing/editing
+    }, 1500); 
     return () => clearTimeout(timer);
-  }, [branding, mentor, courses, triggerForcedSync]);
+  }, [branding, mentor, courses, triggerForcedSync, isLoggedIn]);
 
-  // Initial Fetch & Subscription
+  // Initial Fetch & Realtime Subscription
   useEffect(() => {
-    if (!supabase.url || !supabase.anonKey) return;
+    if (!supabase.url || !supabase.anonKey) {
+      setIsInitialLoading(false);
+      return;
+    }
     const client = createClient(supabase.url, supabase.anonKey);
     
     const initialFetch = async () => {
-      const { data: b } = await client.from('branding').select('*').single();
-      if (b) setBranding(prev => (prev.logo !== b.logo || prev.siteName !== b.site_name) ? { siteName: b.site_name, logo: b.logo } : prev);
+      try {
+        const { data: b } = await client.from('branding').select('*').single();
+        if (b) setBranding(prev => (prev.logo !== b.logo || prev.siteName !== b.site_name) ? { siteName: b.site_name, logo: b.logo } : prev);
 
-      const { data: m } = await client.from('mentor').select('*').single();
-      if (m) setMentor(prev => JSON.stringify(prev) !== JSON.stringify(m) ? m : prev);
+        const { data: m } = await client.from('mentor').select('*').single();
+        if (m) setMentor(prev => JSON.stringify(prev) !== JSON.stringify(m) ? m : prev);
 
-      const { data: c } = await client.from('courses').select('*');
-      if (c && c.length > 0) {
-        const mappedCourses = c.map((item: any) => ({
-          ...item,
-          coverImage: item.cover_image,
-          mentorId: item.mentor_id
-        }));
-        setCourses(prev => JSON.stringify(prev) !== JSON.stringify(mappedCourses) ? mappedCourses : prev);
+        const { data: c } = await client.from('courses').select('*');
+        if (c && c.length > 0) {
+          const mappedCourses = c.map((item: any) => ({
+            ...item,
+            coverImage: item.cover_image,
+            mentorId: item.mentor_id
+          }));
+          setCourses(prev => JSON.stringify(prev) !== JSON.stringify(mappedCourses) ? mappedCourses : prev);
+        }
+      } catch (err) {
+        console.error("Initial fetch error:", err);
+      } finally {
+        setIsInitialLoading(false);
+        isDataLoadedRef.current = true;
       }
     };
+    
     initialFetch();
     
-    // Subscribe to realtime updates for other devices
+    // Subscribe to realtime updates for cross-device sync
     const sub = client.channel('all_changes').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
-       // Only update if WE are not the one currently pushing data
+       // Hanya update jika kita BUKAN admin yang sedang push data (mencegah loop/reset)
        if (!isSyncingRef.current) {
-          if (payload.table === 'branding') setBranding({ siteName: payload.new.site_name, logo: payload.new.logo });
-          if (payload.table === 'mentor') setMentor(payload.new);
+          if (payload.table === 'branding') {
+            setBranding(prev => (prev.logo !== payload.new.logo || prev.siteName !== payload.new.site_name) ? { siteName: payload.new.site_name, logo: payload.new.logo } : prev);
+          }
+          if (payload.table === 'mentor') setMentor(prev => JSON.stringify(prev) !== JSON.stringify(payload.new) ? payload.new : prev);
           if (payload.table === 'courses') {
-             // Re-fetch courses to get the latest list properly if something changed
-             initialFetch();
+             // Jika ada perubahan kursus, re-fetch list untuk memastikan urutan dan data terbaru
+             client.from('courses').select('*').then(({data}) => {
+                if(data) {
+                  const mapped = data.map((item: any) => ({
+                    ...item,
+                    coverImage: item.cover_image,
+                    mentorId: item.mentor_id
+                  }));
+                  setCourses(prev => JSON.stringify(prev) !== JSON.stringify(mapped) ? mapped : prev);
+                }
+             });
           }
        }
     }).subscribe();
@@ -910,8 +991,8 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen">
       {/* SYNC POPUP: TOP CENTER WITH SMOOTH ANIMATION */}
-      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-700 ease-out ${syncing ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-8 scale-95 pointer-events-none'}`}>
-        <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-6 py-2.5 flex items-center gap-3 hard-shadow">
+      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-700 ease-out transform ${syncing ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-12 scale-90 pointer-events-none'}`}>
+        <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-6 py-3 flex items-center gap-3 hard-shadow ring-4 ring-[#34D399]/20">
            <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
            <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B] whitespace-nowrap">Synchronizing Realtime...</span>
         </div>
@@ -919,10 +1000,10 @@ const App: React.FC = () => {
 
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
-        <Route path="/admin" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AdminDashboard courses={courses} setCourses={setCourses} /></main></div> : <Navigate to="/login" />} />
+        <Route path="/admin" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} /></main></div> : <Navigate to="/login" />} />
         <Route path="/admin/course/:id" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></main></div> : <Navigate to="/login" />} />
         <Route path="/settings" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} /></main></div> : <Navigate to="/login" />} />
-        <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} />} />
+        <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} isInitialLoading={isInitialLoading} />} />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>
     </div>
