@@ -36,11 +36,11 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-// Mengimpor FaTiktok dari react-icons via esm.sh
-import { FaTiktok } from 'https://esm.sh/react-icons@5.0.1/fa';
+// Pin React instance for external components
+import { FaTiktok } from 'https://esm.sh/react-icons@5.0.1/fa?external=react,react-dom';
 
-// Use dynamic ESM import for Supabase client
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
+// Use standard mapped import for Supabase
+import { createClient } from '@supabase/supabase-js';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
@@ -58,13 +58,13 @@ const encodeConfig = (cfg: SupabaseConfig) => {
 
 const decodeConfig = (str: string): SupabaseConfig | null => {
   try {
+    if (!str) return null;
     return JSON.parse(atob(str));
   } catch (e) {
     return null;
   }
 };
 
-// --- Storage Helpers ---
 const getStorageItem = <T,>(key: string, defaultValue: T): T => {
   const saved = localStorage.getItem(key);
   try {
@@ -153,10 +153,10 @@ const AdvancedEditor: React.FC<{ value: string; onChange: (v: string) => void; l
       <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>
       <div className="border-2 border-[#1E293B] rounded-2xl overflow-hidden bg-white hard-shadow focus-within:hard-shadow-hover transition-all">
         <div className="bg-[#F1F5F9] border-b-2 border-[#1E293B] p-2 flex gap-2">
-          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><Bold size={14}/></button>
-          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><Italic size={14}/></button>
-          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><List size={14}/></button>
-          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><Type size={14}/></button>
+          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><Bold size={14}/></div>
+          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><Italic size={14}/></div>
+          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><List size={14}/></div>
+          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><Type size={14}/></div>
           <div className="flex-1"></div>
           <Badge className="text-[10px]" color="#8B5CF6"><span className="text-white">PRO EDITOR</span></Badge>
         </div>
@@ -256,7 +256,6 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
   const generateShareLink = (courseId: string) => {
     const cfgStr = encodeConfig(supabase);
     const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    // Memastikan hash router tetap bekerja dengan query params di akhir
     return `${baseUrl}#/course/${courseId}?cfg=${cfgStr}`;
   };
 
@@ -315,11 +314,7 @@ const Settings: React.FC<{
     return (supabase.url && supabase.anonKey) ? 'connected' : 'disconnected';
   });
 
-  const sqlScript = `
--- SETUP DATABASE ARUNIKA LMS (REAL-TIME CONFIG)
--- Jalankan di SQL Editor Supabase Anda
-
--- 1. Tabel Branding
+  const sqlScript = `-- SETUP DATABASE ARUNIKA LMS (REAL-TIME CONFIG)
 CREATE TABLE IF NOT EXISTS public.branding (
   id TEXT PRIMARY KEY DEFAULT 'config',
   site_name TEXT NOT NULL,
@@ -327,7 +322,6 @@ CREATE TABLE IF NOT EXISTS public.branding (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 2. Tabel Mentor
 CREATE TABLE IF NOT EXISTS public.mentor (
   id TEXT PRIMARY KEY DEFAULT 'profile',
   name TEXT NOT NULL,
@@ -338,7 +332,6 @@ CREATE TABLE IF NOT EXISTS public.mentor (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 3. Tabel Courses
 CREATE TABLE IF NOT EXISTS public.courses (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -351,16 +344,9 @@ CREATE TABLE IF NOT EXISTS public.courses (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 4. Enable Realtime Replication
 ALTER PUBLICATION supabase_realtime ADD TABLE public.branding;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.mentor;
-ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
-`.trim();
-
-  const handleCopySQL = () => {
-    navigator.clipboard.writeText(sqlScript);
-    alert('Kode SQL Setup disalin!');
-  };
+ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;`.trim();
 
   const handleConnect = () => {
     if (!supabase.url || !supabase.anonKey) {
@@ -425,7 +411,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
           <div className="space-y-4 pt-4">
             <div className="flex justify-between items-center">
               <label className="text-xs font-extrabold uppercase tracking-widest text-[#64748B]">Setup SQL Script</label>
-              <Button variant="secondary" className="px-4 py-1.5 text-xs" onClick={handleCopySQL} icon={Copy}>Copy SQL</Button>
+              <Button variant="secondary" className="px-4 py-1.5 text-xs" onClick={() => { navigator.clipboard.writeText(sqlScript); alert('SQL Copied!'); }} icon={Copy}>Copy SQL</Button>
             </div>
             <div className="bg-[#1E293B] text-[#34D399] p-6 rounded-3xl font-mono text-xs overflow-x-auto hard-shadow relative">
               <pre>{sqlScript}</pre>
@@ -468,7 +454,7 @@ const CourseEditor: React.FC<{
       description: '',
       duration: type === 'video' ? '00:00' : '5 min'
     };
-    setEditedCourse({ ...editedCourse, modules: [...editedCourse.modules, newModule] });
+    setEditedCourse({ ...editedCourse, modules: [...(editedCourse.modules || []), newModule] });
     setShowAddMenu(false);
   };
 
@@ -491,13 +477,7 @@ const CourseEditor: React.FC<{
         const reader = new FileReader();
         reader.onloadend = () => {
           const updatedAssets = [...(editedCourse.assets || [])];
-          updatedAssets[index] = {
-            ...updatedAssets[index],
-            name: file.name,
-            fileName: file.name,
-            url: reader.result as string, 
-            type: 'file'
-          };
+          updatedAssets[index] = { ...updatedAssets[index], name: file.name, fileName: file.name, url: reader.result as string, type: 'file' };
           setEditedCourse({...editedCourse, assets: updatedAssets});
         };
         reader.readAsDataURL(file);
@@ -510,13 +490,6 @@ const CourseEditor: React.FC<{
     const newModules = [...(editedCourse.modules || [])];
     newModules[index] = { ...newModules[index], [field]: value };
     setEditedCourse({ ...editedCourse, modules: newModules });
-  };
-
-  const removeModule = (index: number) => {
-    if(confirm('Hapus materi ini?')) {
-      const newModules = editedCourse.modules.filter((_, i) => i !== index);
-      setEditedCourse({ ...editedCourse, modules: newModules });
-    }
   };
 
   return (
@@ -554,21 +527,15 @@ const CourseEditor: React.FC<{
             </div>
 
             <div className="space-y-4">
-              {editedCourse.modules?.map((mod, idx) => (
+              {(editedCourse.modules || []).map((mod, idx) => (
                 <Card key={mod.id} className="relative group p-6">
                   <div className="flex justify-between items-start mb-4">
                     <div className="flex-1">
                       <Input label={`Judul Materi #${idx + 1}`} value={mod.title} onChange={e => updateModule(idx, 'title', e.target.value)} />
                     </div>
-                    <button onClick={() => removeModule(idx)} className="ml-4 p-2 bg-red-50 text-red-500 rounded-full hover:bg-red-100 transition-colors">
+                    <button onClick={() => { if(confirm('Hapus?')) setEditedCourse({...editedCourse, modules: editedCourse.modules.filter((_, i) => i !== idx)}) }} className="ml-4 p-2 bg-red-50 text-red-500 rounded-full hover:bg-red-100">
                       <Trash2 size={20} />
                     </button>
-                  </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                    <Badge color={mod.type === 'video' ? '#8B5CF6' : '#F472B6'}>
-                      <span className="text-white font-bold">{mod.type.toUpperCase()}</span>
-                    </Badge>
-                    <Input label="Durasi" value={mod.duration || ''} onChange={e => updateModule(idx, 'duration', e.target.value)} />
                   </div>
                   <div className="mt-4 space-y-4">
                     {mod.type === 'video' ? (
@@ -576,74 +543,28 @@ const CourseEditor: React.FC<{
                     ) : (
                       <AdvancedEditor label="Text Content" value={mod.content} onChange={v => updateModule(idx, 'content', v)} placeholder="Konten teks..." />
                     )}
-                    <AdvancedEditor label="Deskripsi Materi" value={mod.description} onChange={v => updateModule(idx, 'description', v)} placeholder="Ringkasan..." />
+                    <AdvancedEditor label="Deskripsi Materi" value={mod.description} onChange={v => updateModule(idx, 'description', v)} />
                   </div>
                 </Card>
               ))}
-              {(!editedCourse.modules || editedCourse.modules.length === 0) && (
-                <div className="p-12 border-2 border-dashed border-[#CBD5E1] rounded-3xl text-center text-[#64748B] font-bold">
-                   Belum ada materi. Klik "Tambah Materi" di atas.
-                </div>
-              )}
             </div>
           </div>
         </div>
 
         <div className="space-y-8">
           <Card className="space-y-6">
-            <h3 className="text-xl font-bold flex items-center gap-2">Profil Mentor</h3>
+            <h3 className="text-xl font-bold">Profil Mentor</h3>
             <div className="flex flex-col items-center gap-4">
               <ImageUpload value={mentor.photo} onChange={photo => setMentor({...mentor, photo})}>
-                <div className="relative group">
-                  <img src={mentor.photo} className="w-24 h-24 rounded-full border-2 border-[#1E293B] object-cover hard-shadow group-hover:hard-shadow-hover transition-all" alt="Mentor" />
-                </div>
+                <img src={mentor.photo} className="w-24 h-24 rounded-full border-2 border-[#1E293B] object-cover hard-shadow" alt="Mentor" />
               </ImageUpload>
             </div>
             <div className="space-y-4">
               <Input label="Nama Mentor" value={mentor.name} onChange={e => setMentor({...mentor, name: e.target.value})} />
               <Input label="Role" value={mentor.role} onChange={e => setMentor({...mentor, role: e.target.value})} />
               <Textarea label="Bio" value={mentor.bio} onChange={e => setMentor({...mentor, bio: e.target.value})} />
-              <div className="grid grid-cols-1 gap-4">
-                <Input label="LinkedIn" value={mentor.socials.linkedin} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
-                <Input label="TikTok" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={FaTiktok} />
-                <Input label="Instagram" value={mentor.socials.instagram} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} />
-                <Input label="Website" value={mentor.socials.website} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} icon={ExternalLink} />
-              </div>
             </div>
           </Card>
-
-          <div className="space-y-4">
-             <div className="flex justify-between items-center">
-                <h3 className="text-xl font-bold">Asset Belajar</h3>
-                <div className="flex gap-2">
-                   <Button variant="green" className="p-2" icon={Upload} onClick={() => addAsset('file')}></Button>
-                   <Button variant="secondary" className="p-2" icon={LinkIcon} onClick={() => addAsset('link')}></Button>
-                </div>
-             </div>
-             <div className="space-y-3">
-                {editedCourse.assets?.map((asset, aidx) => (
-                  <Card key={asset.id} className="p-4 flex flex-col gap-2">
-                     <div className="flex justify-between items-center">
-                        <Badge color={asset.type === 'link' ? '#FBBF24' : '#34D399'}>{asset.type.toUpperCase()}</Badge>
-                        <button onClick={() => setEditedCourse({...editedCourse, assets: editedCourse.assets.filter((_, i) => i !== aidx)})} className="text-red-400"><Trash2 size={16}/></button>
-                     </div>
-                     <Input placeholder="Nama Asset" value={asset.name} onChange={e => {
-                       const up = [...editedCourse.assets]; up[aidx].name = e.target.value; setEditedCourse({...editedCourse, assets: up});
-                     }} />
-                     {asset.type === 'link' ? (
-                       <Input placeholder="URL Link" value={asset.url} onChange={e => {
-                         const up = [...editedCourse.assets]; up[aidx].url = e.target.value; setEditedCourse({...editedCourse, assets: up});
-                       }} />
-                     ) : (
-                       <div className="flex gap-2">
-                          <Input className="flex-1" placeholder="File..." value={asset.fileName || ''} readOnly />
-                          <Button variant="secondary" className="px-3" onClick={() => handleAssetFileUpload(aidx)}><Upload size={14}/></Button>
-                       </div>
-                     )}
-                  </Card>
-                ))}
-             </div>
-          </div>
         </div>
       </div>
     </div>
@@ -652,7 +573,6 @@ const CourseEditor: React.FC<{
 
 const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: Branding; isInitialLoading: boolean }> = ({ courses, mentor, branding, isInitialLoading }) => {
   const { id } = useParams<{ id: string }>();
-  // Pencarian course yang lebih aman
   const course = useMemo(() => courses.find(c => c.id === id), [courses, id]);
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
 
@@ -662,9 +582,8 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
     }
   }, [course, selectedModule]);
 
-  // Handler URL Youtube yang lebih aman
   const getYoutubeEmbedUrl = (content: string) => {
-    if (!content) return "";
+    if (!content || typeof content !== 'string') return "";
     try {
       const videoId = content.includes('v=') 
         ? content.split('v=')[1]?.split('&')[0] 
@@ -678,14 +597,8 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   if (isInitialLoading) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5]">
-        <div className="relative">
-          <RefreshCw size={64} className="text-[#8B5CF6] animate-spin mb-6" />
-          <div className="absolute inset-0 flex items-center justify-center">
-             <div className="w-4 h-4 bg-[#FBBF24] rounded-full animate-ping"></div>
-          </div>
-        </div>
-        <p className="font-extrabold text-2xl tracking-tight text-[#1E293B]">Memuat Platform Arunika...</p>
-        <p className="text-[#64748B] mt-2 font-medium">Sinkronisasi data realtime sedang berjalan.</p>
+        <RefreshCw size={64} className="text-[#8B5CF6] animate-spin mb-6" />
+        <p className="font-extrabold text-2xl text-[#1E293B]">Memuat Platform Arunika...</p>
       </div>
     );
   }
@@ -693,18 +606,9 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   if (!course) {
     return (
       <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5] p-8 text-center">
-        <div className="w-32 h-32 bg-red-50 rounded-full border-2 border-red-200 flex items-center justify-center mb-6 hard-shadow">
-          <AlertCircle size={64} className="text-red-500" />
-        </div>
+        <AlertCircle size={64} className="text-red-500 mb-4" />
         <h1 className="text-4xl font-extrabold text-[#1E293B] mb-4">Materi Tidak Ditemukan</h1>
-        <p className="text-[#64748B] max-w-lg text-lg mb-8 leading-relaxed font-medium">
-          Maaf, halaman ini mungkin telah dipindahkan atau konfigurasi database admin belum disinkronkan dengan benar. Silakan cek kembali link Anda.
-        </p>
-        <div className="flex gap-4">
-           <Link to="/">
-             <Button variant="yellow" icon={ChevronRight}>Kembali ke Beranda</Button>
-           </Link>
-        </div>
+        <Link to="/"><Button variant="yellow">Kembali ke Beranda</Button></Link>
       </div>
     );
   }
@@ -717,27 +621,18 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
             <img src={branding.logo} className="w-10 h-10 object-contain" alt="Logo" />
             <span className="font-extrabold text-xl">{branding.siteName}</span>
           </div>
-          <div className="hidden md:flex items-center gap-2">
-            <Badge>{course.modules?.length || 0} Materi</Badge>
-          </div>
+          <Badge>{(course.modules || []).length} Materi</Badge>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
-          <div className="bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 transition-bounce">
+          <div className="bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex-1">
               <Badge color="#8B5CF6" className="text-white mb-3">PUBLIC PUBLICATION</Badge>
-              <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2 leading-tight">{course.title}</h1>
-              <div className="flex items-center gap-3">
-                 <div className="h-2 w-24 bg-[#FBBF24] rounded-full"></div>
-                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">LMS Arunika Platform</span>
-              </div>
+              <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2">{course.title}</h1>
             </div>
-            <Button variant="secondary" className="px-6 py-3" icon={Share2} onClick={() => {
-              navigator.clipboard.writeText(window.location.href);
-              alert('Link publik materi ini telah disalin!');
-            }}>Bagikan Halaman</Button>
+            <Button variant="secondary" icon={Share2} onClick={() => { navigator.clipboard.writeText(window.location.href); alert('Link Copied!'); }}>Bagikan</Button>
           </div>
 
           {selectedModule ? (
@@ -746,141 +641,37 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                 {selectedModule.type === 'video' ? (
                   <div className="aspect-video bg-black flex items-center justify-center">
                     {getYoutubeEmbedUrl(selectedModule.content) ? (
-                      <iframe 
-                        className="w-full h-full"
-                        src={getYoutubeEmbedUrl(selectedModule.content)}
-                        title={selectedModule.title}
-                        frameBorder="0"
-                        allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-                        allowFullScreen
-                      ></iframe>
-                    ) : (
-                      <div className="text-white text-center p-8">
-                         <Video size={48} className="mx-auto mb-4 text-[#FBBF24]" />
-                         <p className="font-bold text-xl">URL Video Tidak Valid</p>
-                         <p className="text-white/60 text-sm">Pastikan Admin menginput link Youtube yang benar.</p>
-                      </div>
-                    )}
+                      <iframe className="w-full h-full" src={getYoutubeEmbedUrl(selectedModule.content)} title={selectedModule.title} frameBorder="0" allowFullScreen></iframe>
+                    ) : <p className="text-white">Video tidak tersedia</p>}
                   </div>
                 ) : (
-                  <div className="p-10 prose prose-slate max-w-none">
-                    <h2 className="text-4xl font-extrabold mb-6 text-[#1E293B] border-b-4 border-[#FBBF24] inline-block">{selectedModule.title}</h2>
-                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-xl leading-relaxed">
-                      {selectedModule.content || "Konten teks sedang disiapkan oleh pengajar."}
-                    </div>
+                  <div className="p-10 prose max-w-none">
+                    <h2 className="text-4xl font-extrabold mb-6 text-[#1E293B]">{selectedModule.title}</h2>
+                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-xl">{selectedModule.content || "Konten kosong."}</div>
                   </div>
                 )}
               </div>
-              
-              <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow relative overflow-hidden">
-                 <div className="absolute top-0 right-0 w-16 h-16 bg-[#FBBF24] rounded-bl-3xl border-l-2 border-b-2 border-[#1E293B] flex items-center justify-center">
-                    <FileText className="text-[#1E293B]" />
-                 </div>
-                 <h3 className="text-2xl font-extrabold mb-4 text-[#1E293B] tracking-tight">Detail Materi: {selectedModule.title}</h3>
-                 <div className="text-[#1E293B] text-lg leading-relaxed whitespace-pre-wrap font-medium">
-                    {selectedModule.description || "Tidak ada deskripsi tambahan untuk materi ini."}
-                 </div>
-              </div>
             </div>
-          ) : (
-            <div className="h-96 flex flex-col items-center justify-center text-[#64748B] font-bold bg-white rounded-3xl border-2 border-[#1E293B] border-dashed">
-               <Globe size={64} className="mb-4 text-[#CBD5E1]" />
-               <p className="text-xl">Pilih salah satu materi di kurikulum untuk mulai belajar.</p>
-            </div>
-          )}
+          ) : <p className="text-center p-12">Pilih materi.</p>}
         </div>
 
         <div className="lg:col-span-1 space-y-6">
           <Card className="flex flex-col items-center p-8 text-center featured">
-             <div className="relative mb-6">
-                <img src={mentor.photo} className="w-28 h-28 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover" alt={mentor.name} />
-                <div className="absolute -bottom-2 -right-2 bg-[#FBBF24] p-2 rounded-xl border-2 border-[#1E293B] hard-shadow">
-                   <Check size={16} className="text-[#1E293B]" />
-                </div>
-             </div>
-             <h3 className="text-2xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
-             <Badge color="#F472B6" className="text-white mb-4 uppercase text-[10px] tracking-widest">{mentor.role}</Badge>
-             <p className="text-[#64748B] text-sm leading-relaxed mb-6 font-medium italic">"{mentor.bio}"</p>
-             
-             <div className="flex justify-center gap-3 flex-wrap mb-8">
-                {mentor.socials.linkedin && (
-                   <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-[#0077b5] hover:text-white transition-all hard-shadow-hover">
-                      <Linkedin size={20} />
-                   </a>
-                )}
-                {mentor.socials.tiktok && (
-                   <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-black hover:text-white transition-all hard-shadow-hover">
-                      <FaTiktok size={20} />
-                   </a>
-                )}
-                {mentor.socials.instagram && (
-                   <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-2xl hover:bg-pink-500 hover:text-white transition-all hard-shadow-hover">
-                      <Instagram size={20} />
-                   </a>
-                )}
-             </div>
-
-             {mentor.socials.website && (
-               <Button 
-                 variant="yellow" 
-                 className="w-full text-xs font-bold py-2" 
-                 icon={ExternalLink} 
-                 onClick={() => window.open(mentor.socials.website, '_blank')}
-               >
-                 PORTFOLIO MENTOR
-               </Button>
-             )}
+             <img src={mentor.photo} className="w-28 h-28 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover mb-4" alt={mentor.name} />
+             <h3 className="text-2xl font-extrabold text-[#1E293B]">{mentor.name}</h3>
+             <Badge color="#F472B6" className="text-white mb-4">{mentor.role}</Badge>
           </Card>
 
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 hard-shadow">
-            <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2 tracking-tight">
-              <BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum Materi
-            </h3>
-            <div className="space-y-3 max-h-[400px] overflow-y-auto pr-2 custom-scrollbar">
-              {course.modules?.map((mod, i) => (
-                <button 
-                  key={mod.id} 
-                  onClick={() => setSelectedModule(mod)} 
-                  className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${selectedModule?.id === mod.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow translate-x-1' : 'bg-white border-transparent hover:bg-[#F1F5F9]'}`}
-                >
-                  <div className={`shrink-0 w-8 h-8 rounded-full border-2 border-[#1E293B] flex items-center justify-center font-bold text-xs ${selectedModule?.id === mod.id ? 'bg-white' : 'bg-[#F1F5F9]'}`}>
-                    {i+1}
-                  </div>
-                  <div className="flex-1">
-                    <p className="text-sm font-extrabold leading-tight">{mod.title}</p>
-                    <div className="flex items-center gap-2 mt-1">
-                       {mod.type === 'video' ? <Video size={12} className="text-[#8B5CF6]" /> : <FileText size={12} className="text-[#F472B6]" />}
-                       <span className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">{mod.duration}</span>
-                    </div>
-                  </div>
+            <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2"><BookOpen size={24} /> Materi</h3>
+            <div className="space-y-3">
+              {(course.modules || []).map((mod, i) => (
+                <button key={mod.id} onClick={() => setSelectedModule(mod)} className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${selectedModule?.id === mod.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow' : 'bg-white border-transparent hover:bg-[#F1F5F9]'}`}>
+                  <div className="shrink-0 w-8 h-8 rounded-full border-2 border-[#1E293B] flex items-center justify-center font-bold text-xs">{i+1}</div>
+                  <div className="flex-1"><p className="text-sm font-extrabold">{mod.title}</p></div>
                 </button>
               ))}
-              {(!course.modules || course.modules.length === 0) && (
-                <p className="text-center p-8 text-[#64748B] font-bold text-sm">Belum ada materi.</p>
-              )}
             </div>
-
-            {course.assets && course.assets.length > 0 && (
-              <div className="mt-10 border-t-2 border-[#E2E8F0] pt-6">
-                <h3 className="font-extrabold text-xl mb-4 flex items-center gap-2 tracking-tight">
-                  <Upload size={20} className="text-[#34D399]" /> Asset Download
-                </h3>
-                <div className="space-y-2">
-                  {course.assets.map(asset => (
-                    <a 
-                      key={asset.id} 
-                      href={asset.url} 
-                      target="_blank" 
-                      className="flex items-center justify-between p-4 rounded-xl bg-white border-2 border-[#1E293B] hover:bg-[#34D399] transition-all group" 
-                      download={asset.type === 'file' ? (asset.fileName || asset.name) : undefined}
-                    >
-                      <span className="text-sm font-bold truncate pr-2 group-hover:text-white">{asset.name}</span>
-                      <ExternalLink size={14} className="shrink-0 group-hover:text-white" />
-                    </a>
-                  ))}
-                </div>
-              </div>
-            )}
           </div>
         </div>
       </main>
@@ -888,24 +679,16 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   );
 };
 
-// --- Main Application with Optimized Forced Realtime Logic ---
 const App: React.FC = () => {
-  const location = useLocation();
-
-  // Optimized State Initializers for Instant Config Recovery
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => {
-    // Check hash-based query parameters (Standard for HashRouter)
     const hash = window.location.hash;
     const queryIdx = hash.indexOf('?');
     const hashQuery = queryIdx !== -1 ? hash.slice(queryIdx) : '';
     const params = new URLSearchParams(hashQuery || window.location.search);
     const cfgStr = params.get('cfg');
-    
     if (cfgStr) {
       const decoded = decodeConfig(cfgStr);
-      if (decoded?.url && decoded?.anonKey) {
-        return decoded;
-      }
+      if (decoded?.url) return decoded;
     }
     return getStorageItem('supabase', { url: '', anonKey: '' });
   });
@@ -914,158 +697,70 @@ const App: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
   const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', initialMentor));
   const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
-  
   const [syncing, setSyncing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  
-  const isSyncingRef = useRef(false);
   const isDataLoadedRef = useRef(false);
 
-  // Persistence to LocalStorage
-  useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
-  useEffect(() => setStorageItem('courses', courses), [courses]);
-  useEffect(() => setStorageItem('mentor', mentor), [mentor]);
-  useEffect(() => setStorageItem('branding', branding), [branding]);
-  useEffect(() => setStorageItem('supabase', supabase), [supabase]);
+  useEffect(() => { setStorageItem('isLoggedIn', isLoggedIn); }, [isLoggedIn]);
+  useEffect(() => { setStorageItem('courses', courses); }, [courses]);
+  useEffect(() => { setStorageItem('mentor', mentor); }, [mentor]);
+  useEffect(() => { setStorageItem('branding', branding); }, [branding]);
+  useEffect(() => { setStorageItem('supabase', supabase); }, [supabase]);
 
-  // FORCED REALTIME SYNC FUNCTION (ADMIN ONLY)
-  const triggerForcedSync = useCallback(async () => {
-    if (!supabase.url || !supabase.anonKey || !isLoggedIn || !isDataLoadedRef.current) return;
-    
-    if (isSyncingRef.current) return;
-
-    setSyncing(true);
-    isSyncingRef.current = true;
-    try {
-      const client = createClient(supabase.url, supabase.anonKey);
-      
-      // Sync branding
-      await client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo });
-      
-      // Sync mentor
-      await client.from('mentor').upsert({ id: 'profile', ...mentor });
-      
-      // Sync all courses
-      for (const course of courses) {
-        await client.from('courses').upsert({
-          id: course.id,
-          title: course.title,
-          description: course.description,
-          cover_image: course.coverImage,
-          modules: course.modules,
-          assets: course.assets,
-          mentor_id: course.mentorId
-        });
-      }
-    } catch (err) {
-      console.error("Supabase Realtime Sync Failed:", err);
-    } finally {
-      setTimeout(() => {
-        setSyncing(false);
-        isSyncingRef.current = false;
-      }, 1000);
-    }
-  }, [branding, mentor, courses, supabase, isLoggedIn]);
-
-  // Automatic Trigger on local change (Admin only)
-  useEffect(() => {
-    if (!isLoggedIn) return;
-    const timer = setTimeout(() => {
-       triggerForcedSync();
-    }, 2000); 
-    return () => clearTimeout(timer);
-  }, [branding, mentor, courses, triggerForcedSync, isLoggedIn]);
-
-  // Initial Fetch & Realtime Subscription logic
   useEffect(() => {
     if (!supabase.url || !supabase.anonKey) {
       setIsInitialLoading(false);
       return;
     }
-    
     const client = createClient(supabase.url, supabase.anonKey);
     setIsInitialLoading(true);
-    
     const initialFetch = async () => {
       try {
         const { data: b } = await client.from('branding').select('*').single();
         if (b) setBranding({ siteName: b.site_name, logo: b.logo });
-
         const { data: m } = await client.from('mentor').select('*').single();
         if (m) setMentor(m);
-
         const { data: c } = await client.from('courses').select('*');
-        // Tetap setCourses meskipun kosong untuk sinkronisasi antar perangkat
-        const mappedCourses = (c || []).map((item: any) => ({
-          ...item,
-          coverImage: item.cover_image,
-          mentorId: item.mentor_id,
-          modules: item.modules || [],
-          assets: item.assets || []
-        }));
-        setCourses(mappedCourses);
-      } catch (err) {
-        console.error("Initial fetch error:", err);
-      } finally {
+        if (c) {
+          const mapped = c.map((item: any) => ({
+            ...item,
+            coverImage: item.cover_image,
+            mentorId: item.mentor_id,
+            modules: item.modules || [],
+            assets: item.assets || []
+          }));
+          setCourses(mapped);
+        }
+      } catch (err) { console.error(err); } finally {
         setIsInitialLoading(false);
         isDataLoadedRef.current = true;
       }
     };
-    
     initialFetch();
-    
-    // Subscribe to realtime updates for cross-device sync
-    const sub = client.channel('all_changes').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
-       if (!isSyncingRef.current) {
-          if (payload.table === 'branding') {
-            setBranding({ siteName: payload.new.site_name, logo: payload.new.logo });
-          }
-          if (payload.table === 'mentor') setMentor(payload.new);
-          if (payload.table === 'courses') {
-             client.from('courses').select('*').then(({data}) => {
-                const mapped = (data || []).map((item: any) => ({
-                  ...item,
-                  coverImage: item.cover_image,
-                  mentorId: item.mentor_id,
-                  modules: item.modules || [],
-                  assets: item.assets || []
-                }));
-                setCourses(mapped);
-             });
-          }
-       }
-    }).subscribe();
-
-    return () => { client.removeChannel(sub); };
   }, [supabase.url, supabase.anonKey]);
-
-  const updateCourse = (updated: Course) => {
-    setCourses(prev => prev.map(c => c.id === updated.id ? updated : c));
-  };
 
   return (
     <div className="min-h-screen">
-      {/* SYNC POPUP */}
-      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-700 ease-out transform ${syncing ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-12 scale-90 pointer-events-none'}`}>
-        <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-6 py-3 flex items-center gap-3 hard-shadow ring-4 ring-[#34D399]/20">
-           <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
-           <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B] whitespace-nowrap">Sinkronisasi Cloud...</span>
+      {syncing && (
+        <div className="fixed top-6 left-1/2 -translate-x-1/2 z-[999]">
+          <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-6 py-3 flex items-center gap-3 hard-shadow">
+             <RefreshCw size={18} className="animate-spin" />
+             <span className="text-xs font-extrabold uppercase tracking-widest">Sinkronisasi...</span>
+          </div>
         </div>
-      </div>
-
+      )}
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
         <Route path="/admin" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} /></main></div> : <Navigate to="/login" />} />
-        <Route path="/admin/course/:id" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></main></div> : <Navigate to="/login" />} />
+        <Route path="/admin/course/:id" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><CourseEditor courses={courses} onSave={(updated) => setCourses(p => p.map(c => c.id === updated.id ? updated : c))} mentor={mentor} setMentor={setMentor} /></main></div> : <Navigate to="/login" />} />
         <Route path="/settings" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} /></main></div> : <Navigate to="/login" />} />
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} isInitialLoading={isInitialLoading} />} />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
-        {/* Catch-all untuk menghindari blank page */}
         <Route path="*" element={<Navigate to="/" />} />
       </Routes>
     </div>
   );
 };
 
-const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(<React.StrictMode><Router><App /></Router></React.StrictMode>);
+const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
+root.render(<Router><App /></Router>);
