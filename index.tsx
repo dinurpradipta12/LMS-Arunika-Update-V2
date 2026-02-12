@@ -24,7 +24,12 @@ import {
   Link as LinkIcon,
   Pencil,
   Check,
-  Camera
+  Camera,
+  Music,
+  Bold,
+  Italic,
+  List,
+  Type
 } from 'lucide-react';
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
@@ -32,7 +37,7 @@ import { Button, Card, Input, Textarea, Badge } from './components/UI';
 
 // --- Components ---
 
-const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void; label: string }> = ({ value, onChange, label }) => {
+const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void; label?: string; children?: React.ReactNode; variant?: 'default' | 'minimal' }> = ({ value, onChange, label, children, variant = 'default' }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -42,9 +47,42 @@ const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void;
       reader.readAsDataURL(file);
     }
   };
+  
+  if (children) {
+    return (
+      <div onClick={() => fileInputRef.current?.click()} className="cursor-pointer">
+        {children}
+        <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+      </div>
+    );
+  }
+
+  if (variant === 'minimal') {
+    return (
+      <div className="space-y-2">
+        {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
+        <div 
+          onClick={() => fileInputRef.current?.click()}
+          className="relative group cursor-pointer flex flex-col items-center justify-center p-4 transition-all"
+        >
+          {value ? (
+            <img src={value} className="max-w-[120px] max-h-[120px] object-contain mb-4" alt="Logo Preview" />
+          ) : (
+            <div className="text-center p-4 border-2 border-dashed border-[#CBD5E1] rounded-2xl w-full">
+              <Upload className="mx-auto mb-2 text-[#8B5CF6]" size={32} />
+              <p className="font-bold text-sm">Upload PNG Logo</p>
+            </div>
+          )}
+          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+          <Button variant="secondary" className="text-xs py-1">Ganti Logo</Button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-2">
-      <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>
+      {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
       <div 
         onClick={() => fileInputRef.current?.click()}
         className="relative group cursor-pointer border-2 border-[#1E293B] rounded-2xl overflow-hidden aspect-video bg-white flex items-center justify-center hard-shadow hover:hard-shadow-hover transition-all"
@@ -61,6 +99,31 @@ const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void;
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold">
           Ganti Gambar
         </div>
+      </div>
+    </div>
+  );
+};
+
+// --- Advanced Text Editor Simulation ---
+const AdvancedEditor: React.FC<{ value: string; onChange: (v: string) => void; label: string; placeholder?: string }> = ({ value, onChange, label, placeholder }) => {
+  return (
+    <div className="space-y-2">
+      <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>
+      <div className="border-2 border-[#1E293B] rounded-2xl overflow-hidden bg-white hard-shadow focus-within:hard-shadow-hover transition-all">
+        <div className="bg-[#F1F5F9] border-b-2 border-[#1E293B] p-2 flex gap-2">
+          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><Bold size={14}/></button>
+          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><Italic size={14}/></button>
+          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><List size={14}/></button>
+          <button className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B]"><Type size={14}/></button>
+          <div className="flex-1"></div>
+          <Badge className="text-[10px]" color="#8B5CF6"><span className="text-white">PRO EDITOR</span></Badge>
+        </div>
+        <textarea 
+          value={value} 
+          onChange={e => onChange(e.target.value)}
+          placeholder={placeholder}
+          className="w-full p-4 min-h-[120px] outline-none font-medium text-[#1E293B] bg-transparent resize-none"
+        />
       </div>
     </div>
   );
@@ -113,7 +176,7 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void }> = ({ brand
   return (
     <div className="w-64 bg-white border-r-2 border-[#1E293B] min-h-screen hidden md:flex flex-col sticky top-0">
       <div className="p-6 border-b-2 border-[#1E293B] flex items-center gap-3">
-        <img src={branding.logo} className="w-10 h-10 rounded-lg border-2 border-[#1E293B]" alt="Logo" />
+        <img src={branding.logo} className="w-10 h-10 object-contain" alt="Logo" />
         <span className="font-extrabold text-xl">{branding.siteName}</span>
       </div>
       <nav className="p-4 flex-1 space-y-2">
@@ -230,8 +293,15 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
         <Card className="grid grid-cols-1 md:grid-cols-2 gap-8">
           <div className="space-y-4">
             <Input label="Nama Platform" value={branding.siteName} onChange={e => setBranding({...branding, siteName: e.target.value})} />
+            <p className="text-sm text-[#64748B]">Perubahan branding akan langsung diterapkan ke seluruh halaman publik dan admin secara otomatis.</p>
           </div>
-          <ImageUpload label="Logo Platform (PNG)" value={branding.logo} onChange={logo => setBranding({...branding, logo})} />
+          {/* Logo Upload with Minimal Variant - Removes the 'Black Box' container */}
+          <ImageUpload 
+            label="Logo Platform (PNG)" 
+            variant="minimal"
+            value={branding.logo} 
+            onChange={logo => setBranding({...branding, logo})} 
+          />
         </Card>
       </section>
 
@@ -257,7 +327,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
   );
 };
 
-// --- Course Editor Wrapper ---
+// --- Course Editor ---
 const CourseEditor: React.FC<{ 
   courses: Course[]; 
   onSave: (c: Course) => void; 
@@ -277,7 +347,7 @@ const CourseEditor: React.FC<{
 
   const handleSave = () => {
     onSave(editedCourse);
-    alert('Konten kursus berhasil disimpan ke database lokal.');
+    alert('Konten kursus berhasil disimpan!');
   };
 
   const addModule = (type: 'video' | 'text') => {
@@ -286,6 +356,7 @@ const CourseEditor: React.FC<{
       title: type === 'video' ? 'Materi Video Baru' : 'Halaman Materi Teks',
       type: type,
       content: '',
+      description: '',
       duration: type === 'video' ? '00:00' : '5 min'
     };
     setEditedCourse({ ...editedCourse, modules: [...editedCourse.modules, newModule] });
@@ -300,6 +371,22 @@ const CourseEditor: React.FC<{
       url: ''
     };
     setEditedCourse({...editedCourse, assets: [...editedCourse.assets, newAsset]});
+  };
+
+  const handleAssetFileUpload = (index: number) => {
+    const input = document.createElement('input');
+    input.type = 'file';
+    input.onchange = (e) => {
+      const file = (e.target as HTMLInputElement).files?.[0];
+      if (file) {
+        const updatedAssets = [...editedCourse.assets];
+        updatedAssets[index].name = file.name;
+        updatedAssets[index].url = '#'; // In real app, upload to storage
+        updatedAssets[index].type = 'file';
+        setEditedCourse({...editedCourse, assets: updatedAssets});
+      }
+    };
+    input.click();
   };
 
   const updateModule = (index: number, field: string, value: any) => {
@@ -366,82 +453,83 @@ const CourseEditor: React.FC<{
                     <Badge color={mod.type === 'video' ? '#8B5CF6' : '#F472B6'}>
                       <span className="text-white font-bold">{mod.type.toUpperCase()}</span>
                     </Badge>
-                    <Input label="Durasi (e.g 10:00)" value={mod.duration || ''} onChange={e => updateModule(idx, 'duration', e.target.value)} />
+                    <Input label="Durasi" value={mod.duration || ''} onChange={e => updateModule(idx, 'duration', e.target.value)} />
                   </div>
-                  <div className="mt-4">
+                  <div className="mt-4 space-y-4">
                     {mod.type === 'video' ? (
                       <Input label="YouTube Link" value={mod.content} onChange={e => updateModule(idx, 'content', e.target.value)} placeholder="https://youtube.com/watch?v=..." />
                     ) : (
-                      <Textarea label="Text Pages Content" value={mod.content} onChange={e => updateModule(idx, 'content', e.target.value)} placeholder="Masukkan konten teks di sini..." />
+                      <AdvancedEditor label="Text Content" value={mod.content} onChange={v => updateModule(idx, 'content', v)} placeholder="Masukkan konten teks di sini..." />
                     )}
+                    
+                    {/* Advanced Description Editor */}
+                    <AdvancedEditor 
+                      label="Deskripsi Materi (Tampil di bawah video)" 
+                      value={mod.description} 
+                      onChange={v => updateModule(idx, 'description', v)} 
+                      placeholder="Tuliskan ringkasan atau poin penting materi ini..." 
+                    />
                   </div>
                 </Card>
               ))}
-              {editedCourse.modules.length === 0 && (
-                <div className="p-12 text-center bg-white/50 border-2 border-dashed border-[#CBD5E1] rounded-3xl">
-                  <p className="font-bold text-[#64748B]">Belum ada materi. Klik "Tambah Materi" untuk mulai.</p>
-                </div>
-              )}
             </div>
           </div>
         </div>
 
         <div className="space-y-8">
-          {/* Mentor Profile */}
+          {/* Mentor Profile - Clickable to Upload */}
           <Card className="space-y-6">
-            <h3 className="text-xl font-bold flex items-center gap-2">Data Mentor</h3>
+            <h3 className="text-xl font-bold flex items-center gap-2">Profil Mentor</h3>
             <div className="flex flex-col items-center gap-4">
-              <div className="relative group">
-                <img src={mentor.photo} className="w-24 h-24 rounded-full border-2 border-[#1E293B] object-cover" />
-                <button className="absolute bottom-0 right-0 p-2 bg-[#8B5CF6] text-white rounded-full border-2 border-[#1E293B] shadow-sm"><Camera size={14} /></button>
-              </div>
+              <ImageUpload value={mentor.photo} onChange={photo => setMentor({...mentor, photo})}>
+                <div className="relative group">
+                  <img src={mentor.photo} className="w-24 h-24 rounded-full border-2 border-[#1E293B] object-cover hard-shadow group-hover:hard-shadow-hover transition-all" alt="Mentor" />
+                  <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"><Camera size={18} /></div>
+                </div>
+              </ImageUpload>
+              <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Klik foto untuk ganti</p>
             </div>
             <div className="space-y-4">
-              <div className="flex items-end gap-2">
-                <Input label="Nama Lengkap" value={mentor.name} onChange={e => setMentor({...mentor, name: e.target.value})} className="flex-1" />
-                <Badge><Pencil size={12}/></Badge>
-              </div>
-              <div className="flex items-end gap-2">
-                <Input label="Role/Profesi" value={mentor.role} onChange={e => setMentor({...mentor, role: e.target.value})} className="flex-1" />
-                <Badge><Pencil size={12}/></Badge>
-              </div>
-              <div className="flex items-end gap-2">
-                <Textarea label="Bio Mentor" value={mentor.bio} onChange={e => setMentor({...mentor, bio: e.target.value})} className="flex-1" />
-                <Badge><Pencil size={12}/></Badge>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <Input label="Web Link" value={mentor.socials.website} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} />
+              <Input label="Nama Mentor" value={mentor.name} onChange={e => setMentor({...mentor, name: e.target.value})} />
+              <Input label="Role" value={mentor.role} onChange={e => setMentor({...mentor, role: e.target.value})} />
+              <Textarea label="Bio" value={mentor.bio} onChange={e => setMentor({...mentor, bio: e.target.value})} />
+              <div className="grid grid-cols-1 gap-4">
+                <Input label="LinkedIn Username" value={mentor.socials.linkedin} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
+                <Input label="TikTok Username" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={Music} />
                 <Input label="Instagram" value={mentor.socials.instagram} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} />
               </div>
             </div>
           </Card>
 
-          {/* Assets */}
+          {/* Assets - Now with Upload File */}
           <div className="space-y-4">
              <div className="flex justify-between items-center">
                 <h3 className="text-xl font-bold">Asset Belajar</h3>
-                <Button variant="green" className="p-2" icon={Plus} onClick={() => addAsset('link')}></Button>
+                <div className="flex gap-2">
+                   <Button variant="green" className="p-2" icon={Upload} onClick={() => addAsset('file')}></Button>
+                   <Button variant="secondary" className="p-2" icon={LinkIcon} onClick={() => addAsset('link')}></Button>
+                </div>
              </div>
              <div className="space-y-3">
                 {editedCourse.assets.map((asset, aidx) => (
                   <Card key={asset.id} className="p-4 flex flex-col gap-2">
                      <div className="flex justify-between items-center">
                         <Badge color={asset.type === 'link' ? '#FBBF24' : '#34D399'}>{asset.type.toUpperCase()}</Badge>
-                        <button onClick={() => {
-                          const updatedAssets = editedCourse.assets.filter((_, i) => i !== aidx);
-                          setEditedCourse({...editedCourse, assets: updatedAssets});
-                        }} className="text-red-400"><Trash2 size={16}/></button>
+                        <button onClick={() => setEditedCourse({...editedCourse, assets: editedCourse.assets.filter((_, i) => i !== aidx)})} className="text-red-400"><Trash2 size={16}/></button>
                      </div>
                      <Input placeholder="Nama Asset" value={asset.name} onChange={e => {
-                       const updatedAssets = [...editedCourse.assets];
-                       updatedAssets[aidx].name = e.target.value;
-                       setEditedCourse({...editedCourse, assets: updatedAssets});
+                       const up = [...editedCourse.assets]; up[aidx].name = e.target.value; setEditedCourse({...editedCourse, assets: up});
                      }} />
-                     <Input placeholder="URL Link / Filename" value={asset.url} onChange={e => {
-                       const updatedAssets = [...editedCourse.assets];
-                       updatedAssets[aidx].url = e.target.value;
-                       setEditedCourse({...editedCourse, assets: updatedAssets});
-                     }} />
+                     {asset.type === 'link' ? (
+                       <Input placeholder="URL Link" value={asset.url} onChange={e => {
+                         const up = [...editedCourse.assets]; up[aidx].url = e.target.value; setEditedCourse({...editedCourse, assets: up});
+                       }} />
+                     ) : (
+                       <div className="flex gap-2">
+                          <Input className="flex-1" placeholder="Upload file..." value={asset.fileName || ''} readOnly />
+                          <Button variant="secondary" className="px-3" onClick={() => handleAssetFileUpload(aidx)}><Upload size={14}/></Button>
+                       </div>
+                     )}
                   </Card>
                 ))}
              </div>
@@ -471,7 +559,8 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       <header className="bg-white border-b-2 border-[#1E293B] p-4 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3">
-            <img src={branding.logo} className="w-10 h-10 rounded-lg border-2 border-[#1E293B]" alt="Logo" />
+            {/* Logo fixed to remove the black box/border */}
+            <img src={branding.logo} className="w-10 h-10 object-contain" alt="Logo" />
             <span className="font-extrabold text-xl">{branding.siteName}</span>
           </Link>
           <div className="hidden md:flex items-center gap-2">
@@ -482,6 +571,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       </header>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
+        {/* Main Content Area */}
         <div className="lg:col-span-3 space-y-6">
           {selectedModule ? (
             <div className="space-y-6">
@@ -506,9 +596,21 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                   </div>
                 )}
               </div>
-              <div className="flex justify-between items-center">
-                <h2 className="text-3xl font-extrabold">{selectedModule.title}</h2>
-                <Badge color="#8B5CF6" className="text-white px-4 py-2 text-sm">{selectedModule.duration}</Badge>
+              
+              <div className="flex justify-between items-start">
+                 <div>
+                    <h2 className="text-3xl font-extrabold">{selectedModule.title}</h2>
+                    <Badge color="#8B5CF6" className="text-white mt-2">{selectedModule.duration}</Badge>
+                 </div>
+                 <Button variant="secondary" className="px-4 py-2" icon={Share2}>Share Materi</Button>
+              </div>
+
+              {/* Module Description Field - Always visible under video */}
+              <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow">
+                 <h3 className="text-xl font-extrabold mb-4 flex items-center gap-2"><FileText size={20} className="text-[#8B5CF6]"/> Deskripsi Materi</h3>
+                 <div className="text-[#1E293B] text-lg leading-relaxed whitespace-pre-wrap font-medium">
+                    {selectedModule.description || "Tidak ada deskripsi untuk materi ini."}
+                 </div>
               </div>
             </div>
           ) : (
@@ -517,30 +619,32 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                <p>Pilih materi di samping untuk mulai belajar</p>
             </div>
           )}
-
-          {/* Mentor Data Section */}
-          <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow">
-            <div className="flex flex-col md:flex-row gap-8 items-start">
-              <div className="shrink-0 relative">
-                <img src={mentor.photo} className="w-32 h-32 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover" alt={mentor.name} />
-              </div>
-              <div className="flex-1">
-                <h3 className="text-2xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
-                <p className="font-bold text-[#8B5CF6] mb-4 uppercase tracking-wider text-sm">{mentor.role}</p>
-                <p className="text-[#64748B] text-lg leading-relaxed mb-6 italic">"{mentor.bio}"</p>
-                <div className="flex flex-wrap gap-4">
-                  {mentor.socials.instagram && <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="flex items-center gap-2 p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl font-bold hover:bg-[#F472B6] hover:text-white transition-all"><Instagram size={20} /> Instagram</a>}
-                  {mentor.socials.linkedin && <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="flex items-center gap-2 p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl font-bold hover:bg-[#8B5CF6] hover:text-white transition-all"><Linkedin size={20} /> LinkedIn</a>}
-                  {mentor.socials.website && <a href={mentor.socials.website} target="_blank" className="flex items-center gap-2 p-3 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl font-bold hover:bg-[#FBBF24] transition-all"><Globe size={20} /> Website</a>}
-                </div>
-              </div>
-            </div>
+          
+          <div className="bg-[#F1F5F9] border-2 border-[#1E293B] rounded-3xl p-8 border-dashed">
+            <h3 className="text-xl font-extrabold mb-4">Tentang Kursus Ini</h3>
+            <p className="text-[#64748B] leading-relaxed italic">"{course.description}"</p>
           </div>
         </div>
 
-        {/* Sidebar Curriculum */}
+        {/* Sidebar Area - Mentor Card Moved here above curriculum */}
         <div className="lg:col-span-1 space-y-6">
-          <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 sticky top-28 hard-shadow">
+          {/* Mentor Profile moved to TOP of Sidebar */}
+          <Card className="text-center pt-12 featured relative">
+             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2">
+                <img src={mentor.photo} className="w-24 h-24 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover" alt={mentor.name} />
+             </div>
+             <h3 className="text-xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
+             <p className="font-bold text-[#8B5CF6] text-xs uppercase mb-4">{mentor.role}</p>
+             <p className="text-[#64748B] text-sm leading-relaxed mb-6">{mentor.bio}</p>
+             <div className="flex justify-center gap-2 flex-wrap">
+                {mentor.socials.linkedin && <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#8B5CF6] hover:text-white transition-all"><Linkedin size={18} /></a>}
+                {mentor.socials.tiktok && <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-black hover:text-white transition-all"><Music size={18} /></a>}
+                {mentor.socials.instagram && <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#F472B6] hover:text-white transition-all"><Instagram size={18} /></a>}
+                {mentor.socials.website && <a href={mentor.socials.website} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#FBBF24] transition-all"><Globe size={18} /></a>}
+             </div>
+          </Card>
+
+          <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 hard-shadow">
             <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2">
               <BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum Kelas
             </h3>

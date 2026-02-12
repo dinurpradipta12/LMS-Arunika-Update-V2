@@ -7,6 +7,7 @@ export interface Module {
   title: string;
   type: ContentType;
   content: string; // YouTube URL or Markdown Text
+  description: string; // New: Description below video
   duration?: string;
 }
 
@@ -15,6 +16,7 @@ export interface Asset {
   name: string;
   type: AssetType;
   url: string;
+  fileName?: string;
 }
 
 export interface Course {
@@ -38,6 +40,7 @@ export interface Mentor {
     linkedin?: string;
     website?: string;
     twitter?: string;
+    tiktok?: string;
   };
 }
 

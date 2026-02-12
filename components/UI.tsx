@@ -47,14 +47,22 @@ export const Card: React.FC<{ children: React.ReactNode; className?: string; fea
   );
 };
 
-export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string }> = ({ label, className = '', ...props }) => {
+// Fixed: Added 'icon' prop to Input component and updated it to render the icon if provided
+export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string; icon?: LucideIcon }> = ({ label, icon: Icon, className = '', ...props }) => {
   return (
     <div className="flex flex-col gap-2">
       {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
-      <input 
-        className={`bg-white border-2 border-[#CBD5E1] rounded-xl px-4 py-3 text-[#1E293B] focus:border-[#8B5CF6] focus:ring-0 focus:hard-shadow transition-all outline-none ${className}`}
-        {...props}
-      />
+      <div className="relative">
+        <input 
+          className={`w-full bg-white border-2 border-[#CBD5E1] rounded-xl py-3 text-[#1E293B] focus:border-[#8B5CF6] focus:ring-0 focus:hard-shadow transition-all outline-none ${Icon ? 'pl-11 pr-4' : 'px-4'} ${className}`}
+          {...props}
+        />
+        {Icon && (
+          <div className="absolute left-4 top-1/2 -translate-y-1/2 text-[#64748B]">
+            <Icon size={18} />
+          </div>
+        )}
+      </div>
     </div>
   );
 };

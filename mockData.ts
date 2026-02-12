@@ -16,7 +16,8 @@ export const initialMentor: Mentor = {
     instagram: 'alexrivera',
     linkedin: 'alex-rivera',
     website: 'https://alexdesign.io',
-    twitter: 'alex_tweets'
+    twitter: 'alex_tweets',
+    tiktok: 'alexdesign'
   }
 };
 
@@ -33,6 +34,7 @@ export const initialCourses: Course[] = [
         title: 'Introduction to Memphis Design',
         type: 'video',
         content: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ',
+        description: 'Dalam video ini, kita akan mempelajari sejarah gerakan Memphis Design dan bagaimana mengimplementasikannya dalam UI modern.',
         duration: '10:00'
       },
       {
@@ -40,6 +42,7 @@ export const initialCourses: Course[] = [
         title: 'Color Theory & Accessibility',
         type: 'text',
         content: '# Color Theory\n\nUnderstanding saturation and contrast in playful designs...',
+        description: 'Materi teks lengkap mengenai psikologi warna.',
         duration: '5 mins read'
       }
     ],
