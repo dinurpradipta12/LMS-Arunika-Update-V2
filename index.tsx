@@ -33,11 +33,9 @@ import {
   Save,
   Instagram,
   RefreshCw,
-  // Added Check to imports
   Check
 } from 'lucide-react';
 
-// Use standard Supabase import if possible, but keeping URL import as requested/provided
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
@@ -283,10 +281,28 @@ const Settings: React.FC<{
   supabase: SupabaseConfig;
   setSupabase: React.Dispatch<React.SetStateAction<SupabaseConfig>>;
 }> = ({ branding, setBranding, supabase, setSupabase }) => {
+  // --- Fix Cursor Jump: Use Local Draft State ---
+  const [localBranding, setLocalBranding] = useState<Branding>(branding);
   const [isConnecting, setIsConnecting] = useState(false);
   const [dbStatus, setDbStatus] = useState<'connected' | 'disconnected' | 'connecting'>(() => {
     return (supabase.url && supabase.anonKey) ? 'connected' : 'disconnected';
   });
+
+  // Keep local state in sync with parent when parent changes from OUTSIDE (e.g. database fetch)
+  // But NOT while typing
+  useEffect(() => {
+    setLocalBranding(branding);
+  }, [branding.logo]); // Only sync logo or other props if needed, siteName is usually handled by debounce
+
+  // Debounced update to parent state for siteName
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (localBranding.siteName !== branding.siteName) {
+        setBranding(localBranding);
+      }
+    }, 500);
+    return () => clearTimeout(timer);
+  }, [localBranding.siteName]);
 
   const sqlScript = `
 -- SETUP DATABASE ARUNIKA LMS (REAL-TIME CONFIG)
@@ -370,10 +386,24 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
         </h2>
         <Card className="grid grid-cols-1 md:grid-cols-2 gap-8 featured shadow-[#8B5CF6]">
           <div className="space-y-4">
-            <Input label="Nama Platform" value={branding.siteName} onChange={e => setBranding({...branding, siteName: e.target.value})} icon={Layout} />
+            {/* USE LOCAL BRANDING STATE FOR SNAPPY INPUT */}
+            <Input 
+              label="Nama Platform" 
+              value={localBranding.siteName} 
+              onChange={e => setLocalBranding({...localBranding, siteName: e.target.value})} 
+              icon={Layout} 
+            />
           </div>
           <div className="bg-[#FFFDF5] p-6 rounded-2xl border-2 border-dashed border-[#CBD5E1] flex items-center justify-center">
-            <ImageUpload label="Logo Platform (PNG)" variant="minimal" value={branding.logo} onChange={logo => setBranding({...branding, logo})} />
+            <ImageUpload 
+              label="Logo Platform (PNG)" 
+              variant="minimal" 
+              value={localBranding.logo} 
+              onChange={logo => {
+                setLocalBranding({...localBranding, logo});
+                setBranding({...branding, logo}); // Update parent immediately for images
+              }} 
+            />
           </div>
         </Card>
       </section>
@@ -445,40 +475,6 @@ const CourseEditor: React.FC<{
     setShowAddMenu(false);
   };
 
-  const addAsset = (type: 'link' | 'file') => {
-    const newAsset: Asset = {
-      id: `a-${Date.now()}`,
-      name: 'Asset Baru',
-      type: type,
-      url: ''
-    };
-    setEditedCourse({...editedCourse, assets: [...editedCourse.assets, newAsset]});
-  };
-
-  const handleAssetFileUpload = (index: number) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const updatedAssets = [...editedCourse.assets];
-          updatedAssets[index] = {
-            ...updatedAssets[index],
-            name: file.name,
-            fileName: file.name,
-            url: reader.result as string, 
-            type: 'file'
-          };
-          setEditedCourse({...editedCourse, assets: updatedAssets});
-        };
-        reader.readAsDataURL(file);
-      }
-    };
-    input.click();
-  };
-
   const updateModule = (index: number, field: string, value: any) => {
     const newModules = [...editedCourse.modules];
     newModules[index] = { ...newModules[index], [field]: value };
@@ -490,6 +486,39 @@ const CourseEditor: React.FC<{
       const newModules = editedCourse.modules.filter((_, i) => i !== index);
       setEditedCourse({ ...editedCourse, modules: newModules });
     }
+  };
+
+  const addAsset = (type: 'link' | 'file') => {
+    const newAsset: Asset = {
+      id: `asset-${Date.now()}`,
+      name: type === 'link' ? 'Link Baru' : 'File Baru',
+      type: type,
+      url: '',
+      fileName: type === 'file' ? '' : undefined
+    };
+    setEditedCourse({ ...editedCourse, assets: [...editedCourse.assets, newAsset] });
+  };
+
+  const handleAssetFileUpload = (index: number) => {
+    const fileInput = document.createElement('input');
+    fileInput.type = 'file';
+    fileInput.onchange = (e: any) => {
+      const file = e.target.files?.[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const newAssets = [...editedCourse.assets];
+          newAssets[index] = {
+            ...newAssets[index],
+            url: reader.result as string,
+            fileName: file.name
+          };
+          setEditedCourse({ ...editedCourse, assets: newAssets });
+        };
+        reader.readAsDataURL(file);
+      }
+    };
+    fileInput.click();
   };
 
   return (
@@ -639,8 +668,12 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
             <img src={branding.logo} className="w-10 h-10 object-contain" alt="Logo" />
             <span className="font-extrabold text-xl">{branding.siteName}</span>
           </Link>
-          <div className="hidden md:flex items-center gap-2">
-            <Badge>{course.modules.length} Materi</Badge>
+          <div className="flex items-center gap-3">
+            <Badge className="hidden md:inline-block">{course.modules.length} Materi</Badge>
+            <Button variant="secondary" className="px-4 py-2 text-xs" icon={Share2} onClick={() => {
+              navigator.clipboard.writeText(window.location.href);
+              alert('Link publik materi ini telah disalin!');
+            }}>Bagikan</Button>
           </div>
         </div>
       </header>
@@ -648,19 +681,15 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
           {/* JUDUL KURSUS DI ATAS VIDEO/TEKS */}
-          <div className="bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 transition-bounce">
+          <div className="bg-white border-2 border-[#1E293B] p-6 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-4 transition-bounce">
             <div className="flex-1">
-              <Badge color="#8B5CF6" className="text-white mb-3">Video Course</Badge>
-              <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2 leading-tight">{course.title}</h1>
-              <div className="flex items-center gap-3">
-                 <div className="h-2 w-24 bg-[#FBBF24] rounded-full"></div>
-                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">Arunika Learning Hub</span>
+              <Badge color="#8B5CF6" className="text-white mb-2">Video Course</Badge>
+              <h1 className="text-2xl font-extrabold text-[#1E293B] leading-tight">{course.title}</h1>
+              <div className="flex items-center gap-2 mt-1">
+                 <div className="h-1.5 w-16 bg-[#FBBF24] rounded-full"></div>
+                 <span className="text-[#64748B] font-bold text-[10px] tracking-widest uppercase">Arunika Learning Hub</span>
               </div>
             </div>
-            <Button variant="secondary" className="px-6 py-3" icon={Share2} onClick={() => {
-              navigator.clipboard.writeText(window.location.href);
-              alert('Link publik materi ini telah disalin!');
-            }}>Bagikan Halaman</Button>
           </div>
 
           {selectedModule ? (
@@ -679,8 +708,8 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                   </div>
                 ) : (
                   <div className="p-10 prose prose-slate max-w-none">
-                    <h2 className="text-4xl font-extrabold mb-6 text-[#1E293B] border-b-4 border-[#FBBF24] inline-block">{selectedModule.title}</h2>
-                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-xl leading-relaxed">{selectedModule.content}</div>
+                    <h2 className="text-3xl font-extrabold mb-6 text-[#1E293B] border-b-4 border-[#FBBF24] inline-block">{selectedModule.title}</h2>
+                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-lg leading-relaxed">{selectedModule.content}</div>
                   </div>
                 )}
               </div>
@@ -689,7 +718,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                  <div className="absolute top-0 right-0 w-16 h-16 bg-[#FBBF24] rounded-bl-3xl border-l-2 border-b-2 border-[#1E293B] flex items-center justify-center">
                     <FileText className="text-[#1E293B]" />
                  </div>
-                 <h3 className="text-2xl font-extrabold mb-4 text-[#1E293B] tracking-tight">Detail Materi: {selectedModule.title}</h3>
+                 <h3 className="text-xl font-extrabold mb-4 text-[#1E293B] tracking-tight">Detail Materi: {selectedModule.title}</h3>
                  <div className="text-[#1E293B] text-lg leading-relaxed whitespace-pre-wrap font-medium">
                     {selectedModule.description || "Tidak ada deskripsi tambahan untuk materi ini."}
                  </div>
@@ -806,6 +835,10 @@ const App: React.FC = () => {
   const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
   const [syncing, setSyncing] = useState(false);
+  
+  // Guard for realtime feedback loops
+  const isSyncingRef = useRef(false);
+  const lastUpdateRef = useRef<number>(0);
 
   // Persistence to LocalStorage (Always up to date locally)
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
@@ -816,20 +849,23 @@ const App: React.FC = () => {
 
   // FORCED REALTIME SYNC FUNCTION
   const triggerForcedSync = useCallback(async () => {
-    if (!supabase.url || !supabase.anonKey) return;
+    if (!supabase.url || !supabase.anonKey || isSyncingRef.current) return;
+    
     setSyncing(true);
+    isSyncingRef.current = true;
+    lastUpdateRef.current = Date.now();
+    
     try {
       const client = createClient(supabase.url, supabase.anonKey);
       
-      // Force sync branding
-      await client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo });
+      // Batch sync
+      const promises = [
+        client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo }),
+        client.from('mentor').upsert({ id: 'profile', ...mentor })
+      ];
       
-      // Force sync mentor
-      await client.from('mentor').upsert({ id: 'profile', ...mentor });
-      
-      // Force sync all courses
       for (const course of courses) {
-        await client.from('courses').upsert({
+        promises.push(client.from('courses').upsert({
           id: course.id,
           title: course.title,
           description: course.description,
@@ -837,18 +873,24 @@ const App: React.FC = () => {
           modules: course.modules,
           assets: course.assets,
           mentor_id: course.mentorId
-        });
+        }));
       }
+      
+      await Promise.all(promises);
     } catch (err) {
       console.error("Supabase Realtime Sync Failed:", err);
     } finally {
-      setTimeout(() => setSyncing(false), 500);
+      // Small timeout to prevent UI flickering and allow local state to settle
+      setTimeout(() => {
+        setSyncing(false);
+        isSyncingRef.current = false;
+      }, 800);
     }
   }, [branding, mentor, courses, supabase]);
 
-  // Automatic Trigger on any change
+  // Automatic Trigger on any change with debounce
   useEffect(() => {
-    const timer = setTimeout(triggerForcedSync, 1000); // 1s debounce to allow multiple quick inputs
+    const timer = setTimeout(triggerForcedSync, 2000); 
     return () => clearTimeout(timer);
   }, [branding, mentor, courses, triggerForcedSync]);
 
@@ -875,15 +917,24 @@ const App: React.FC = () => {
     };
     initialFetch();
     
-    // Subscribe to realtime updates if any (for external changes)
+    // Subscribe to realtime updates
     const sub = client.channel('public_updates').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
-       // Refresh local state if remote table branding or mentor changed
-       if(payload.table === 'branding') setBranding({siteName: payload.new.site_name, logo: payload.new.logo});
+       // IGNORE IF WE JUST UPDATED (fixes the "revert" jump)
+       const now = Date.now();
+       if (isSyncingRef.current || (now - lastUpdateRef.current < 5000)) {
+         return;
+       }
+
+       if(payload.table === 'branding') {
+         if (payload.new.site_name !== branding.siteName || payload.new.logo !== branding.logo) {
+           setBranding({siteName: payload.new.site_name, logo: payload.new.logo});
+         }
+       }
        if(payload.table === 'mentor') setMentor(payload.new);
     }).subscribe();
 
     return () => { client.removeChannel(sub); };
-  }, [supabase.url, supabase.anonKey]);
+  }, [supabase.url, supabase.anonKey, branding.siteName, branding.logo]);
 
   const updateCourse = (updated: Course) => {
     setCourses(prev => prev.map(c => c.id === updated.id ? updated : c));
@@ -891,12 +942,14 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      {syncing && (
-        <div className="fixed bottom-6 left-6 z-[999] bg-[#34D399] border-2 border-[#1E293B] rounded-full px-5 py-2 flex items-center gap-3 hard-shadow animate-bounce">
+      {/* NOTIFICATION: TOP CENTER */}
+      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-500 transform ${syncing ? 'translate-y-0 opacity-100' : '-translate-y-12 opacity-0'}`}>
+        <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-5 py-2 flex items-center gap-3 hard-shadow">
            <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
            <span className="text-xs font-extrabold uppercase tracking-widest text-[#1E293B]">Syncing Realtime...</span>
         </div>
-      )}
+      </div>
+      
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
         <Route path="/admin" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AdminDashboard courses={courses} setCourses={setCourses} /></main></div> : <Navigate to="/login" />} />
