@@ -36,11 +36,20 @@ import {
   AlertCircle
 } from 'lucide-react';
 
-// Pin React instance for external components
-import { FaTiktok } from 'https://esm.sh/react-icons@5.0.1/fa?external=react,react-dom';
+/**
+ * CRITICAL FIX FOR ERROR #31: Instance Mismatch
+ * We must ensure that ESM modules from cloud URLs (like esm.sh) use the 
+ * SAME React instance that Vite has bundled from node_modules.
+ */
+// @ts-ignore
+window.React = React;
+// @ts-ignore
+window.ReactDOM = ReactDOM;
 
-// Use standard mapped import for Supabase
-import { createClient } from '@supabase/supabase-js';
+// External libraries not in package.json must use full ESM URLs
+// We use ?external=react,react-dom to force them to use the window.React we set above
+import { FaTiktok } from 'https://esm.sh/react-icons@5.0.1/fa?external=react,react-dom';
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1?external=react,react-dom';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
@@ -103,13 +112,13 @@ const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void;
   if (variant === 'minimal') {
     return (
       <div className="space-y-2">
-        {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
+        {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{String(label)}</label>}
         <div 
           onClick={() => fileInputRef.current?.click()}
           className="relative group cursor-pointer flex flex-col items-center justify-center p-4 transition-all"
         >
           {value ? (
-            <img src={value} className="max-w-[120px] max-h-[120px] object-contain mb-4" alt="Logo Preview" />
+            <img src={String(value)} className="max-w-[120px] max-h-[120px] object-contain mb-4" alt="Logo Preview" />
           ) : (
             <div className="text-center p-4 border-2 border-dashed border-[#CBD5E1] rounded-2xl w-full">
               <Upload className="mx-auto mb-2 text-[#8B5CF6]" size={32} />
@@ -125,13 +134,13 @@ const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void;
 
   return (
     <div className="space-y-2">
-      {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
+      {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{String(label)}</label>}
       <div 
         onClick={() => fileInputRef.current?.click()}
         className="relative group cursor-pointer border-2 border-[#1E293B] rounded-2xl overflow-hidden aspect-video bg-white flex items-center justify-center hard-shadow hover:hard-shadow-hover transition-all"
       >
         {value ? (
-          <img src={value} className="w-full h-full object-cover" alt="Upload" />
+          <img src={String(value)} className="w-full h-full object-cover" alt="Upload" />
         ) : (
           <div className="text-center p-4">
             <Upload className="mx-auto mb-2 text-[#8B5CF6]" size={32} />
@@ -150,7 +159,7 @@ const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void;
 const AdvancedEditor: React.FC<{ value: string; onChange: (v: string) => void; label: string; placeholder?: string }> = ({ value, onChange, label, placeholder }) => {
   return (
     <div className="space-y-2">
-      <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>
+      <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{String(label)}</label>
       <div className="border-2 border-[#1E293B] rounded-2xl overflow-hidden bg-white hard-shadow focus-within:hard-shadow-hover transition-all">
         <div className="bg-[#F1F5F9] border-b-2 border-[#1E293B] p-2 flex gap-2">
           <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><Bold size={14}/></div>
@@ -204,7 +213,7 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
         <form onSubmit={handleLogin} className="space-y-6">
           <Input label="Username" value={username} onChange={e => setUsername(e.target.value)} placeholder="arunika" />
           <Input label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
-          {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-2 rounded-lg border border-red-200">{error}</p>}
+          {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-2 rounded-lg border border-red-200">{String(error)}</p>}
           <Button type="submit" className="w-full" icon={ChevronRight}>Masuk Dashboard</Button>
         </form>
       </Card>
@@ -216,8 +225,8 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void }> = ({ brand
   return (
     <div className="w-64 bg-white border-r-2 border-[#1E293B] min-h-screen hidden md:flex flex-col sticky top-0">
       <div className="p-6 border-b-2 border-[#1E293B] flex items-center gap-3">
-        <img src={branding.logo} className="w-10 h-10 object-contain" alt="Logo" />
-        <span className="font-extrabold text-xl">{branding.siteName}</span>
+        <img src={String(branding.logo)} className="w-10 h-10 object-contain" alt="Logo" />
+        <span className="font-extrabold text-xl">{String(branding.siteName)}</span>
       </div>
       <nav className="p-4 flex-1 space-y-2">
         <Link to="/admin" className="flex items-center gap-3 p-3 rounded-xl hover:bg-[#F1F5F9] font-bold text-[#1E293B]">
@@ -273,14 +282,14 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
           <Card key={course.id} className="group overflow-hidden flex flex-col">
             <div className="relative aspect-video mb-4 rounded-lg overflow-hidden border-2 border-[#1E293B] bg-[#F1F5F9] flex items-center justify-center">
               {course.coverImage ? (
-                <img src={course.coverImage} className="w-full h-full object-cover" alt={course.title} />
+                <img src={String(course.coverImage)} className="w-full h-full object-cover" alt={String(course.title)} />
               ) : (
                 <Globe size={48} className="text-[#CBD5E1]" />
               )}
             </div>
             <div className="flex-1">
-              <h3 className="text-xl font-extrabold group-hover:text-[#8B5CF6] transition-colors">{course.title}</h3>
-              <p className="text-sm text-[#64748B] line-clamp-2 mt-2 mb-4">{course.description}</p>
+              <h3 className="text-xl font-extrabold group-hover:text-[#8B5CF6] transition-colors">{String(course.title)}</h3>
+              <p className="text-sm text-[#64748B] line-clamp-2 mt-2 mb-4">{String(course.description)}</p>
             </div>
             <div className="grid grid-cols-2 gap-3 mt-4">
               <Button onClick={() => navigate(`/admin/course/${course.id}`)} variant="secondary" className="text-xs">Edit Content</Button>
@@ -372,7 +381,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;`.trim();
         <Badge color={dbStatus === 'connected' ? '#34D399' : dbStatus === 'connecting' ? '#FBBF24' : '#E2E8F0'}>
           <div className="flex items-center gap-2 px-1">
             {dbStatus === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
-            <span className="uppercase tracking-tighter">{dbStatus}</span>
+            <span className="uppercase tracking-tighter">{String(dbStatus)}</span>
           </div>
         </Badge>
       </div>
@@ -414,7 +423,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;`.trim();
               <Button variant="secondary" className="px-4 py-1.5 text-xs" onClick={() => { navigator.clipboard.writeText(sqlScript); alert('SQL Copied!'); }} icon={Copy}>Copy SQL</Button>
             </div>
             <div className="bg-[#1E293B] text-[#34D399] p-6 rounded-3xl font-mono text-xs overflow-x-auto hard-shadow relative">
-              <pre>{sqlScript}</pre>
+              <pre>{String(sqlScript)}</pre>
             </div>
           </div>
         </Card>
@@ -458,34 +467,6 @@ const CourseEditor: React.FC<{
     setShowAddMenu(false);
   };
 
-  const addAsset = (type: 'link' | 'file') => {
-    const newAsset: Asset = {
-      id: `a-${Date.now()}`,
-      name: 'Asset Baru',
-      type: type,
-      url: ''
-    };
-    setEditedCourse({...editedCourse, assets: [...(editedCourse.assets || []), newAsset]});
-  };
-
-  const handleAssetFileUpload = (index: number) => {
-    const input = document.createElement('input');
-    input.type = 'file';
-    input.onchange = (e) => {
-      const file = (e.target as HTMLInputElement).files?.[0];
-      if (file) {
-        const reader = new FileReader();
-        reader.onloadend = () => {
-          const updatedAssets = [...(editedCourse.assets || [])];
-          updatedAssets[index] = { ...updatedAssets[index], name: file.name, fileName: file.name, url: reader.result as string, type: 'file' };
-          setEditedCourse({...editedCourse, assets: updatedAssets});
-        };
-        reader.readAsDataURL(file);
-      }
-    };
-    input.click();
-  };
-
   const updateModule = (index: number, field: string, value: any) => {
     const newModules = [...(editedCourse.modules || [])];
     newModules[index] = { ...newModules[index], [field]: value };
@@ -495,7 +476,7 @@ const CourseEditor: React.FC<{
   return (
     <div className="p-8 max-w-5xl mx-auto pb-24 space-y-8">
       <div className="flex justify-between items-center">
-        <h1 className="text-3xl font-extrabold text-[#1E293B]">Editor: {editedCourse.title}</h1>
+        <h1 className="text-3xl font-extrabold text-[#1E293B]">Editor: {String(editedCourse.title)}</h1>
         <Button onClick={handleSave} icon={Save}>Simpan Perubahan</Button>
       </div>
 
@@ -556,7 +537,7 @@ const CourseEditor: React.FC<{
             <h3 className="text-xl font-bold">Profil Mentor</h3>
             <div className="flex flex-col items-center gap-4">
               <ImageUpload value={mentor.photo} onChange={photo => setMentor({...mentor, photo})}>
-                <img src={mentor.photo} className="w-24 h-24 rounded-full border-2 border-[#1E293B] object-cover hard-shadow" alt="Mentor" />
+                <img src={String(mentor.photo)} className="w-24 h-24 rounded-full border-2 border-[#1E293B] object-cover hard-shadow" alt="Mentor" />
               </ImageUpload>
             </div>
             <div className="space-y-4">
@@ -582,7 +563,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
     }
   }, [course, selectedModule]);
 
-  const getYoutubeEmbedUrl = (content: string) => {
+  const getYoutubeEmbedUrl = (content: any) => {
     if (!content || typeof content !== 'string') return "";
     try {
       const videoId = content.includes('v=') 
@@ -618,8 +599,8 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       <header className="bg-white border-b-2 border-[#1E293B] p-4 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <img src={branding.logo} className="w-10 h-10 object-contain" alt="Logo" />
-            <span className="font-extrabold text-xl">{branding.siteName}</span>
+            <img src={String(branding.logo)} className="w-10 h-10 object-contain" alt="Logo" />
+            <span className="font-extrabold text-xl">{String(branding.siteName)}</span>
           </div>
           <Badge>{(course.modules || []).length} Materi</Badge>
         </div>
@@ -630,7 +611,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
           <div className="bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6">
             <div className="flex-1">
               <Badge color="#8B5CF6" className="text-white mb-3">PUBLIC PUBLICATION</Badge>
-              <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2">{course.title}</h1>
+              <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2">{String(course.title)}</h1>
             </div>
             <Button variant="secondary" icon={Share2} onClick={() => { navigator.clipboard.writeText(window.location.href); alert('Link Copied!'); }}>Bagikan</Button>
           </div>
@@ -641,13 +622,15 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                 {selectedModule.type === 'video' ? (
                   <div className="aspect-video bg-black flex items-center justify-center">
                     {getYoutubeEmbedUrl(selectedModule.content) ? (
-                      <iframe className="w-full h-full" src={getYoutubeEmbedUrl(selectedModule.content)} title={selectedModule.title} frameBorder="0" allowFullScreen></iframe>
+                      <iframe className="w-full h-full" src={getYoutubeEmbedUrl(selectedModule.content)} title={String(selectedModule.title)} frameBorder="0" allowFullScreen></iframe>
                     ) : <p className="text-white">Video tidak tersedia</p>}
                   </div>
                 ) : (
                   <div className="p-10 prose max-w-none">
-                    <h2 className="text-4xl font-extrabold mb-6 text-[#1E293B]">{selectedModule.title}</h2>
-                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-xl">{selectedModule.content || "Konten kosong."}</div>
+                    <h2 className="text-4xl font-extrabold mb-6 text-[#1E293B]">{String(selectedModule.title)}</h2>
+                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-xl">
+                      {typeof selectedModule.content === 'string' ? selectedModule.content : "Format konten tidak valid."}
+                    </div>
                   </div>
                 )}
               </div>
@@ -657,9 +640,9 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
         <div className="lg:col-span-1 space-y-6">
           <Card className="flex flex-col items-center p-8 text-center featured">
-             <img src={mentor.photo} className="w-28 h-28 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover mb-4" alt={mentor.name} />
-             <h3 className="text-2xl font-extrabold text-[#1E293B]">{mentor.name}</h3>
-             <Badge color="#F472B6" className="text-white mb-4">{mentor.role}</Badge>
+             <img src={String(mentor.photo)} className="w-28 h-28 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover mb-4" alt={String(mentor.name)} />
+             <h3 className="text-2xl font-extrabold text-[#1E293B]">{String(mentor.name)}</h3>
+             <Badge color="#F472B6" className="text-white mb-4">{String(mentor.role)}</Badge>
           </Card>
 
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 hard-shadow">
@@ -668,7 +651,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
               {(course.modules || []).map((mod, i) => (
                 <button key={mod.id} onClick={() => setSelectedModule(mod)} className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${selectedModule?.id === mod.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow' : 'bg-white border-transparent hover:bg-[#F1F5F9]'}`}>
                   <div className="shrink-0 w-8 h-8 rounded-full border-2 border-[#1E293B] flex items-center justify-center font-bold text-xs">{i+1}</div>
-                  <div className="flex-1"><p className="text-sm font-extrabold">{mod.title}</p></div>
+                  <div className="flex-1"><p className="text-sm font-extrabold">{String(mod.title)}</p></div>
                 </button>
               ))}
             </div>
@@ -699,7 +682,6 @@ const App: React.FC = () => {
   const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
   const [syncing, setSyncing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
-  const isDataLoadedRef = useRef(false);
 
   useEffect(() => { setStorageItem('isLoggedIn', isLoggedIn); }, [isLoggedIn]);
   useEffect(() => { setStorageItem('courses', courses); }, [courses]);
@@ -733,7 +715,6 @@ const App: React.FC = () => {
         }
       } catch (err) { console.error(err); } finally {
         setIsInitialLoading(false);
-        isDataLoadedRef.current = true;
       }
     };
     initialFetch();
@@ -762,5 +743,9 @@ const App: React.FC = () => {
   );
 };
 
-const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
-root.render(<Router><App /></Router>);
+// @ts-ignore
+const rootElement = document.getElementById('root');
+if (rootElement) {
+  const root = ReactDOM.createRoot(rootElement);
+  root.render(<Router><App /></Router>);
+}
