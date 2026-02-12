@@ -31,7 +31,10 @@ import {
   Zap
 } from 'lucide-react';
 
+// Menggunakan bare specifier yang sudah didefinisikan di importmap
 import { FaTiktok, FaLinkedinIn, FaInstagram } from 'react-icons/fa';
+
+// Menggunakan bare specifier untuk Supabase
 import { createClient } from '@supabase/supabase-js';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
@@ -282,7 +285,7 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
                 onClick={() => {
                   const url = generateShareLink(course.id);
                   navigator.clipboard.writeText(url);
-                  alert('Link publik berhasil disalin!');
+                  alert('Link publik (Cross-Device Realtime) berhasil disalin!');
                 }} 
                 variant="green" className="text-xs col-span-2" icon={Share2}
               >
@@ -858,15 +861,12 @@ const App: React.FC = () => {
     if (cfgParam) {
       const decoded = decodeConfig(cfgParam);
       if (decoded && decoded.url && decoded.anonKey) {
-        console.log("Config detected in URL. Sticking to this config.");
         setSupabase(decoded);
-        setStorageItem('supabase', decoded); // Force save to make it sticky
+        setStorageItem('supabase', decoded);
         setIsInitialLoading(true);
       }
     } else {
-      // Jika tidak ada di URL, cek apakah ada di LocalStorage (sudah ditangani di useState init)
       if (supabase.url && supabase.anonKey) {
-        console.log("No config in URL, but found in memory. Reconnecting...");
         setShowAutoConnectNotif(true);
         setTimeout(() => setShowAutoConnectNotif(false), 3000);
       }
@@ -962,7 +962,7 @@ const App: React.FC = () => {
     
     // Realtime listener
     const sub = client.channel('all_changes').on('postgres_changes', { event: '*', schema: 'public', table: '*' } as any, (payload: any) => {
-       if (!isSyncingRef.current) {
+       if (!isSyncingRef.current && payload.new) {
           if (payload.table === 'branding') {
             setBranding({ siteName: payload.new.site_name, logo: payload.new.logo });
           }
