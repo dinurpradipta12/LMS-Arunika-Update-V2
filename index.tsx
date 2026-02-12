@@ -31,11 +31,11 @@ import {
   Check
 } from 'lucide-react';
 
-// Mengimpor ikon media sosial dari react-icons via esm.sh
-import { FaTiktok, FaLinkedinIn, FaInstagram } from 'https://esm.sh/react-icons@5.0.1/fa';
+// Menggunakan bare specifier yang sudah didefinisikan di importmap
+import { FaTiktok, FaLinkedinIn, FaInstagram } from 'react-icons/fa';
 
-// Use dynamic ESM import for Supabase client
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
+// Menggunakan bare specifier untuk Supabase
+import { createClient } from '@supabase/supabase-js';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
@@ -252,8 +252,6 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
   const generateShareLink = (courseId: string) => {
     const cfgStr = encodeConfig(supabase);
     const baseUrl = window.location.origin + window.location.pathname;
-    // Link structure: site.com/#/course/ID?cfg=BASE64
-    // This format works best with HashRouter and React Router
     return `${baseUrl}#/course/${courseId}?cfg=${cfgStr}`;
   };
 
@@ -854,16 +852,13 @@ const App: React.FC = () => {
 
   // --- Initial Recovery for Realtime Sync via URL (Cross-Device Support) ---
   useEffect(() => {
-    // Memeriksa parameter cfg di URL segera setelah aplikasi dimuat
     const searchParams = new URLSearchParams(location.search);
     const cfgParam = searchParams.get('cfg');
     
     if (cfgParam) {
       const decoded = decodeConfig(cfgParam);
       if (decoded && decoded.url && decoded.anonKey) {
-        console.log("Supabase config recovered from URL share");
         setSupabase(decoded);
-        // Penting: pastikan loading tetap true saat konfigurasi baru ditemukan
         setIsInitialLoading(true);
       }
     }
@@ -887,13 +882,9 @@ const App: React.FC = () => {
     try {
       const client = createClient(supabase.url, supabase.anonKey);
       
-      // Force sync branding
       await client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo });
-      
-      // Force sync mentor
       await client.from('mentor').upsert({ id: 'profile', ...mentor });
       
-      // Force sync all courses
       for (const course of courses) {
         await client.from('courses').upsert({
           id: course.id,
@@ -915,7 +906,6 @@ const App: React.FC = () => {
     }
   }, [branding, mentor, courses, supabase, isLoggedIn]);
 
-  // Automatic Trigger on local change (Admin only)
   useEffect(() => {
     if (!isLoggedIn) return;
     const timer = setTimeout(() => {
@@ -960,7 +950,6 @@ const App: React.FC = () => {
     
     initialFetch();
     
-    // Subscribe to realtime updates for cross-device sync
     const sub = client.channel('all_changes').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
        if (!isSyncingRef.current) {
           if (payload.table === 'branding') {
@@ -991,7 +980,6 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      {/* SYNC POPUP: TOP CENTER WITH SMOOTH ANIMATION */}
       <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-700 ease-out transform ${syncing ? 'opacity-100 translate-y-0 scale-100' : 'opacity-0 -translate-y-12 scale-90 pointer-events-none'}`}>
         <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-6 py-3 flex items-center gap-3 hard-shadow ring-4 ring-[#34D399]/20">
            <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
@@ -1011,5 +999,6 @@ const App: React.FC = () => {
   );
 };
 
+// Merender langsung tanpa menyertakan Router lagi karena sudah dibungkus di level atas atau sebaliknya
 const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(<React.StrictMode><Router><App /></Router></React.StrictMode>);
+root.render(<App />);
