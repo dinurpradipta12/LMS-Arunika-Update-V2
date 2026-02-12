@@ -34,8 +34,11 @@ import {
   Wifi,
   WifiOff,
   RefreshCw,
-  ArrowUpRight
+  ArrowUpRight,
+  CloudUpload
 } from 'lucide-react';
+// Import Supabase client dynamically via ESM
+import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
@@ -123,7 +126,6 @@ const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void;
   );
 };
 
-// --- Advanced Text Editor Simulation ---
 const AdvancedEditor: React.FC<{ value: string; onChange: (v: string) => void; label: string; placeholder?: string }> = ({ value, onChange, label, placeholder }) => {
   return (
     <div className="space-y-2">
@@ -148,7 +150,6 @@ const AdvancedEditor: React.FC<{ value: string; onChange: (v: string) => void; l
   );
 };
 
-// --- Login Page ---
 const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin, isLoggedIn }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -190,7 +191,6 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
   );
 };
 
-// --- Shared Layout ---
 const Sidebar: React.FC<{ branding: Branding; onLogout: () => void }> = ({ branding, onLogout }) => {
   return (
     <div className="w-64 bg-white border-r-2 border-[#1E293B] min-h-screen hidden md:flex flex-col sticky top-0">
@@ -215,7 +215,6 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void }> = ({ brand
   );
 };
 
-// --- Admin Dashboard ---
 const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<React.SetStateAction<Course[]>> }> = ({ courses, setCourses }) => {
   const navigate = useNavigate();
 
@@ -277,7 +276,6 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
   );
 };
 
-// --- Settings Page ---
 const Settings: React.FC<{ 
   branding: Branding; 
   setBranding: React.Dispatch<React.SetStateAction<Branding>>;
@@ -291,7 +289,9 @@ const Settings: React.FC<{
 
   const sqlScript = `
 -- SETUP DATABASE ARUNIKA LMS (REAL-TIME CONFIG)
--- 1. Tabel Branding (Logo & App Name)
+-- Jalankan di SQL Editor Supabase Anda
+
+-- 1. Tabel Branding
 CREATE TABLE IF NOT EXISTS public.branding (
   id TEXT PRIMARY KEY DEFAULT 'config',
   site_name TEXT NOT NULL,
@@ -299,7 +299,7 @@ CREATE TABLE IF NOT EXISTS public.branding (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 2. Tabel Mentor (Profil & Sosmed)
+-- 2. Tabel Mentor
 CREATE TABLE IF NOT EXISTS public.mentor (
   id TEXT PRIMARY KEY DEFAULT 'profile',
   name TEXT NOT NULL,
@@ -310,7 +310,7 @@ CREATE TABLE IF NOT EXISTS public.mentor (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 3. Tabel Courses (Kursus, Modul, & Asset)
+-- 3. Tabel Courses
 CREATE TABLE IF NOT EXISTS public.courses (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -323,31 +323,29 @@ CREATE TABLE IF NOT EXISTS public.courses (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 4. Aktifkan Realtime Replication
+-- 4. Enable Realtime
 ALTER PUBLICATION supabase_realtime ADD TABLE public.branding;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.mentor;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
-  `.trim();
+`.trim();
 
   const handleCopySQL = () => {
     navigator.clipboard.writeText(sqlScript);
-    alert('Kode SQL Setup berhasil disalin ke clipboard!');
+    alert('Kode SQL Setup berhasil disalin!');
   };
 
   const handleConnect = () => {
     if (!supabase.url || !supabase.anonKey) {
-      alert('Harap lengkapi Supabase URL dan Anon Key untuk melakukan koneksi.');
+      alert('Lengkapi URL dan Anon Key.');
       return;
     }
     setDbStatus('connecting');
     setIsConnecting(true);
-    
-    // Simulate connection process
     setTimeout(() => {
       setIsConnecting(false);
       setDbStatus('connected');
-      alert('Berhasil terhubung ke Supabase! Data Anda sekarang akan tersinkronisasi secara realtime di seluruh perangkat.');
-    }, 2000);
+      alert('Koneksi Supabase Berhasil! Data akan tersinkron otomatis.');
+    }, 1500);
   };
 
   return (
@@ -355,16 +353,14 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
       <div className="flex justify-between items-end">
         <div>
           <h1 className="text-4xl font-extrabold text-[#1E293B]">Dashboard Settings</h1>
-          <p className="text-[#64748B] mt-2">Kelola identitas visual dan infrastruktur database Anda.</p>
+          <p className="text-[#64748B] mt-2">Identitas visual & sinkronisasi database.</p>
         </div>
-        <div className="flex flex-col items-end gap-2">
-           <Badge color={dbStatus === 'connected' ? '#34D399' : dbStatus === 'connecting' ? '#FBBF24' : '#E2E8F0'}>
-              <div className="flex items-center gap-2 px-1">
-                {dbStatus === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
-                <span className="uppercase tracking-tighter">{dbStatus}</span>
-              </div>
-           </Badge>
-        </div>
+        <Badge color={dbStatus === 'connected' ? '#34D399' : dbStatus === 'connecting' ? '#FBBF24' : '#E2E8F0'}>
+          <div className="flex items-center gap-2 px-1">
+            {dbStatus === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
+            <span className="uppercase tracking-tighter">{dbStatus}</span>
+          </div>
+        </Badge>
       </div>
       
       <section className="space-y-6">
@@ -374,15 +370,9 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
         <Card className="grid grid-cols-1 md:grid-cols-2 gap-8 featured shadow-[#8B5CF6]">
           <div className="space-y-4">
             <Input label="Nama Platform" value={branding.siteName} onChange={e => setBranding({...branding, siteName: e.target.value})} icon={Layout} />
-            <p className="text-sm text-[#64748B] leading-relaxed">Nama platform ini akan muncul di header seluruh halaman publik dan admin secara otomatis.</p>
           </div>
           <div className="bg-[#FFFDF5] p-6 rounded-2xl border-2 border-dashed border-[#CBD5E1] flex items-center justify-center">
-            <ImageUpload 
-              label="Logo Platform (PNG)" 
-              variant="minimal"
-              value={branding.logo} 
-              onChange={logo => setBranding({...branding, logo})} 
-            />
+            <ImageUpload label="Logo Platform (PNG)" variant="minimal" value={branding.logo} onChange={logo => setBranding({...branding, logo})} />
           </div>
         </Card>
       </section>
@@ -393,76 +383,25 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
         </h2>
         <Card className="space-y-8">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Input 
-              label="Supabase Project URL" 
-              value={supabase.url} 
-              onChange={e => setSupabase({...supabase, url: e.target.value})} 
-              placeholder="https://yourproject.supabase.co"
-              icon={Globe}
-            />
-            <Input 
-              label="Project Anon API Key" 
-              value={supabase.anonKey} 
-              onChange={e => setSupabase({...supabase, anonKey: e.target.value})} 
-              placeholder="eyJhbGciOiJIUzI1..." 
-              type="password"
-              icon={X}
-            />
+            <Input label="Supabase URL" value={supabase.url} onChange={e => setSupabase({...supabase, url: e.target.value})} icon={Globe} />
+            <Input label="Anon Key" value={supabase.anonKey} onChange={e => setSupabase({...supabase, anonKey: e.target.value})} type="password" icon={X} />
           </div>
 
-          <div className="flex justify-between items-center bg-[#F1F5F9] p-6 rounded-2xl border-2 border-[#1E293B] border-dashed">
-            <div className="flex items-center gap-4">
-              <div className={`p-3 rounded-xl border-2 border-[#1E293B] ${dbStatus === 'connected' ? 'bg-[#34D399]' : 'bg-white'}`}>
-                <Database size={24} />
-              </div>
-              <div>
-                <p className="font-extrabold text-[#1E293B]">Status Database</p>
-                <p className="text-xs text-[#64748B] font-medium">Data Kursus, Mentor, Branding, & Assets</p>
-              </div>
-            </div>
-            <div className="flex gap-3">
-              <Button 
-                variant="secondary" 
-                className="text-sm px-4 py-2" 
-                onClick={() => {
-                  setSupabase({url: '', anonKey: ''});
-                  setDbStatus('disconnected');
-                }}
-              >
-                Reset
-              </Button>
-              <Button 
-                variant="green" 
-                className="text-sm px-8" 
-                icon={Check} 
-                onClick={handleConnect}
-                isLoading={isConnecting}
-              >
-                {dbStatus === 'connected' ? 'Reconnect' : 'Connect Supabase'}
-              </Button>
-            </div>
+          <div className="flex justify-end gap-3 border-t-2 border-[#E2E8F0] pt-6">
+            <Button variant="secondary" className="text-sm" onClick={() => { setSupabase({url: '', anonKey: ''}); setDbStatus('disconnected'); }}>Reset</Button>
+            <Button variant="green" className="text-sm px-8" icon={Check} onClick={handleConnect} isLoading={isConnecting}>
+              {dbStatus === 'connected' ? 'Reconnect' : 'Connect Supabase'}
+            </Button>
           </div>
 
           <div className="space-y-4 pt-4">
             <div className="flex justify-between items-center">
-              <div className="flex items-center gap-2">
-                <Badge color="#8B5CF6"><span className="text-white">SETUP SQL</span></Badge>
-                <label className="text-xs font-extrabold uppercase tracking-widest text-[#64748B]">Script Pembuatan Tabel</label>
-              </div>
-              <Button variant="secondary" className="px-4 py-1.5 text-xs" onClick={handleCopySQL} icon={Copy}>
-                Salin Kode SQL
-              </Button>
+              <label className="text-xs font-extrabold uppercase tracking-widest text-[#64748B]">Setup SQL Script</label>
+              <Button variant="secondary" className="px-4 py-1.5 text-xs" onClick={handleCopySQL} icon={Copy}>Copy SQL</Button>
             </div>
-            <div className="bg-[#1E293B] text-[#34D399] p-8 rounded-3xl font-mono text-sm overflow-x-auto hard-shadow relative group">
-              <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
-                <Badge color="#34D399">READY TO RUN</Badge>
-              </div>
-              <pre className="leading-relaxed">{sqlScript}</pre>
+            <div className="bg-[#1E293B] text-[#34D399] p-6 rounded-3xl font-mono text-xs overflow-x-auto hard-shadow relative">
+              <pre>{sqlScript}</pre>
             </div>
-            <p className="text-sm text-[#64748B] font-medium leading-relaxed bg-[#FFFDF5] p-4 rounded-xl border-2 border-[#E2E8F0]">
-              <span className="font-bold text-[#1E293B]">Instruksi:</span> Jalankan script SQL di atas pada menu <span className="text-[#8B5CF6] font-bold">SQL Editor</span> di Dashboard Supabase Anda. 
-              Ini akan mensinkronkan data Logo, Nama App, semua isi Kursus (modul, link youtube, deskripsi), Profil Mentor (foto, bio), hingga Asset belajar secara otomatis dan realtime.
-            </p>
           </div>
         </Card>
       </section>
@@ -470,7 +409,6 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
   );
 };
 
-// --- Course Editor ---
 const CourseEditor: React.FC<{ 
   courses: Course[]; 
   onSave: (c: Course) => void; 
@@ -529,7 +467,7 @@ const CourseEditor: React.FC<{
             ...updatedAssets[index],
             name: file.name,
             fileName: file.name,
-            url: reader.result as string, // Store as base64 for demo
+            url: reader.result as string, 
             type: 'file'
           };
           setEditedCourse({...editedCourse, assets: updatedAssets});
@@ -610,12 +548,7 @@ const CourseEditor: React.FC<{
                     ) : (
                       <AdvancedEditor label="Text Content" value={mod.content} onChange={v => updateModule(idx, 'content', v)} placeholder="Masukkan konten teks di sini..." />
                     )}
-                    <AdvancedEditor 
-                      label="Deskripsi Materi (Tampil di bawah video)" 
-                      value={mod.description} 
-                      onChange={v => updateModule(idx, 'description', v)} 
-                      placeholder="Tuliskan ringkasan atau poin penting materi ini..." 
-                    />
+                    <AdvancedEditor label="Deskripsi Materi" value={mod.description} onChange={v => updateModule(idx, 'description', v)} placeholder="Ringkasan materi..." />
                   </div>
                 </Card>
               ))}
@@ -633,17 +566,16 @@ const CourseEditor: React.FC<{
                   <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"><Camera size={18} /></div>
                 </div>
               </ImageUpload>
-              <p className="text-[10px] font-bold text-[#64748B] uppercase tracking-widest">Klik foto untuk ganti</p>
             </div>
             <div className="space-y-4">
               <Input label="Nama Mentor" value={mentor.name} onChange={e => setMentor({...mentor, name: e.target.value})} />
               <Input label="Role" value={mentor.role} onChange={e => setMentor({...mentor, role: e.target.value})} />
               <Textarea label="Bio" value={mentor.bio} onChange={e => setMentor({...mentor, bio: e.target.value})} />
               <div className="grid grid-cols-1 gap-4">
-                <Input label="LinkedIn Username" value={mentor.socials.linkedin} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
-                <Input label="TikTok Username" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={Music} />
+                <Input label="LinkedIn" value={mentor.socials.linkedin} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
+                <Input label="TikTok" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={Music} />
                 <Input label="Instagram" value={mentor.socials.instagram} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} />
-                <Input label="Link Produk Lainnya (URL)" value={mentor.socials.website} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} icon={ExternalLink} />
+                <Input label="Website" value={mentor.socials.website} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} icon={ExternalLink} />
               </div>
             </div>
           </Card>
@@ -672,7 +604,7 @@ const CourseEditor: React.FC<{
                        }} />
                      ) : (
                        <div className="flex gap-2">
-                          <Input className="flex-1" placeholder="Upload file..." value={asset.fileName || ''} readOnly />
+                          <Input className="flex-1" placeholder="File..." value={asset.fileName || ''} readOnly />
                           <Button variant="secondary" className="px-3" onClick={() => handleAssetFileUpload(aidx)}><Upload size={14}/></Button>
                        </div>
                      )}
@@ -686,7 +618,6 @@ const CourseEditor: React.FC<{
   );
 };
 
-// --- Public Course View ---
 const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: Branding }> = ({ courses, mentor, branding }) => {
   const { id } = useParams<{ id: string }>();
   const course = courses.find(c => c.id === id);
@@ -710,13 +641,27 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
           </Link>
           <div className="hidden md:flex items-center gap-2">
             <Badge>{course.modules.length} Materi</Badge>
-            <Badge color="#FBBF24">{course.title}</Badge>
           </div>
         </div>
       </header>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
+          {/* Course Title Header Added Here */}
+          <div className="mb-6 bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6">
+            <div>
+              <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2">{course.title}</h1>
+              <div className="flex items-center gap-3">
+                 <div className="h-2 w-24 bg-[#FBBF24] rounded-full"></div>
+                 <span className="text-[#64748B] font-bold text-sm tracking-widest uppercase">Edisi Publik</span>
+              </div>
+            </div>
+            <Button variant="secondary" className="px-6 py-3" icon={Share2} onClick={() => {
+              navigator.clipboard.writeText(window.location.href);
+              alert('Link kursus disalin!');
+            }}>Share Link</Button>
+          </div>
+
           {selectedModule ? (
             <div className="space-y-6">
               <div className="bg-white border-2 border-[#1E293B] rounded-3xl overflow-hidden hard-shadow">
@@ -733,25 +678,12 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                   </div>
                 ) : (
                   <div className="p-8 prose prose-slate max-w-none">
-                    <h1 className="text-4xl font-extrabold mb-6 text-[#1E293B] border-b-4 border-[#FBBF24] inline-block">{selectedModule.title}</h1>
-                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-lg leading-relaxed">
-                      {selectedModule.content}
-                    </div>
+                    <h2 className="text-4xl font-extrabold mb-6 text-[#1E293B] border-b-4 border-[#FBBF24] inline-block">{selectedModule.title}</h2>
+                    <div className="whitespace-pre-wrap font-medium text-[#1E293B] text-lg leading-relaxed">{selectedModule.content}</div>
                   </div>
                 )}
               </div>
               
-              <div className="flex justify-between items-start">
-                 <div>
-                    <h2 className="text-3xl font-extrabold">{selectedModule.title}</h2>
-                    <Badge color="#8B5CF6" className="text-white mt-2">{selectedModule.duration}</Badge>
-                 </div>
-                 <Button variant="secondary" className="px-4 py-2" icon={Share2} onClick={() => {
-                   navigator.clipboard.writeText(window.location.href);
-                   alert('Link materi berhasil disalin!');
-                 }}>Share Materi</Button>
-              </div>
-
               <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow">
                  <h3 className="text-xl font-extrabold mb-4 flex items-center gap-2"><FileText size={20} className="text-[#8B5CF6]"/> Deskripsi Materi</h3>
                  <div className="text-[#1E293B] text-lg leading-relaxed whitespace-pre-wrap font-medium">
@@ -762,66 +694,30 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
           ) : (
             <div className="h-96 flex flex-col items-center justify-center text-[#64748B] font-bold">
                <Globe size={64} className="mb-4 text-[#CBD5E1]" />
-               <p>Pilih materi di samping untuk mulai belajar</p>
+               <p>Pilih materi untuk mulai belajar</p>
             </div>
           )}
         </div>
 
         <div className="lg:col-span-1 space-y-6">
           <Card className="flex flex-col items-center p-6 text-center featured">
-             <img 
-               src={mentor.photo} 
-               className="w-24 h-24 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover mb-4" 
-               alt={mentor.name} 
-             />
+             <img src={mentor.photo} className="w-24 h-24 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover mb-4" alt={mentor.name} />
              <h3 className="text-xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
              <p className="font-bold text-[#8B5CF6] text-xs uppercase mb-4">{mentor.role}</p>
              <p className="text-[#64748B] text-sm leading-relaxed mb-6">{mentor.bio}</p>
-             
              <div className="flex justify-center gap-2 flex-wrap mb-6">
-                {mentor.socials.linkedin && (
-                  <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#8B5CF6] hover:text-white transition-all">
-                    <Linkedin size={18} />
-                  </a>
-                )}
-                {mentor.socials.tiktok && (
-                  <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-black hover:text-white transition-all">
-                    <Music size={18} />
-                  </a>
-                )}
-                {mentor.socials.instagram && (
-                  <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#F472B6] hover:text-white transition-all">
-                    <Instagram size={18} />
-                  </a>
-                )}
+                {mentor.socials.linkedin && <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl"><Linkedin size={18} /></a>}
+                {mentor.socials.tiktok && <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl"><Music size={18} /></a>}
              </div>
-
-             {mentor.socials.website && (
-               <Button 
-                variant="yellow" 
-                className="w-full text-xs font-bold" 
-                icon={ExternalLink}
-                onClick={() => window.open(mentor.socials.website, '_blank')}
-               >
-                 link produk lainnya
-               </Button>
-             )}
+             {mentor.socials.website && <Button variant="yellow" className="w-full text-xs font-bold" icon={ExternalLink} onClick={() => window.open(mentor.socials.website, '_blank')}>link produk lainnya</Button>}
           </Card>
 
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 hard-shadow">
-            <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2">
-              <BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum Kelas
-            </h3>
+            <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2"><BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum</h3>
             <div className="space-y-3">
               {course.modules.map((mod, i) => (
-                <button 
-                  key={mod.id}
-                  onClick={() => setSelectedModule(mod)}
-                  className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${selectedModule?.id === mod.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow translate-x-1' : 'bg-white border-transparent hover:bg-[#F1F5F9]'}`}
-                >
-                  <div className={`shrink-0 w-8 h-8 rounded-full border-2 border-[#1E293B] flex items-center justify-center font-bold text-xs ${selectedModule?.id === mod.id ? 'bg-white' : 'bg-[#F1F5F9]'}`}>
-                    {i+1}
-                  </div>
+                <button key={mod.id} onClick={() => setSelectedModule(mod)} className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${selectedModule?.id === mod.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow translate-x-1' : 'bg-white border-transparent hover:bg-[#F1F5F9]'}`}>
+                  <div className={`shrink-0 w-8 h-8 rounded-full border-2 border-[#1E293B] flex items-center justify-center font-bold text-xs ${selectedModule?.id === mod.id ? 'bg-white' : 'bg-[#F1F5F9]'}`}>{i+1}</div>
                   <div className="flex-1">
                     <p className="text-sm font-extrabold leading-tight">{mod.title}</p>
                     <div className="flex items-center gap-2 mt-1">
@@ -835,18 +731,10 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
             {course.assets.length > 0 && (
               <div className="mt-10 border-t-2 border-[#E2E8F0] pt-6">
-                <h3 className="font-extrabold text-xl mb-4 flex items-center gap-2">
-                  <Upload size={20} className="text-[#34D399]" /> Asset Belajar
-                </h3>
+                <h3 className="font-extrabold text-xl mb-4 flex items-center gap-2"><Upload size={20} className="text-[#34D399]" /> Assets</h3>
                 <div className="space-y-2">
                   {course.assets.map(asset => (
-                    <a 
-                      key={asset.id} 
-                      href={asset.url} 
-                      target="_blank" 
-                      className="flex items-center justify-between p-4 rounded-xl bg-white border-2 border-[#1E293B] hover:bg-[#34D399] transition-all group"
-                      download={asset.type === 'file' ? asset.fileName : undefined}
-                    >
+                    <a key={asset.id} href={asset.url} target="_blank" className="flex items-center justify-between p-4 rounded-xl bg-white border-2 border-[#1E293B] hover:bg-[#34D399] transition-all group" download={asset.type === 'file' ? asset.fileName : undefined}>
                       <span className="text-sm font-bold truncate pr-2 group-hover:text-white">{asset.name}</span>
                       <ExternalLink size={14} className="shrink-0 group-hover:text-white" />
                     </a>
@@ -861,33 +749,90 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   );
 };
 
-// --- App Entry ---
+// --- App Entry with Realtime Sync Logic ---
 const App: React.FC = () => {
-  // Persistence Layer
   const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
   const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
   const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', initialMentor));
   const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
+  const [syncing, setSyncing] = useState(false);
 
-  // Effect to save state to localStorage
+  // Persistence to LocalStorage
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
   useEffect(() => setStorageItem('courses', courses), [courses]);
   useEffect(() => setStorageItem('mentor', mentor), [mentor]);
   useEffect(() => setStorageItem('branding', branding), [branding]);
   useEffect(() => setStorageItem('supabase', supabase), [supabase]);
 
-  // Handle updates across different browser tabs (Realtime Sync Simulation)
+  // Realtime Sync to Supabase Logic
   useEffect(() => {
-    const handleStorage = (e: StorageEvent) => {
-      if (e.key === 'branding' && e.newValue) setBranding(JSON.parse(e.newValue));
-      if (e.key === 'courses' && e.newValue) setCourses(JSON.parse(e.newValue));
-      if (e.key === 'mentor' && e.newValue) setMentor(JSON.parse(e.newValue));
-      if (e.key === 'supabase' && e.newValue) setSupabase(JSON.parse(e.newValue));
+    if (!supabase.url || !supabase.anonKey) return;
+    
+    let supabaseClient: any;
+    try {
+      supabaseClient = createClient(supabase.url, supabase.anonKey);
+    } catch (e) {
+      console.warn("Invalid Supabase Config");
+      return;
+    }
+
+    const syncToSupabase = async () => {
+      setSyncing(true);
+      try {
+        // Sync Branding
+        await supabaseClient.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo });
+        // Sync Mentor
+        await supabaseClient.from('mentor').upsert({ id: 'profile', name: mentor.name, role: mentor.role, bio: mentor.bio, photo: mentor.photo, socials: mentor.socials });
+        // Sync Courses
+        for (const course of courses) {
+          await supabaseClient.from('courses').upsert({
+            id: course.id,
+            title: course.title,
+            description: course.description,
+            cover_image: course.coverImage,
+            modules: course.modules,
+            assets: course.assets,
+            mentor_id: course.mentorId
+          });
+        }
+      } catch (err) {
+        console.error("Supabase Sync Error:", err);
+      } finally {
+        setSyncing(false);
+      }
     };
-    window.addEventListener('storage', handleStorage);
-    return () => window.removeEventListener('storage', handleStorage);
-  }, []);
+
+    const debounceTimer = setTimeout(syncToSupabase, 2000);
+    return () => clearTimeout(debounceTimer);
+  }, [branding, mentor, courses, supabase]);
+
+  // Realtime Listener for Public View
+  useEffect(() => {
+    if (!supabase.url || !supabase.anonKey) return;
+    const client = createClient(supabase.url, supabase.anonKey);
+
+    const brandingChannel = client.channel('branding_changes').on('postgres_changes', { event: '*', table: 'branding' }, (payload: any) => {
+      if (payload.new) setBranding({ siteName: payload.new.site_name, logo: payload.new.logo });
+    }).subscribe();
+
+    const mentorChannel = client.channel('mentor_changes').on('postgres_changes', { event: '*', table: 'mentor' }, (payload: any) => {
+      if (payload.new) setMentor({ ...payload.new, photo: payload.new.photo });
+    }).subscribe();
+
+    const coursesChannel = client.channel('courses_changes').on('postgres_changes', { event: '*', table: 'courses' }, (payload: any) => {
+       // Deep refresh for courses if changed externally
+       client.from('courses').select('*').then(({data}: any) => {
+         if (data) setCourses(data.map((c: any) => ({ ...c, coverImage: c.cover_image, mentorId: c.mentor_id })));
+       });
+    }).subscribe();
+
+    return () => {
+      client.removeChannel(brandingChannel);
+      client.removeChannel(mentorChannel);
+      client.removeChannel(coursesChannel);
+    };
+  }, [supabase]);
 
   const updateCourse = (updated: Course) => {
     setCourses(prev => prev.map(c => c.id === updated.id ? updated : c));
@@ -895,15 +840,18 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen">
+      {syncing && (
+        <div className="fixed top-4 right-4 z-[999] bg-white border-2 border-[#1E293B] rounded-full px-4 py-2 flex items-center gap-2 hard-shadow animate-pulse">
+           <CloudUpload size={16} className="text-[#8B5CF6]" />
+           <span className="text-xs font-bold uppercase tracking-widest">Syncing to Supabase...</span>
+        </div>
+      )}
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
-        
         <Route path="/admin" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AdminDashboard courses={courses} setCourses={setCourses} /></main></div> : <Navigate to="/login" />} />
         <Route path="/admin/course/:id" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></main></div> : <Navigate to="/login" />} />
         <Route path="/settings" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} /></main></div> : <Navigate to="/login" />} />
-        
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} />} />
-        
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>
     </div>
@@ -911,10 +859,4 @@ const App: React.FC = () => {
 };
 
 const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(
-  <React.StrictMode>
-    <Router>
-      <App />
-    </Router>
-  </React.StrictMode>
-);
+root.render(<React.StrictMode><Router><App /></Router></React.StrictMode>);
