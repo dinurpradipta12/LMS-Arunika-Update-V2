@@ -16,7 +16,7 @@ export const Button: React.FC<ButtonProps> = ({
   isLoading,
   ...props 
 }) => {
-  const baseStyles = "px-6 py-3 rounded-full font-bold flex items-center justify-center gap-2 border-2 border-[#1E293B] transition-bounce hard-shadow hard-shadow-hover hard-shadow-active disabled:opacity-50 disabled:cursor-not-allowed";
+  const baseStyles = "px-6 py-3 rounded-full font-bold flex items-center justify-center gap-2 border-2 border-[#1E293B] transition-bounce hard-shadow hard-shadow-hover hard-shadow-active disabled:opacity-50 disabled:cursor-not-allowed min-h-[48px]";
   
   const variants = {
     primary: "bg-[#8B5CF6] text-white",
@@ -47,14 +47,13 @@ export const Card: React.FC<{ children: React.ReactNode; className?: string; fea
   );
 };
 
-// Fixed: Added 'icon' prop to Input component and updated it to render the icon if provided
 export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string; icon?: LucideIcon }> = ({ label, icon: Icon, className = '', ...props }) => {
   return (
     <div className="flex flex-col gap-2">
       {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
       <div className="relative">
         <input 
-          className={`w-full bg-white border-2 border-[#CBD5E1] rounded-xl py-3 text-[#1E293B] focus:border-[#8B5CF6] focus:ring-0 focus:hard-shadow transition-all outline-none ${Icon ? 'pl-11 pr-4' : 'px-4'} ${className}`}
+          className={`w-full bg-white border-2 border-[#CBD5E1] rounded-xl py-3 text-[#1E293B] focus:border-[#8B5CF6] focus:ring-0 focus:hard-shadow transition-all outline-none min-h-[48px] ${Icon ? 'pl-11 pr-4' : 'px-4'} ${className}`}
           {...props}
         />
         {Icon && (
@@ -79,9 +78,11 @@ export const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement
   );
 };
 
-// Added className to Badge component props to support custom styling and fix TS error
 export const Badge: React.FC<{ children: React.ReactNode; color?: string; className?: string }> = ({ children, color = '#FBBF24', className = '' }) => (
-  <span className={`px-3 py-1 rounded-full text-xs font-bold border-2 border-[#1E293B] shadow-[2px 2px 0px 0px_#1E293B] ${className}`} style={{ backgroundColor: color }}>
+  <span 
+    className={`inline-flex items-center justify-center px-4 py-2 rounded-full text-[10px] font-extrabold uppercase tracking-widest border-2 border-[#1E293B] shadow-[2px 2px 0px 0px_#1E293B] ${className}`} 
+    style={{ backgroundColor: color }}
+  >
     {children}
   </span>
 );

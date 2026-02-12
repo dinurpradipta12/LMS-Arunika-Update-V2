@@ -14,6 +14,7 @@
         font-family: 'Plus Jakarta Sans', sans-serif;
         background-color: #FFFDF5;
         color: #1E293B;
+        overflow-x: hidden;
       }
       h1, h2, h3, h4, h5, h6 {
         font-family: 'Outfit', sans-serif;
@@ -22,6 +23,8 @@
         background-image: radial-gradient(#E2E8F0 1.5px, transparent 1.5px);
         background-size: 24px 24px;
       }
+      
+      /* Hard Shadow System */
       .hard-shadow {
         box-shadow: 4px 4px 0px 0px #1E293B;
       }
@@ -36,12 +39,46 @@
       .sticker-shadow {
         box-shadow: 8px 8px 0px 0px #E2E8F0;
       }
+      
+      /* Mobile Optimizations */
+      @media (max-width: 768px) {
+        .hard-shadow {
+          box-shadow: 2px 2px 0px 0px #1E293B !important;
+        }
+        .hard-shadow-hover:hover {
+          box-shadow: 3px 3px 0px 0px #1E293B !important;
+          transform: translate(-1px, -1px) !important;
+        }
+        .sticker-shadow {
+          box-shadow: 4px 4px 0px 0px #E2E8F0 !important;
+        }
+        .dot-grid {
+          background-size: 32px 32px;
+        }
+      }
+
       .transition-bounce {
         transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
       }
+      
       ::selection {
         background: #FBBF24;
         color: #1E293B;
+      }
+
+      ::-webkit-scrollbar {
+        width: 8px;
+      }
+      ::-webkit-scrollbar-track {
+        background: #FFFDF5;
+      }
+      ::-webkit-scrollbar-thumb {
+        background: #CBD5E1;
+        border-radius: 10px;
+        border: 2px solid #FFFDF5;
+      }
+      ::-webkit-scrollbar-thumb:hover {
+        background: #94A3B8;
       }
     </style>
     <script type="importmap">
