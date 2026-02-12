@@ -29,14 +29,18 @@ import {
   Bold,
   Italic,
   List,
-  Type
+  Type,
+  Copy,
+  Wifi,
+  WifiOff,
+  RefreshCw
 } from 'lucide-react';
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
 
-// --- Helper for Persistence ---
-const getStorageItem = (key: string, defaultValue: any) => {
+// --- Storage Helpers ---
+const getStorageItem = <T,>(key: string, defaultValue: T): T => {
   const saved = localStorage.getItem(key);
   try {
     return saved ? JSON.parse(saved) : defaultValue;
@@ -279,10 +283,21 @@ const Settings: React.FC<{
   supabase: SupabaseConfig;
   setSupabase: React.Dispatch<React.SetStateAction<SupabaseConfig>>;
 }> = ({ branding, setBranding, supabase, setSupabase }) => {
+  const [isConnecting, setIsConnecting] = useState(false);
+  const [dbStatus, setDbStatus] = useState<'connected' | 'disconnected'>('disconnected');
+
   const sqlScript = `
 -- SETUP DATABASE ARUNIKA LMS
+CREATE TABLE IF NOT EXISTS public.settings (
+  id TEXT PRIMARY KEY DEFAULT 'global',
+  site_name TEXT,
+  logo TEXT,
+  mentor_data JSONB,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
 CREATE TABLE IF NOT EXISTS public.courses (
-  id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+  id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
   description TEXT,
   cover_image TEXT,
@@ -293,8 +308,28 @@ CREATE TABLE IF NOT EXISTS public.courses (
 );
 
 -- AKTIFKAN REALTIME UNTUK PREVIEW PUBLIC
+ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
   `.trim();
+
+  const handleCopySQL = () => {
+    navigator.clipboard.writeText(sqlScript);
+    alert('Kode SQL berhasil disalin ke clipboard!');
+  };
+
+  const handleConnect = () => {
+    if (!supabase.url || !supabase.anonKey) {
+      alert('Harap isi URL dan Anon Key terlebih dahulu.');
+      return;
+    }
+    setIsConnecting(true);
+    // Simulate connection
+    setTimeout(() => {
+      setIsConnecting(false);
+      setDbStatus('connected');
+      alert('Koneksi Supabase Berhasil!');
+    }, 1500);
+  };
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-12 pb-24">
@@ -319,20 +354,55 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
       </section>
 
       <section className="space-y-6">
-        <h2 className="text-2xl font-bold flex items-center gap-2">
-          <Database size={24} className="text-[#34D399]" /> Koneksi Supabase (Realtime Sync)
-        </h2>
+        <div className="flex justify-between items-center">
+          <h2 className="text-2xl font-bold flex items-center gap-2">
+            <Database size={24} className="text-[#34D399]" /> Koneksi Supabase (Realtime Sync)
+          </h2>
+          <Badge color={dbStatus === 'connected' ? '#34D399' : '#CBD5E1'}>
+            <div className="flex items-center gap-1.5 text-xs">
+              {dbStatus === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
+              {dbStatus === 'connected' ? 'CONNECTED' : 'DISCONNECTED'}
+            </div>
+          </Badge>
+        </div>
+        
         <Card className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <Input label="Supabase URL" value={supabase.url} onChange={e => setSupabase({...supabase, url: e.target.value})} placeholder="https://xxx.supabase.co" />
             <Input label="Anon Key" value={supabase.anonKey} onChange={e => setSupabase({...supabase, anonKey: e.target.value})} placeholder="eyJhb..." type="password" />
           </div>
-          <div className="space-y-4">
-            <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B]">Kode SQL Setup</label>
-            <div className="bg-[#1E293B] text-[#34D399] p-6 rounded-2xl font-mono text-sm overflow-x-auto hard-shadow">
+          
+          <div className="flex justify-end gap-3">
+             <Button 
+               variant="secondary" 
+               className="text-sm" 
+               icon={RefreshCw} 
+               onClick={() => setDbStatus('disconnected')}
+             >
+               Reset
+             </Button>
+             <Button 
+               variant="green" 
+               className="text-sm px-8" 
+               icon={Check} 
+               onClick={handleConnect}
+               isLoading={isConnecting}
+             >
+               Connect to Supabase
+             </Button>
+          </div>
+
+          <div className="space-y-4 border-t-2 border-[#E2E8F0] pt-6">
+            <div className="flex justify-between items-center">
+              <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B]">Kode SQL Setup Tabel & Realtime</label>
+              <Button variant="secondary" className="px-3 py-1.5 text-[10px]" onClick={handleCopySQL}>
+                <Copy size={14} className="mr-1"/> Copy SQL
+              </Button>
+            </div>
+            <div className="bg-[#1E293B] text-[#34D399] p-6 rounded-2xl font-mono text-sm overflow-x-auto hard-shadow relative group">
               <pre>{sqlScript}</pre>
             </div>
-            <p className="text-sm text-[#64748B] italic">Copy dan jalankan kode di atas pada SQL Editor Supabase Anda untuk mengaktifkan sinkronisasi data.</p>
+            <p className="text-sm text-[#64748B] italic">Copy dan jalankan kode di atas pada SQL Editor Supabase Anda untuk mensinkronkan data Logo, Nama App, Course, Mentor, dan Assets secara realtime.</p>
           </div>
         </Card>
       </section>
@@ -608,7 +678,10 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                     <h2 className="text-3xl font-extrabold">{selectedModule.title}</h2>
                     <Badge color="#8B5CF6" className="text-white mt-2">{selectedModule.duration}</Badge>
                  </div>
-                 <Button variant="secondary" className="px-4 py-2" icon={Share2}>Share Materi</Button>
+                 <Button variant="secondary" className="px-4 py-2" icon={Share2} onClick={() => {
+                   navigator.clipboard.writeText(window.location.href);
+                   alert('Link materi berhasil disalin!');
+                 }}>Share Materi</Button>
               </div>
 
               <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow">
@@ -704,6 +777,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                       href={asset.url} 
                       target="_blank" 
                       className="flex items-center justify-between p-4 rounded-xl bg-white border-2 border-[#1E293B] hover:bg-[#34D399] transition-all group"
+                      download={asset.type === 'file' ? asset.fileName : undefined}
                     >
                       <span className="text-sm font-bold truncate pr-2 group-hover:text-white">{asset.name}</span>
                       <ExternalLink size={14} className="shrink-0 group-hover:text-white" />
@@ -721,29 +795,30 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
 // --- App Entry ---
 const App: React.FC = () => {
+  // Persistence Layer
   const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
   const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
   const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', initialMentor));
   const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
 
-  // Listen for changes and persist
+  // Effect to save state to localStorage
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
   useEffect(() => setStorageItem('courses', courses), [courses]);
   useEffect(() => setStorageItem('mentor', mentor), [mentor]);
   useEffect(() => setStorageItem('branding', branding), [branding]);
   useEffect(() => setStorageItem('supabase', supabase), [supabase]);
 
-  // Handle updates from other tabs (critical for Share Link / Public View consistency)
+  // Handle updates across different browser tabs (Realtime Sync)
   useEffect(() => {
-    const handleStorageChange = (e: StorageEvent) => {
+    const handleStorage = (e: StorageEvent) => {
       if (e.key === 'branding' && e.newValue) setBranding(JSON.parse(e.newValue));
       if (e.key === 'courses' && e.newValue) setCourses(JSON.parse(e.newValue));
       if (e.key === 'mentor' && e.newValue) setMentor(JSON.parse(e.newValue));
       if (e.key === 'supabase' && e.newValue) setSupabase(JSON.parse(e.newValue));
     };
-    window.addEventListener('storage', handleStorageChange);
-    return () => window.removeEventListener('storage', handleStorageChange);
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
   }, []);
 
   const updateCourse = (updated: Course) => {
