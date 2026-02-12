@@ -4,7 +4,7 @@ import { ArrowRight, LucideIcon } from 'lucide-react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
   variant?: 'primary' | 'secondary' | 'accent' | 'pink' | 'yellow' | 'green';
-  icon?: LucideIcon;
+  icon?: LucideIcon | React.ComponentType<{ size?: number | string; className?: string }>;
   isLoading?: boolean;
 }
 
@@ -32,7 +32,7 @@ export const Button: React.FC<ButtonProps> = ({
       {isLoading ? "Loading..." : children}
       {Icon && !isLoading && (
         <div className="bg-white rounded-full p-1 text-[#1E293B]">
-          <Icon size={18} strokeWidth={2.5} />
+          <Icon size={18} />
         </div>
       )}
     </button>
@@ -47,8 +47,8 @@ export const Card: React.FC<{ children: React.ReactNode; className?: string; fea
   );
 };
 
-// Fixed: Added 'icon' prop to Input component and updated it to render the icon if provided
-export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string; icon?: LucideIcon }> = ({ label, icon: Icon, className = '', ...props }) => {
+// Diperbarui: Tipe 'icon' sekarang mendukung LucideIcon atau komponen React apa pun yang menerima 'size'
+export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string; icon?: LucideIcon | React.ComponentType<{ size?: number | string; className?: string }> }> = ({ label, icon: Icon, className = '', ...props }) => {
   return (
     <div className="flex flex-col gap-2">
       {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
@@ -79,7 +79,6 @@ export const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement
   );
 };
 
-// Added className to Badge component props to support custom styling and fix TS error
 export const Badge: React.FC<{ children: React.ReactNode; color?: string; className?: string }> = ({ children, color = '#FBBF24', className = '' }) => (
   <span className={`px-3 py-1 rounded-full text-xs font-bold border-2 border-[#1E293B] shadow-[2px 2px 0px 0px_#1E293B] ${className}`} style={{ backgroundColor: color }}>
     {children}
