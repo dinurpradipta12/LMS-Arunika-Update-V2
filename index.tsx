@@ -295,7 +295,6 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
             <Input label="Nama Platform" value={branding.siteName} onChange={e => setBranding({...branding, siteName: e.target.value})} />
             <p className="text-sm text-[#64748B]">Perubahan branding akan langsung diterapkan ke seluruh halaman publik dan admin secara otomatis.</p>
           </div>
-          {/* Logo Upload with Minimal Variant - Removes the 'Black Box' container */}
           <ImageUpload 
             label="Logo Platform (PNG)" 
             variant="minimal"
@@ -411,7 +410,6 @@ const CourseEditor: React.FC<{
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          {/* Main Info */}
           <Card className="space-y-6">
             <h3 className="text-xl font-bold flex items-center gap-2">Main Content <Badge color="#F472B6">Required</Badge></h3>
             <Input label="Judul Kursus" value={editedCourse.title} onChange={e => setEditedCourse({...editedCourse, title: e.target.value})} />
@@ -419,7 +417,6 @@ const CourseEditor: React.FC<{
             <ImageUpload label="Cover Image Kursus" value={editedCourse.coverImage} onChange={img => setEditedCourse({...editedCourse, coverImage: img})} />
           </Card>
 
-          {/* Curriculum */}
           <div className="space-y-6">
             <div className="flex justify-between items-center">
               <h3 className="text-xl font-bold">Kurikulum Materi</h3>
@@ -461,8 +458,6 @@ const CourseEditor: React.FC<{
                     ) : (
                       <AdvancedEditor label="Text Content" value={mod.content} onChange={v => updateModule(idx, 'content', v)} placeholder="Masukkan konten teks di sini..." />
                     )}
-                    
-                    {/* Advanced Description Editor */}
                     <AdvancedEditor 
                       label="Deskripsi Materi (Tampil di bawah video)" 
                       value={mod.description} 
@@ -477,7 +472,6 @@ const CourseEditor: React.FC<{
         </div>
 
         <div className="space-y-8">
-          {/* Mentor Profile - Clickable to Upload */}
           <Card className="space-y-6">
             <h3 className="text-xl font-bold flex items-center gap-2">Profil Mentor</h3>
             <div className="flex flex-col items-center gap-4">
@@ -497,11 +491,11 @@ const CourseEditor: React.FC<{
                 <Input label="LinkedIn Username" value={mentor.socials.linkedin} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
                 <Input label="TikTok Username" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={Music} />
                 <Input label="Instagram" value={mentor.socials.instagram} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} />
+                <Input label="Link Produk Lainnya (URL)" value={mentor.socials.website} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} icon={ExternalLink} />
               </div>
             </div>
           </Card>
 
-          {/* Assets - Now with Upload File */}
           <div className="space-y-4">
              <div className="flex justify-between items-center">
                 <h3 className="text-xl font-bold">Asset Belajar</h3>
@@ -559,7 +553,6 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       <header className="bg-white border-b-2 border-[#1E293B] p-4 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3">
-            {/* Logo fixed to remove the black box/border */}
             <img src={branding.logo} className="w-10 h-10 object-contain" alt="Logo" />
             <span className="font-extrabold text-xl">{branding.siteName}</span>
           </Link>
@@ -571,7 +564,6 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       </header>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
-        {/* Main Content Area */}
         <div className="lg:col-span-3 space-y-6">
           {selectedModule ? (
             <div className="space-y-6">
@@ -605,7 +597,6 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                  <Button variant="secondary" className="px-4 py-2" icon={Share2}>Share Materi</Button>
               </div>
 
-              {/* Module Description Field - Always visible under video */}
               <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow">
                  <h3 className="text-xl font-extrabold mb-4 flex items-center gap-2"><FileText size={20} className="text-[#8B5CF6]"/> Deskripsi Materi</h3>
                  <div className="text-[#1E293B] text-lg leading-relaxed whitespace-pre-wrap font-medium">
@@ -619,29 +610,49 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                <p>Pilih materi di samping untuk mulai belajar</p>
             </div>
           )}
-          
-          <div className="bg-[#F1F5F9] border-2 border-[#1E293B] rounded-3xl p-8 border-dashed">
-            <h3 className="text-xl font-extrabold mb-4">Tentang Kursus Ini</h3>
-            <p className="text-[#64748B] leading-relaxed italic">"{course.description}"</p>
-          </div>
+          {/* Box "Tentang Kursus Ini" dihilangkan sesuai permintaan */}
         </div>
 
-        {/* Sidebar Area - Mentor Card Moved here above curriculum */}
         <div className="lg:col-span-1 space-y-6">
-          {/* Mentor Profile moved to TOP of Sidebar */}
-          <Card className="text-center pt-12 featured relative">
-             <div className="absolute top-0 left-1/2 -translate-x-1/2 -translate-y-1/2">
-                <img src={mentor.photo} className="w-24 h-24 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover" alt={mentor.name} />
-             </div>
+          {/* Card Mentor Updated: Photo Inside & New Button Label */}
+          <Card className="flex flex-col items-center p-6 text-center featured">
+             <img 
+               src={mentor.photo} 
+               className="w-24 h-24 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover mb-4" 
+               alt={mentor.name} 
+             />
              <h3 className="text-xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
              <p className="font-bold text-[#8B5CF6] text-xs uppercase mb-4">{mentor.role}</p>
              <p className="text-[#64748B] text-sm leading-relaxed mb-6">{mentor.bio}</p>
-             <div className="flex justify-center gap-2 flex-wrap">
-                {mentor.socials.linkedin && <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#8B5CF6] hover:text-white transition-all"><Linkedin size={18} /></a>}
-                {mentor.socials.tiktok && <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-black hover:text-white transition-all"><Music size={18} /></a>}
-                {mentor.socials.instagram && <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#F472B6] hover:text-white transition-all"><Instagram size={18} /></a>}
-                {mentor.socials.website && <a href={mentor.socials.website} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#FBBF24] transition-all"><Globe size={18} /></a>}
+             
+             <div className="flex justify-center gap-2 flex-wrap mb-6">
+                {mentor.socials.linkedin && (
+                  <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#8B5CF6] hover:text-white transition-all">
+                    <Linkedin size={18} />
+                  </a>
+                )}
+                {mentor.socials.tiktok && (
+                  <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-black hover:text-white transition-all">
+                    <Music size={18} />
+                  </a>
+                )}
+                {mentor.socials.instagram && (
+                  <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#F472B6] hover:text-white transition-all">
+                    <Instagram size={18} />
+                  </a>
+                )}
              </div>
+
+             {mentor.socials.website && (
+               <Button 
+                variant="yellow" 
+                className="w-full text-xs font-bold" 
+                icon={ExternalLink}
+                onClick={() => window.open(mentor.socials.website, '_blank')}
+               >
+                 link produk lainnya
+               </Button>
+             )}
           </Card>
 
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 hard-shadow">
@@ -713,15 +724,12 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
         
-        {/* Admin Routes */}
         <Route path="/admin" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AdminDashboard courses={courses} setCourses={setCourses} /></main></div> : <Navigate to="/login" />} />
         <Route path="/admin/course/:id" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></main></div> : <Navigate to="/login" />} />
         <Route path="/settings" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} /></main></div> : <Navigate to="/login" />} />
         
-        {/* Public Routes */}
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} />} />
         
-        {/* Default */}
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>
     </div>
