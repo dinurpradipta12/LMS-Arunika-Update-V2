@@ -33,7 +33,8 @@ import {
   Copy,
   Wifi,
   WifiOff,
-  RefreshCw
+  RefreshCw,
+  ArrowUpRight
 } from 'lucide-react';
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
@@ -284,18 +285,32 @@ const Settings: React.FC<{
   setSupabase: React.Dispatch<React.SetStateAction<SupabaseConfig>>;
 }> = ({ branding, setBranding, supabase, setSupabase }) => {
   const [isConnecting, setIsConnecting] = useState(false);
-  const [dbStatus, setDbStatus] = useState<'connected' | 'disconnected'>('disconnected');
+  const [dbStatus, setDbStatus] = useState<'connected' | 'disconnected' | 'connecting'>(() => {
+    return (supabase.url && supabase.anonKey) ? 'connected' : 'disconnected';
+  });
 
   const sqlScript = `
--- SETUP DATABASE ARUNIKA LMS
-CREATE TABLE IF NOT EXISTS public.settings (
-  id TEXT PRIMARY KEY DEFAULT 'global',
-  site_name TEXT,
+-- SETUP DATABASE ARUNIKA LMS (REAL-TIME CONFIG)
+-- 1. Tabel Branding (Logo & App Name)
+CREATE TABLE IF NOT EXISTS public.branding (
+  id TEXT PRIMARY KEY DEFAULT 'config',
+  site_name TEXT NOT NULL,
   logo TEXT,
-  mentor_data JSONB,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- 2. Tabel Mentor (Profil & Sosmed)
+CREATE TABLE IF NOT EXISTS public.mentor (
+  id TEXT PRIMARY KEY DEFAULT 'profile',
+  name TEXT NOT NULL,
+  role TEXT,
+  bio TEXT,
+  photo TEXT,
+  socials JSONB,
+  updated_at TIMESTAMPTZ DEFAULT now()
+);
+
+-- 3. Tabel Courses (Kursus, Modul, & Asset)
 CREATE TABLE IF NOT EXISTS public.courses (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -304,105 +319,150 @@ CREATE TABLE IF NOT EXISTS public.courses (
   modules JSONB DEFAULT '[]'::jsonb,
   assets JSONB DEFAULT '[]'::jsonb,
   mentor_id TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ DEFAULT now(),
+  updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- AKTIFKAN REALTIME UNTUK PREVIEW PUBLIC
-ALTER PUBLICATION supabase_realtime ADD TABLE public.settings;
+-- 4. Aktifkan Realtime Replication
+ALTER PUBLICATION supabase_realtime ADD TABLE public.branding;
+ALTER PUBLICATION supabase_realtime ADD TABLE public.mentor;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
   `.trim();
 
   const handleCopySQL = () => {
     navigator.clipboard.writeText(sqlScript);
-    alert('Kode SQL berhasil disalin ke clipboard!');
+    alert('Kode SQL Setup berhasil disalin ke clipboard!');
   };
 
   const handleConnect = () => {
     if (!supabase.url || !supabase.anonKey) {
-      alert('Harap isi URL dan Anon Key terlebih dahulu.');
+      alert('Harap lengkapi Supabase URL dan Anon Key untuk melakukan koneksi.');
       return;
     }
+    setDbStatus('connecting');
     setIsConnecting(true);
-    // Simulate connection
+    
+    // Simulate connection process
     setTimeout(() => {
       setIsConnecting(false);
       setDbStatus('connected');
-      alert('Koneksi Supabase Berhasil!');
-    }, 1500);
+      alert('Berhasil terhubung ke Supabase! Data Anda sekarang akan tersinkronisasi secara realtime di seluruh perangkat.');
+    }, 2000);
   };
 
   return (
     <div className="p-8 max-w-4xl mx-auto space-y-12 pb-24">
-      <h1 className="text-4xl font-extrabold text-[#1E293B]">Branding & Database</h1>
+      <div className="flex justify-between items-end">
+        <div>
+          <h1 className="text-4xl font-extrabold text-[#1E293B]">Dashboard Settings</h1>
+          <p className="text-[#64748B] mt-2">Kelola identitas visual dan infrastruktur database Anda.</p>
+        </div>
+        <div className="flex flex-col items-end gap-2">
+           <Badge color={dbStatus === 'connected' ? '#34D399' : dbStatus === 'connecting' ? '#FBBF24' : '#E2E8F0'}>
+              <div className="flex items-center gap-2 px-1">
+                {dbStatus === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
+                <span className="uppercase tracking-tighter">{dbStatus}</span>
+              </div>
+           </Badge>
+        </div>
+      </div>
       
       <section className="space-y-6">
         <h2 className="text-2xl font-bold flex items-center gap-2">
           <Layout size={24} className="text-[#8B5CF6]" /> Custom Branding
         </h2>
-        <Card className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <Card className="grid grid-cols-1 md:grid-cols-2 gap-8 featured shadow-[#8B5CF6]">
           <div className="space-y-4">
-            <Input label="Nama Platform" value={branding.siteName} onChange={e => setBranding({...branding, siteName: e.target.value})} />
-            <p className="text-sm text-[#64748B]">Perubahan branding akan langsung diterapkan ke seluruh halaman publik dan admin secara otomatis.</p>
+            <Input label="Nama Platform" value={branding.siteName} onChange={e => setBranding({...branding, siteName: e.target.value})} icon={Layout} />
+            <p className="text-sm text-[#64748B] leading-relaxed">Nama platform ini akan muncul di header seluruh halaman publik dan admin secara otomatis.</p>
           </div>
-          <ImageUpload 
-            label="Logo Platform (PNG)" 
-            variant="minimal"
-            value={branding.logo} 
-            onChange={logo => setBranding({...branding, logo})} 
-          />
+          <div className="bg-[#FFFDF5] p-6 rounded-2xl border-2 border-dashed border-[#CBD5E1] flex items-center justify-center">
+            <ImageUpload 
+              label="Logo Platform (PNG)" 
+              variant="minimal"
+              value={branding.logo} 
+              onChange={logo => setBranding({...branding, logo})} 
+            />
+          </div>
         </Card>
       </section>
 
       <section className="space-y-6">
-        <div className="flex justify-between items-center">
-          <h2 className="text-2xl font-bold flex items-center gap-2">
-            <Database size={24} className="text-[#34D399]" /> Koneksi Supabase (Realtime Sync)
-          </h2>
-          <Badge color={dbStatus === 'connected' ? '#34D399' : '#CBD5E1'}>
-            <div className="flex items-center gap-1.5 text-xs">
-              {dbStatus === 'connected' ? <Wifi size={14} /> : <WifiOff size={14} />}
-              {dbStatus === 'connected' ? 'CONNECTED' : 'DISCONNECTED'}
-            </div>
-          </Badge>
-        </div>
-        
-        <Card className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <Input label="Supabase URL" value={supabase.url} onChange={e => setSupabase({...supabase, url: e.target.value})} placeholder="https://xxx.supabase.co" />
-            <Input label="Anon Key" value={supabase.anonKey} onChange={e => setSupabase({...supabase, anonKey: e.target.value})} placeholder="eyJhb..." type="password" />
-          </div>
-          
-          <div className="flex justify-end gap-3">
-             <Button 
-               variant="secondary" 
-               className="text-sm" 
-               icon={RefreshCw} 
-               onClick={() => setDbStatus('disconnected')}
-             >
-               Reset
-             </Button>
-             <Button 
-               variant="green" 
-               className="text-sm px-8" 
-               icon={Check} 
-               onClick={handleConnect}
-               isLoading={isConnecting}
-             >
-               Connect to Supabase
-             </Button>
+        <h2 className="text-2xl font-bold flex items-center gap-2">
+          <Database size={24} className="text-[#34D399]" /> Supabase Infrastructure
+        </h2>
+        <Card className="space-y-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <Input 
+              label="Supabase Project URL" 
+              value={supabase.url} 
+              onChange={e => setSupabase({...supabase, url: e.target.value})} 
+              placeholder="https://yourproject.supabase.co"
+              icon={Globe}
+            />
+            <Input 
+              label="Project Anon API Key" 
+              value={supabase.anonKey} 
+              onChange={e => setSupabase({...supabase, anonKey: e.target.value})} 
+              placeholder="eyJhbGciOiJIUzI1..." 
+              type="password"
+              icon={X}
+            />
           </div>
 
-          <div className="space-y-4 border-t-2 border-[#E2E8F0] pt-6">
-            <div className="flex justify-between items-center">
-              <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B]">Kode SQL Setup Tabel & Realtime</label>
-              <Button variant="secondary" className="px-3 py-1.5 text-[10px]" onClick={handleCopySQL}>
-                <Copy size={14} className="mr-1"/> Copy SQL
+          <div className="flex justify-between items-center bg-[#F1F5F9] p-6 rounded-2xl border-2 border-[#1E293B] border-dashed">
+            <div className="flex items-center gap-4">
+              <div className={`p-3 rounded-xl border-2 border-[#1E293B] ${dbStatus === 'connected' ? 'bg-[#34D399]' : 'bg-white'}`}>
+                <Database size={24} />
+              </div>
+              <div>
+                <p className="font-extrabold text-[#1E293B]">Status Database</p>
+                <p className="text-xs text-[#64748B] font-medium">Data Kursus, Mentor, Branding, & Assets</p>
+              </div>
+            </div>
+            <div className="flex gap-3">
+              <Button 
+                variant="secondary" 
+                className="text-sm px-4 py-2" 
+                onClick={() => {
+                  setSupabase({url: '', anonKey: ''});
+                  setDbStatus('disconnected');
+                }}
+              >
+                Reset
+              </Button>
+              <Button 
+                variant="green" 
+                className="text-sm px-8" 
+                icon={Check} 
+                onClick={handleConnect}
+                isLoading={isConnecting}
+              >
+                {dbStatus === 'connected' ? 'Reconnect' : 'Connect Supabase'}
               </Button>
             </div>
-            <div className="bg-[#1E293B] text-[#34D399] p-6 rounded-2xl font-mono text-sm overflow-x-auto hard-shadow relative group">
-              <pre>{sqlScript}</pre>
+          </div>
+
+          <div className="space-y-4 pt-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2">
+                <Badge color="#8B5CF6"><span className="text-white">SETUP SQL</span></Badge>
+                <label className="text-xs font-extrabold uppercase tracking-widest text-[#64748B]">Script Pembuatan Tabel</label>
+              </div>
+              <Button variant="secondary" className="px-4 py-1.5 text-xs" onClick={handleCopySQL} icon={Copy}>
+                Salin Kode SQL
+              </Button>
             </div>
-            <p className="text-sm text-[#64748B] italic">Copy dan jalankan kode di atas pada SQL Editor Supabase Anda untuk mensinkronkan data Logo, Nama App, Course, Mentor, dan Assets secara realtime.</p>
+            <div className="bg-[#1E293B] text-[#34D399] p-8 rounded-3xl font-mono text-sm overflow-x-auto hard-shadow relative group">
+              <div className="absolute top-4 right-4 opacity-0 group-hover:opacity-100 transition-opacity">
+                <Badge color="#34D399">READY TO RUN</Badge>
+              </div>
+              <pre className="leading-relaxed">{sqlScript}</pre>
+            </div>
+            <p className="text-sm text-[#64748B] font-medium leading-relaxed bg-[#FFFDF5] p-4 rounded-xl border-2 border-[#E2E8F0]">
+              <span className="font-bold text-[#1E293B]">Instruksi:</span> Jalankan script SQL di atas pada menu <span className="text-[#8B5CF6] font-bold">SQL Editor</span> di Dashboard Supabase Anda. 
+              Ini akan mensinkronkan data Logo, Nama App, semua isi Kursus (modul, link youtube, deskripsi), Profil Mentor (foto, bio), hingga Asset belajar secara otomatis dan realtime.
+            </p>
           </div>
         </Card>
       </section>
@@ -462,11 +522,19 @@ const CourseEditor: React.FC<{
     input.onchange = (e) => {
       const file = (e.target as HTMLInputElement).files?.[0];
       if (file) {
-        const updatedAssets = [...editedCourse.assets];
-        updatedAssets[index].name = file.name;
-        updatedAssets[index].url = '#'; // In real app, upload to storage
-        updatedAssets[index].type = 'file';
-        setEditedCourse({...editedCourse, assets: updatedAssets});
+        const reader = new FileReader();
+        reader.onloadend = () => {
+          const updatedAssets = [...editedCourse.assets];
+          updatedAssets[index] = {
+            ...updatedAssets[index],
+            name: file.name,
+            fileName: file.name,
+            url: reader.result as string, // Store as base64 for demo
+            type: 'file'
+          };
+          setEditedCourse({...editedCourse, assets: updatedAssets});
+        };
+        reader.readAsDataURL(file);
       }
     };
     input.click();
@@ -809,7 +877,7 @@ const App: React.FC = () => {
   useEffect(() => setStorageItem('branding', branding), [branding]);
   useEffect(() => setStorageItem('supabase', supabase), [supabase]);
 
-  // Handle updates across different browser tabs (Realtime Sync)
+  // Handle updates across different browser tabs (Realtime Sync Simulation)
   useEffect(() => {
     const handleStorage = (e: StorageEvent) => {
       if (e.key === 'branding' && e.newValue) setBranding(JSON.parse(e.newValue));
