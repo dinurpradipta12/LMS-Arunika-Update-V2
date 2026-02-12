@@ -1,5 +1,5 @@
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
 import { 
@@ -254,10 +254,9 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
 
   const generateShareLink = (courseId: string) => {
     const cfgStr = encodeConfig(supabase);
+    // Standardizing Share URL with cfg at the very end of the hash path
     const baseUrl = `${window.location.origin}${window.location.pathname}`;
-    // Memastikan share link menyertakan konfigurasi agar cross-device ready
-    const sep = baseUrl.includes('?') ? '&' : '?';
-    return `${baseUrl}#/course/${courseId}${sep}cfg=${cfgStr}`;
+    return `${baseUrl}#/course/${courseId}?cfg=${cfgStr}`;
   };
 
   return (
@@ -651,10 +650,10 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
 
   useEffect(() => {
-    if (course && course.modules.length > 0) {
+    if (course && course.modules.length > 0 && !selectedModule) {
       setSelectedModule(course.modules[0]);
     }
-  }, [course]);
+  }, [course, selectedModule]);
 
   if (isInitialLoading) {
     return (
@@ -670,7 +669,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       <div className="h-screen flex flex-col items-center justify-center bg-[#FFFDF5] p-8 text-center">
         <X size={64} className="text-red-400 mb-4" />
         <h1 className="text-3xl font-extrabold text-[#1E293B] mb-2">Materi Tidak Ditemukan</h1>
-        <p className="text-[#64748B] max-w-md">Konfigurasi atau Materi ini mungkin belum dipublikasi oleh Admin.</p>
+        <p className="text-[#64748B] max-w-md">Konfigurasi atau Materi ini mungkin belum dipublikasi oleh Admin atau Link Salah.</p>
         <Link to="/" className="mt-8 text-[#8B5CF6] font-bold border-b-2 border-[#8B5CF6]">Kembali ke Beranda</Link>
       </div>
     );
@@ -844,34 +843,39 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
 // --- Main Application with Optimized Forced Realtime Logic ---
 const App: React.FC = () => {
+  const location = useLocation();
+
+  // Optimized State Initializers for Instant Config Recovery
+  const [supabase, setSupabase] = useState<SupabaseConfig>(() => {
+    // Check hash-based query parameters (Standard for HashRouter)
+    const hash = window.location.hash;
+    const queryIdx = hash.indexOf('?');
+    const hashQuery = queryIdx !== -1 ? hash.slice(queryIdx) : '';
+    const params = new URLSearchParams(hashQuery || window.location.search);
+    const cfgStr = params.get('cfg');
+    
+    if (cfgStr) {
+      const decoded = decodeConfig(cfgStr);
+      if (decoded?.url && decoded?.anonKey) {
+        console.log("Config recovered instantly from URL");
+        return decoded;
+      }
+    }
+    return getStorageItem('supabase', { url: '', anonKey: '' });
+  });
+
   const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
   const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
   const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', initialMentor));
   const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
-  const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
   
   const [syncing, setSyncing] = useState(false);
   const [isInitialLoading, setIsInitialLoading] = useState(true);
   
   const isSyncingRef = useRef(false);
   const isDataLoadedRef = useRef(false);
-  
-  const location = useLocation();
 
-  // --- Initial Config Recovery from URL (Public View Sync Ready) ---
-  useEffect(() => {
-    const params = new URLSearchParams(location.search);
-    const cfgStr = params.get('cfg');
-    if (cfgStr) {
-      const decoded = decodeConfig(cfgStr);
-      if (decoded && decoded.url && decoded.anonKey) {
-        console.log("Config recovered from Share URL");
-        setSupabase(decoded);
-      }
-    }
-  }, [location.search]);
-
-  // Persistence to LocalStorage (Immediate feedback)
+  // Persistence to LocalStorage
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
   useEffect(() => setStorageItem('courses', courses), [courses]);
   useEffect(() => setStorageItem('mentor', mentor), [mentor]);
@@ -889,13 +893,13 @@ const App: React.FC = () => {
     try {
       const client = createClient(supabase.url, supabase.anonKey);
       
-      // Force sync branding
+      // Sync branding
       await client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo });
       
-      // Force sync mentor
+      // Sync mentor
       await client.from('mentor').upsert({ id: 'profile', ...mentor });
       
-      // Force sync all courses (including new ones)
+      // Sync all courses
       for (const course of courses) {
         await client.from('courses').upsert({
           id: course.id,
@@ -926,21 +930,23 @@ const App: React.FC = () => {
     return () => clearTimeout(timer);
   }, [branding, mentor, courses, triggerForcedSync, isLoggedIn]);
 
-  // Initial Fetch & Realtime Subscription
+  // Initial Fetch & Realtime Subscription logic
   useEffect(() => {
     if (!supabase.url || !supabase.anonKey) {
       setIsInitialLoading(false);
       return;
     }
+    
     const client = createClient(supabase.url, supabase.anonKey);
+    setIsInitialLoading(true); // Ensure loading is active during re-fetches
     
     const initialFetch = async () => {
       try {
         const { data: b } = await client.from('branding').select('*').single();
-        if (b) setBranding(prev => (prev.logo !== b.logo || prev.siteName !== b.site_name) ? { siteName: b.site_name, logo: b.logo } : prev);
+        if (b) setBranding({ siteName: b.site_name, logo: b.logo });
 
         const { data: m } = await client.from('mentor').select('*').single();
-        if (m) setMentor(prev => JSON.stringify(prev) !== JSON.stringify(m) ? m : prev);
+        if (m) setMentor(m);
 
         const { data: c } = await client.from('courses').select('*');
         if (c && c.length > 0) {
@@ -949,7 +955,7 @@ const App: React.FC = () => {
             coverImage: item.cover_image,
             mentorId: item.mentor_id
           }));
-          setCourses(prev => JSON.stringify(prev) !== JSON.stringify(mappedCourses) ? mappedCourses : prev);
+          setCourses(mappedCourses);
         }
       } catch (err) {
         console.error("Initial fetch error:", err);
@@ -963,14 +969,12 @@ const App: React.FC = () => {
     
     // Subscribe to realtime updates for cross-device sync
     const sub = client.channel('all_changes').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
-       // Hanya update jika kita BUKAN admin yang sedang push data (mencegah loop/reset logo)
        if (!isSyncingRef.current) {
           if (payload.table === 'branding') {
-            setBranding(prev => (prev.logo !== payload.new.logo || prev.siteName !== payload.new.site_name) ? { siteName: payload.new.site_name, logo: payload.new.logo } : prev);
+            setBranding({ siteName: payload.new.site_name, logo: payload.new.logo });
           }
-          if (payload.table === 'mentor') setMentor(prev => JSON.stringify(prev) !== JSON.stringify(payload.new) ? payload.new : prev);
+          if (payload.table === 'mentor') setMentor(payload.new);
           if (payload.table === 'courses') {
-             // Jika ada perubahan kursus di device lain, re-fetch list
              client.from('courses').select('*').then(({data}) => {
                 if(data) {
                   const mapped = data.map((item: any) => ({
@@ -978,7 +982,7 @@ const App: React.FC = () => {
                     coverImage: item.cover_image,
                     mentorId: item.mentor_id
                   }));
-                  setCourses(prev => JSON.stringify(prev) !== JSON.stringify(mapped) ? mapped : prev);
+                  setCourses(mapped);
                 }
              });
           }
