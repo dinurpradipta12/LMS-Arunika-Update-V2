@@ -35,9 +35,10 @@ import {
   WifiOff,
   RefreshCw,
   ArrowUpRight,
-  CloudUpload
+  CloudUpload,
+  Save
 } from 'lucide-react';
-// Import Supabase client dynamically via ESM
+// Import Supabase client via ESM
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1';
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
 import { initialCourses, initialMentor, initialBranding } from './mockData';
@@ -323,7 +324,7 @@ CREATE TABLE IF NOT EXISTS public.courses (
   updated_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 4. Enable Realtime
+-- 4. Enable Realtime Replication
 ALTER PUBLICATION supabase_realtime ADD TABLE public.branding;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.mentor;
 ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
@@ -331,12 +332,12 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
 
   const handleCopySQL = () => {
     navigator.clipboard.writeText(sqlScript);
-    alert('Kode SQL Setup berhasil disalin!');
+    alert('Kode SQL Setup disalin!');
   };
 
   const handleConnect = () => {
     if (!supabase.url || !supabase.anonKey) {
-      alert('Lengkapi URL dan Anon Key.');
+      alert('Isi URL dan Anon Key.');
       return;
     }
     setDbStatus('connecting');
@@ -344,7 +345,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
     setTimeout(() => {
       setIsConnecting(false);
       setDbStatus('connected');
-      alert('Koneksi Supabase Berhasil! Data akan tersinkron otomatis.');
+      alert('Terhubung ke Supabase! Data disinkronkan realtime.');
     }, 1500);
   };
 
@@ -495,7 +496,7 @@ const CourseEditor: React.FC<{
     <div className="p-8 max-w-5xl mx-auto pb-24 space-y-8">
       <div className="flex justify-between items-center">
         <h1 className="text-3xl font-extrabold text-[#1E293B]">Editor: {editedCourse.title}</h1>
-        <Button onClick={handleSave} icon={Database}>Simpan Perubahan</Button>
+        <Button onClick={handleSave} icon={Save}>Simpan Perubahan</Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -546,9 +547,9 @@ const CourseEditor: React.FC<{
                     {mod.type === 'video' ? (
                       <Input label="YouTube Link" value={mod.content} onChange={e => updateModule(idx, 'content', e.target.value)} placeholder="https://youtube.com/watch?v=..." />
                     ) : (
-                      <AdvancedEditor label="Text Content" value={mod.content} onChange={v => updateModule(idx, 'content', v)} placeholder="Masukkan konten teks di sini..." />
+                      <AdvancedEditor label="Text Content" value={mod.content} onChange={v => updateModule(idx, 'content', v)} placeholder="Konten teks..." />
                     )}
-                    <AdvancedEditor label="Deskripsi Materi" value={mod.description} onChange={v => updateModule(idx, 'description', v)} placeholder="Ringkasan materi..." />
+                    <AdvancedEditor label="Deskripsi Materi" value={mod.description} onChange={v => updateModule(idx, 'description', v)} placeholder="Ringkasan..." />
                   </div>
                 </Card>
               ))}
@@ -563,7 +564,6 @@ const CourseEditor: React.FC<{
               <ImageUpload value={mentor.photo} onChange={photo => setMentor({...mentor, photo})}>
                 <div className="relative group">
                   <img src={mentor.photo} className="w-24 h-24 rounded-full border-2 border-[#1E293B] object-cover hard-shadow group-hover:hard-shadow-hover transition-all" alt="Mentor" />
-                  <div className="absolute inset-0 bg-black/40 rounded-full opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white"><Camera size={18} /></div>
                 </div>
               </ImageUpload>
             </div>
@@ -647,8 +647,8 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid grid-cols-1 lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
-          {/* Course Title Header Added Here */}
-          <div className="mb-6 bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6">
+          {/* COURSE TITLE HEADER ADDED ABOVE VIDEO */}
+          <div className="bg-white border-2 border-[#1E293B] p-8 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-6 transition-bounce">
             <div>
               <h1 className="text-4xl font-extrabold text-[#1E293B] mb-2">{course.title}</h1>
               <div className="flex items-center gap-3">
@@ -685,7 +685,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
               </div>
               
               <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow">
-                 <h3 className="text-xl font-extrabold mb-4 flex items-center gap-2"><FileText size={20} className="text-[#8B5CF6]"/> Deskripsi Materi</h3>
+                 <h3 className="text-xl font-extrabold mb-4 flex items-center gap-2 tracking-tight"><FileText size={20} className="text-[#8B5CF6]"/> Deskripsi Materi</h3>
                  <div className="text-[#1E293B] text-lg leading-relaxed whitespace-pre-wrap font-medium">
                     {selectedModule.description || "Tidak ada deskripsi untuk materi ini."}
                  </div>
@@ -713,7 +713,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
           </Card>
 
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 hard-shadow">
-            <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2"><BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum</h3>
+            <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2 tracking-tight"><BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum</h3>
             <div className="space-y-3">
               {course.modules.map((mod, i) => (
                 <button key={mod.id} onClick={() => setSelectedModule(mod)} className={`w-full text-left p-4 rounded-2xl border-2 transition-all flex items-start gap-4 ${selectedModule?.id === mod.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow translate-x-1' : 'bg-white border-transparent hover:bg-[#F1F5F9]'}`}>
@@ -731,7 +731,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
 
             {course.assets.length > 0 && (
               <div className="mt-10 border-t-2 border-[#E2E8F0] pt-6">
-                <h3 className="font-extrabold text-xl mb-4 flex items-center gap-2"><Upload size={20} className="text-[#34D399]" /> Assets</h3>
+                <h3 className="font-extrabold text-xl mb-4 flex items-center gap-2 tracking-tight"><Upload size={20} className="text-[#34D399]" /> Assets</h3>
                 <div className="space-y-2">
                   {course.assets.map(asset => (
                     <a key={asset.id} href={asset.url} target="_blank" className="flex items-center justify-between p-4 rounded-xl bg-white border-2 border-[#1E293B] hover:bg-[#34D399] transition-all group" download={asset.type === 'file' ? asset.fileName : undefined}>
@@ -749,7 +749,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
   );
 };
 
-// --- App Entry with Realtime Sync Logic ---
+// --- App Entry with Forced Realtime Sync Logic ---
 const App: React.FC = () => {
   const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
   const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
@@ -758,6 +758,28 @@ const App: React.FC = () => {
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
   const [syncing, setSyncing] = useState(false);
 
+  // Initial Data Fetch from Supabase if connected
+  useEffect(() => {
+    if (!supabase.url || !supabase.anonKey) return;
+    const client = createClient(supabase.url, supabase.anonKey);
+    
+    const fetchAll = async () => {
+      const { data: b } = await client.from('branding').select('*').single();
+      if (b) setBranding({ siteName: b.site_name, logo: b.logo });
+
+      const { data: m } = await client.from('mentor').select('*').single();
+      if (m) setMentor(m);
+
+      const { data: c } = await client.from('courses').select('*');
+      if (c) setCourses(c.map((item: any) => ({
+        ...item,
+        coverImage: item.cover_image,
+        mentorId: item.mentor_id
+      })));
+    };
+    fetchAll();
+  }, [supabase]);
+
   // Persistence to LocalStorage
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
   useEffect(() => setStorageItem('courses', courses), [courses]);
@@ -765,28 +787,21 @@ const App: React.FC = () => {
   useEffect(() => setStorageItem('branding', branding), [branding]);
   useEffect(() => setStorageItem('supabase', supabase), [supabase]);
 
-  // Realtime Sync to Supabase Logic
+  // Realtime Sync FORCE TO SUPABASE
   useEffect(() => {
     if (!supabase.url || !supabase.anonKey) return;
-    
-    let supabaseClient: any;
-    try {
-      supabaseClient = createClient(supabase.url, supabase.anonKey);
-    } catch (e) {
-      console.warn("Invalid Supabase Config");
-      return;
-    }
+    const client = createClient(supabase.url, supabase.anonKey);
 
-    const syncToSupabase = async () => {
+    const performSync = async () => {
       setSyncing(true);
       try {
         // Sync Branding
-        await supabaseClient.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo });
+        await client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo });
         // Sync Mentor
-        await supabaseClient.from('mentor').upsert({ id: 'profile', name: mentor.name, role: mentor.role, bio: mentor.bio, photo: mentor.photo, socials: mentor.socials });
-        // Sync Courses
+        await client.from('mentor').upsert({ id: 'profile', ...mentor });
+        // Sync Courses (Iterate and force upsert)
         for (const course of courses) {
-          await supabaseClient.from('courses').upsert({
+          await client.from('courses').upsert({
             id: course.id,
             title: course.title,
             description: course.description,
@@ -797,42 +812,15 @@ const App: React.FC = () => {
           });
         }
       } catch (err) {
-        console.error("Supabase Sync Error:", err);
+        console.error("Supabase Forced Sync Error:", err);
       } finally {
-        setSyncing(false);
+        setTimeout(() => setSyncing(false), 800);
       }
     };
 
-    const debounceTimer = setTimeout(syncToSupabase, 2000);
-    return () => clearTimeout(debounceTimer);
+    const timer = setTimeout(performSync, 1000); // 1s Debounce
+    return () => clearTimeout(timer);
   }, [branding, mentor, courses, supabase]);
-
-  // Realtime Listener for Public View
-  useEffect(() => {
-    if (!supabase.url || !supabase.anonKey) return;
-    const client = createClient(supabase.url, supabase.anonKey);
-
-    const brandingChannel = client.channel('branding_changes').on('postgres_changes', { event: '*', table: 'branding' }, (payload: any) => {
-      if (payload.new) setBranding({ siteName: payload.new.site_name, logo: payload.new.logo });
-    }).subscribe();
-
-    const mentorChannel = client.channel('mentor_changes').on('postgres_changes', { event: '*', table: 'mentor' }, (payload: any) => {
-      if (payload.new) setMentor({ ...payload.new, photo: payload.new.photo });
-    }).subscribe();
-
-    const coursesChannel = client.channel('courses_changes').on('postgres_changes', { event: '*', table: 'courses' }, (payload: any) => {
-       // Deep refresh for courses if changed externally
-       client.from('courses').select('*').then(({data}: any) => {
-         if (data) setCourses(data.map((c: any) => ({ ...c, coverImage: c.cover_image, mentorId: c.mentor_id })));
-       });
-    }).subscribe();
-
-    return () => {
-      client.removeChannel(brandingChannel);
-      client.removeChannel(mentorChannel);
-      client.removeChannel(coursesChannel);
-    };
-  }, [supabase]);
 
   const updateCourse = (updated: Course) => {
     setCourses(prev => prev.map(c => c.id === updated.id ? updated : c));
@@ -841,9 +829,9 @@ const App: React.FC = () => {
   return (
     <div className="min-h-screen">
       {syncing && (
-        <div className="fixed top-4 right-4 z-[999] bg-white border-2 border-[#1E293B] rounded-full px-4 py-2 flex items-center gap-2 hard-shadow animate-pulse">
-           <CloudUpload size={16} className="text-[#8B5CF6]" />
-           <span className="text-xs font-bold uppercase tracking-widest">Syncing to Supabase...</span>
+        <div className="fixed bottom-4 left-4 z-[999] bg-[#34D399] border-2 border-[#1E293B] rounded-full px-4 py-2 flex items-center gap-2 hard-shadow">
+           <CloudUpload size={16} className="text-[#1E293B]" />
+           <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#1E293B]">Supabase Realtime Sync...</span>
         </div>
       )}
       <Routes>
