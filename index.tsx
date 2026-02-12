@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
@@ -250,7 +249,6 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
   const generateShareLink = (courseId: string) => {
     const cfgStr = encodeConfig(supabase);
     const baseUrl = window.location.origin + window.location.pathname;
-    // Menghapus search params lama jika ada untuk menghindari duplikasi
     return `${baseUrl}#/course/${courseId}?cfg=${cfgStr}`;
   };
 
@@ -284,7 +282,7 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
                 onClick={() => {
                   const url = generateShareLink(course.id);
                   navigator.clipboard.writeText(url);
-                  alert('Link publik berhasil disalin! Aplikasi akan otomatis terhubung saat link ini dibuka.');
+                  alert('Link publik berhasil disalin!');
                 }} 
                 variant="green" className="text-xs col-span-2" icon={Share2}
               >
@@ -357,7 +355,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
     setTimeout(() => {
       setIsConnecting(false);
       setDbStatus('connected');
-      alert('Terhubung ke Supabase! Perubahan akan langsung sinkron secara realtime di semua browser.');
+      alert('Terhubung ke Supabase! Perubahan akan langsung sinkron secara realtime.');
     }, 1500);
   };
 
@@ -422,7 +420,6 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;
   );
 };
 
-// ... [CourseEditor logic remains similar but ensures save triggers sync] ...
 const CourseEditor: React.FC<{ 
   courses: Course[]; 
   onSave: (c: Course) => void; 
@@ -442,7 +439,7 @@ const CourseEditor: React.FC<{
 
   const handleSave = () => {
     onSave(editedCourse);
-    alert('Konten kursus berhasil disimpan dan disinkronkan!');
+    alert('Konten kursus berhasil disimpan!');
   };
 
   const addModule = (type: 'video' | 'text') => {
