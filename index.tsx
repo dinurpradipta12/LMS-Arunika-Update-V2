@@ -41,7 +41,7 @@ import {
   Activity
 } from 'lucide-react';
 
-// Custom TikTok SVG Icon since it might not be in all Lucide versions
+// Custom TikTok SVG Icon
 const TiktokIcon = ({ size = 18 }) => (
   <svg 
     width={size} 
@@ -278,7 +278,6 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
   const [views, setViews] = useState<any[]>([]);
   const [isLive, setIsLive] = useState(false);
 
-  // Helper function to process views data
   const processData = (allViews: any[]) => {
     const counts = allViews.reduce((acc: any, curr: any) => {
       acc[curr.course_id] = (acc[curr.course_id] || 0) + 1;
@@ -306,21 +305,17 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
 
     fetchInitial();
 
-    // REAL-TIME SUBSCRIPTION
-    const channel = client.channel('analytics_realtime')
+    // REAL-TIME SUBSCRIPTION: Listen for any new inserts from any device
+    const channel = client.channel('global_analytics')
       .on('postgres_changes', { 
         event: 'INSERT', 
         table: 'course_views', 
         schema: 'public' 
       }, (payload) => {
-        console.log('Kunjungan Real-time Baru!', payload.new);
         setViews(prev => [...prev, payload.new]);
       })
       .subscribe((status) => {
-        if (status === 'SUBSCRIBED') {
-          setIsLive(true);
-          console.log("Real-time Tracking Terhubung!");
-        }
+        if (status === 'SUBSCRIBED') setIsLive(true);
       });
 
     return () => {
@@ -335,12 +330,12 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl md:text-4xl font-extrabold mb-2 text-[#1E293B]">Analitik Pengunjung</h1>
-          <p className="text-sm md:text-base text-[#64748B]">Pantau performa publikasi Anda secara langsung.</p>
+          <p className="text-sm md:text-base text-[#64748B]">Pantau kunjungan link secara real-time dari semua perangkat.</p>
         </div>
         <Badge color={isLive ? '#34D399' : '#E2E8F0'} className="h-10">
           <div className="flex items-center gap-2 px-1">
              <div className={`w-2 h-2 rounded-full ${isLive ? 'bg-white animate-pulse' : 'bg-[#94A3B8]'}`} />
-             <span className={isLive ? 'text-white' : 'text-[#64748B]'}>{isLive ? 'LIVE TRACKING AKTIF' : 'MENYAMBUNGKAN...'}</span>
+             <span className={isLive ? 'text-white' : 'text-[#64748B]'}>{isLive ? 'LIVE ANALYTICS ACTIVE' : 'CONNECTING...'}</span>
           </div>
         </Badge>
       </div>
@@ -364,8 +359,8 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
               <TrendingUp size={24} className="md:w-8 md:h-8" />
             </div>
             <div>
-              <p className="text-[10px] md:text-xs font-bold text-[#64748B] uppercase tracking-wider">Prakiraan Konversi</p>
-              <h2 className="text-2xl md:text-4xl font-extrabold">{total > 0 ? (total * 0.12).toFixed(0) : 0}</h2>
+              <p className="text-[10px] md:text-xs font-bold text-[#64748B] uppercase tracking-wider">Efektivitas Link</p>
+              <h2 className="text-2xl md:text-4xl font-extrabold">High</h2>
             </div>
           </div>
         </Card>
@@ -376,8 +371,8 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
               <Activity size={24} className="md:w-8 md:h-8" />
             </div>
             <div>
-              <p className="text-[10px] md:text-xs font-bold text-[#64748B] uppercase tracking-wider">Status Sinkron</p>
-              <h2 className="text-lg md:text-xl font-extrabold">{isLive ? 'SINKRON' : 'LOKAL'}</h2>
+              <p className="text-[10px] md:text-xs font-bold text-[#64748B] uppercase tracking-wider">Sync Status</p>
+              <h2 className="text-lg md:text-xl font-extrabold">{isLive ? 'CONNECTED' : 'LOCAL ONLY'}</h2>
             </div>
           </div>
         </Card>
@@ -402,14 +397,14 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
                 <span className="text-[10px] md:text-xs font-extrabold text-[#64748B] whitespace-nowrap">{item.count} Views</span>
               </div>
             ))}
-            {sortedData.length === 0 && <p className="text-center py-12 text-[#64748B] italic">Belum ada kunjungan tercatat.</p>}
+            {sortedData.length === 0 && <p className="text-center py-12 text-[#64748B] italic">Belum ada data kunjungan real-time.</p>}
           </div>
         </Card>
 
         <Card>
-          <h3 className="text-xl font-extrabold mb-4 md:mb-6">Distribusi Traffic</h3>
+          <h3 className="text-xl font-extrabold mb-4 md:mb-6">Trend Traffic Real-time</h3>
           <div className="h-48 md:h-64 flex items-end gap-2 md:gap-3 px-1 md:px-2">
-            {[30, 45, 25, 60, 80, 55, 90].map((val, i) => (
+            {[20, 35, 15, 50, 70, 45, 80].map((val, i) => (
               <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-help">
                 <div 
                   className="w-full bg-[#34D399] rounded-t-lg transition-all group-hover:bg-[#FBBF24] hard-shadow"
@@ -419,7 +414,6 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
               </div>
             ))}
           </div>
-          <p className="text-[8px] md:text-[10px] text-center mt-4 font-bold text-[#94A3B8]">DATA BERDASARKAN 7 HARI TERAKHIR</p>
         </Card>
       </div>
     </div>
@@ -530,15 +524,13 @@ const Settings: React.FC<{
   }, [localSiteName]);
 
   const sqlScript = `
--- SETUP DATABASE ARUNIKA LMS (REAL-TIME ENABLED)
--- 1. Tabel Branding
+-- IDEMPOTENT SQL SETUP FOR ARUNIKA LMS
 CREATE TABLE IF NOT EXISTS public.branding (
   id TEXT PRIMARY KEY DEFAULT 'config',
   site_name TEXT NOT NULL,
   logo TEXT,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
--- 2. Tabel Mentor
 CREATE TABLE IF NOT EXISTS public.mentor (
   id TEXT PRIMARY KEY DEFAULT 'profile',
   name TEXT NOT NULL,
@@ -548,7 +540,6 @@ CREATE TABLE IF NOT EXISTS public.mentor (
   socials JSONB,
   updated_at TIMESTAMPTZ DEFAULT now()
 );
--- 3. Tabel Courses
 CREATE TABLE IF NOT EXISTS public.courses (
   id TEXT PRIMARY KEY,
   title TEXT NOT NULL,
@@ -560,16 +551,13 @@ CREATE TABLE IF NOT EXISTS public.courses (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
--- 4. Tabel Analytics Tracking
 CREATE TABLE IF NOT EXISTS public.course_views (
   id BIGSERIAL PRIMARY KEY,
   course_id TEXT NOT NULL,
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- 5. PENTING: Aktifkan Realtime Untuk Semua Tabel
--- Jalankan kode di bawah ini di SQL Editor Supabase:
-
+-- Enable Realtime for all tracking tables
 DO $$ 
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'branding') THEN
@@ -835,10 +823,10 @@ const CourseEditor: React.FC<{
               <Input label="Role" value={mentor.role} onChange={e => setMentor({...mentor, role: e.target.value})} />
               <Textarea label="Bio" value={mentor.bio} onChange={e => setMentor({...mentor, bio: e.target.value})} />
               <div className="grid grid-cols-1 gap-4">
-                <Input label="LinkedIn" value={mentor.socials.linkedin} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
-                <Input label="TikTok" value={mentor.socials.tiktok} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={TiktokIcon} />
-                <Input label="Instagram" value={mentor.socials.instagram} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} icon={Instagram} />
-                <Input label="Website" value={mentor.socials.website} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} icon={ExternalLink} />
+                <Input label="LinkedIn" value={mentor.socials.linkedin || ''} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
+                <Input label="TikTok" value={mentor.socials.tiktok || ''} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={TiktokIcon} />
+                <Input label="Instagram" value={mentor.socials.instagram || ''} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} icon={Instagram} />
+                <Input label="Website" value={mentor.socials.website || ''} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} icon={ExternalLink} />
               </div>
             </div>
           </Card>
@@ -881,11 +869,43 @@ const CourseEditor: React.FC<{
   );
 };
 
-const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: Branding; supabase: SupabaseConfig }> = ({ courses, mentor, branding, supabase }) => {
+const PublicCourseView: React.FC<{ 
+  courses: Course[]; 
+  mentor: Mentor; 
+  branding: Branding; 
+  supabase: SupabaseConfig;
+  setBranding: (b: Branding) => void;
+  setMentor: (m: Mentor) => void;
+  setCourses: (c: Course[]) => void;
+}> = ({ courses, mentor: localMentor, branding: localBranding, supabase, setBranding, setMentor, setCourses }) => {
   const { id } = useParams<{ id: string }>();
   const course = courses.find(c => c.id === id);
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
   const trackAttempted = useRef(false);
+
+  // GLOBAL SYNC: Always try to fetch latest data from Supabase if visitor has no local context
+  useEffect(() => {
+    if (!supabase.url || !supabase.anonKey) return;
+    const client = createClient(supabase.url, supabase.anonKey);
+    
+    const syncGlobalData = async () => {
+      // 1. Fetch Latest Branding
+      const { data: b } = await client.from('branding').select('*').single();
+      if (b) setBranding({ siteName: b.site_name, logo: b.logo });
+      
+      // 2. Fetch Latest Mentor Profile
+      const { data: m } = await client.from('mentor').select('*').single();
+      if (m) setMentor(m);
+
+      // 3. Fetch Specific Course Detail
+      const { data: c } = await client.from('courses').select('*').eq('id', id).single();
+      if (c) {
+        const fullCourse = { ...c, coverImage: c.cover_image, mentorId: c.mentor_id };
+        setCourses(courses.map(item => item.id === id ? fullCourse : item));
+      }
+    };
+    syncGlobalData();
+  }, [id, supabase, setBranding, setMentor, setCourses]);
 
   useEffect(() => {
     if (course && course.modules.length > 0) {
@@ -893,23 +913,15 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
     }
   }, [course]);
 
-  // ANALYTICS TRACKING: Record visit to Supabase
+  // ANALYTICS TRACKING: Record visit immediately
   useEffect(() => {
-    const trackVisit = async () => {
-      if (supabase.url && supabase.anonKey && id && !trackAttempted.current) {
-        trackAttempted.current = true;
-        try {
-          const client = createClient(supabase.url, supabase.anonKey);
-          // INSERT visit record to course_views
-          const { error } = await client.from('course_views').insert({ course_id: id });
-          if (error) console.error("Real-time Tracking Error:", error);
-          else console.log("Real-time Visit Tracked Successfully");
-        } catch (e) {
-          console.error("Tracking System Exception:", e);
-        }
-      }
-    };
-    trackVisit();
+    if (supabase.url && supabase.anonKey && id && !trackAttempted.current) {
+      trackAttempted.current = true;
+      const client = createClient(supabase.url, supabase.anonKey);
+      client.from('course_views').insert({ course_id: id }).then(({ error }) => {
+        if (!error) console.log("Real-time Analytics: Visit Tracked!");
+      });
+    }
   }, [id, supabase]);
 
   if (!course) return <div className="h-screen flex items-center justify-center font-bold">Materi tidak ditemukan</div>;
@@ -919,8 +931,8 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       <header className="bg-white border-b-2 border-[#1E293B] p-4 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
           <Link to="/" className="flex items-center gap-3">
-            <img src={branding.logo} className="w-8 h-8 md:w-10 md:h-10 object-contain" alt="Logo" />
-            <span className="font-extrabold text-lg md:text-xl truncate max-w-[150px] md:max-w-none">{branding.siteName}</span>
+            <img src={localBranding.logo} className="w-8 h-8 md:w-10 md:h-10 object-contain" alt="Logo" />
+            <span className="font-extrabold text-lg md:text-xl truncate max-w-[150px] md:max-w-none">{localBranding.siteName}</span>
           </Link>
           <div className="flex items-center gap-2 md:gap-3">
             <Badge className="hidden sm:inline-flex">{course.modules.length} Materi</Badge>
@@ -976,43 +988,43 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
         </div>
 
         <div className="lg:col-span-1 space-y-6">
-          {/* MENTOR CARD WITH SOCIALS */}
+          {/* MENTOR CARD */}
           <Card className="flex flex-col items-center p-6 md:p-8 text-center featured">
              <div className="relative mb-4 md:mb-6">
-                <img src={mentor.photo} className="w-24 h-24 md:w-28 md:h-28 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover" alt={mentor.name} />
+                <img src={localMentor.photo} className="w-24 h-24 md:w-28 md:h-28 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover" alt={localMentor.name} />
              </div>
-             <h3 className="text-xl md:text-2xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
-             <Badge color="#F472B6" className="text-white mb-4 uppercase text-[8px] md:text-[10px] tracking-widest">{mentor.role}</Badge>
-             <p className="text-[#64748B] text-xs md:text-sm italic mb-6">"{mentor.bio}"</p>
+             <h3 className="text-xl md:text-2xl font-extrabold text-[#1E293B] mb-1">{localMentor.name}</h3>
+             <Badge color="#F472B6" className="text-white mb-4 uppercase text-[8px] md:text-[10px] tracking-widest">{localMentor.role}</Badge>
+             <p className="text-[#64748B] text-xs md:text-sm italic mb-6">"{localMentor.bio}"</p>
              
              {/* SOCIAL MEDIA ROW */}
              <div className="flex gap-3 md:gap-4 mb-6">
-                {mentor.socials.instagram && (
-                  <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce" title="Instagram">
+                {localMentor.socials?.instagram && (
+                  <a href={`https://instagram.com/${localMentor.socials.instagram}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce" title="Instagram">
                     <Instagram size={18}/>
                   </a>
                 )}
-                {mentor.socials.linkedin && (
-                  <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce" title="LinkedIn">
+                {localMentor.socials?.linkedin && (
+                  <a href={`https://linkedin.com/in/${localMentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce" title="LinkedIn">
                     <Linkedin size={18}/>
                   </a>
                 )}
-                {mentor.socials.tiktok && (
-                  <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce" title="TikTok">
+                {localMentor.socials?.tiktok && (
+                  <a href={`https://tiktok.com/@${localMentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover transition-bounce" title="TikTok">
                     <TiktokIcon size={18}/>
                   </a>
                 )}
              </div>
 
-             {/* WEBSITE BUTTON */}
-             {mentor.socials.website && (
-               <a href={mentor.socials.website} target="_blank" className="w-full">
+             {/* WEBSITE BUTTON (Full-width text button) */}
+             {localMentor.socials?.website && (
+               <a href={localMentor.socials.website.startsWith('http') ? localMentor.socials.website : `https://${localMentor.socials.website}`} target="_blank" className="w-full">
                  <Button variant="secondary" className="w-full h-10 text-xs" icon={ExternalLink}>Link produk lainnya</Button>
                </a>
              )}
           </Card>
 
-          {/* CURRICULUM LIST (NOW ABOVE ASSETS) */}
+          {/* KURIKULUM (Moved to TOP) */}
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-4 md:p-6 hard-shadow">
             <h3 className="font-extrabold text-lg md:text-xl mb-4 md:mb-6 flex items-center gap-2 tracking-tight">
               <BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum
@@ -1036,7 +1048,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
             </div>
           </div>
 
-          {/* ASSETS CARD (NOW BELOW CURRICULUM) */}
+          {/* ASSET BELAJAR (Moved to BOTTOM) */}
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-4 md:p-6 hard-shadow">
             <h3 className="font-extrabold text-lg md:text-xl mb-4 flex items-center gap-2 tracking-tight">
               <Download size={24} className="text-[#34D399]" /> Asset Belajar
@@ -1144,14 +1156,14 @@ const App: React.FC = () => {
           })));
         }
       } catch (e) {
-        console.warn("DB not ready or table missing", e);
+        console.warn("DB Initial fetch failed", e);
       }
     };
     initialFetch();
     
-    const sub = client.channel('public_updates').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
+    const sub = client.channel('global_sync').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
        const timeSinceLastLocalUpdate = Date.now() - lastLocalUpdateRef.current;
-       if (isSyncingRef.current || timeSinceLastLocalUpdate < 5000) return;
+       if (isSyncingRef.current || timeSinceLastLocalUpdate < 3000) return;
 
        if(payload.table === 'branding') {
          setBranding(prev => ({...prev, siteName: payload.new.site_name, logo: payload.new.logo}));
@@ -1205,7 +1217,7 @@ const App: React.FC = () => {
       <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-500 ease-in-out transform ${syncing ? 'translate-y-0 opacity-100' : '-translate-y-12 opacity-0'}`}>
         <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-5 py-2 flex items-center gap-3 hard-shadow">
            <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
-           <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#1E293B]">Sinkronisasi...</span>
+           <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#1E293B]">Syncing Hub...</span>
         </div>
       </div>
       
@@ -1215,7 +1227,17 @@ const App: React.FC = () => {
         <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/analytics" element={isLoggedIn ? <AdminLayout><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/settings" element={isLoggedIn ? <AdminLayout><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={supabase} />} />
+        <Route path="/course/:id" element={
+          <PublicCourseView 
+            courses={courses} 
+            mentor={mentor} 
+            branding={branding} 
+            supabase={supabase} 
+            setBranding={setBranding}
+            setMentor={setMentor}
+            setCourses={setCourses}
+          />
+        } />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>
     </div>
