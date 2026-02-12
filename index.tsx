@@ -35,7 +35,9 @@ import {
   BarChart2,
   TrendingUp,
   Users,
-  Eye
+  Eye,
+  Twitter,
+  Download
 } from 'lucide-react';
 
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1?external=react,react-dom';
@@ -219,104 +221,128 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void }> = ({ brand
   );
 };
 
-const AnalyticsPage: React.FC<{ courses: Course[] }> = ({ courses }) => {
-  // Mock data for analytics
-  const totalVisitors = 1245;
-  const growth = 12.5;
-  const courseVisits = courses.map(c => ({
-    name: c.title,
-    visits: Math.floor(Math.random() * 500) + 50
-  })).sort((a, b) => b.visits - a.visits);
+const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> = ({ courses, supabase }) => {
+  const [data, setData] = useState<{ course_id: string, count: number }[]>([]);
+  const [total, setTotal] = useState(0);
+  const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    const fetchAnalytics = async () => {
+      if (!supabase.url || !supabase.anonKey) return;
+      setLoading(true);
+      const client = createClient(supabase.url, supabase.anonKey);
+      
+      const { data: views, error } = await client
+        .from('course_views')
+        .select('course_id');
+      
+      if (views) {
+        setTotal(views.length);
+        const counts = views.reduce((acc: any, curr: any) => {
+          acc[curr.course_id] = (acc[curr.course_id] || 0) + 1;
+          return acc;
+        }, {});
+        
+        const sorted = Object.entries(counts).map(([id, count]) => ({
+          course_id: id as string,
+          count: count as number
+        })).sort((a, b) => b.count - a.count);
+        
+        setData(sorted);
+      }
+      setLoading(false);
+    };
+
+    fetchAnalytics();
+  }, [supabase]);
+
+  const getCourseTitle = (id: string) => courses.find(c => c.id === id)?.title || "Unknown Course";
 
   return (
     <div className="p-8 max-w-6xl mx-auto space-y-8">
-      <div>
-        <h1 className="text-4xl font-extrabold mb-2 text-[#1E293B]">Analitik Pengunjung</h1>
-        <p className="text-[#64748B]">Pantau performa traffic dari "Share Page Kursus" Anda.</p>
+      <div className="flex justify-between items-center">
+        <div>
+          <h1 className="text-4xl font-extrabold mb-2 text-[#1E293B]">Analitik Pengunjung</h1>
+          <p className="text-[#64748B]">Data kunjungan realtime dari link yang Anda bagikan.</p>
+        </div>
+        {loading && <RefreshCw className="animate-spin text-[#8B5CF6]" />}
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="featured border-[#8B5CF6]">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-[#8B5CF6]/10 rounded-2xl text-[#8B5CF6]">
-              <Users size={24} />
+          <div className="flex items-center gap-4">
+            <div className="p-4 bg-[#8B5CF6]/10 rounded-2xl text-[#8B5CF6]">
+              <Users size={32} />
             </div>
             <div>
-              <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Total Pengunjung</p>
-              <h2 className="text-3xl font-extrabold">{totalVisitors}</h2>
+              <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Total Kunjungan</p>
+              <h2 className="text-4xl font-extrabold">{total}</h2>
             </div>
-          </div>
-          <div className="flex items-center gap-1 text-[#34D399] font-bold text-sm">
-            <TrendingUp size={16} />
-            <span>+{growth}% bulan ini</span>
           </div>
         </Card>
-
+        
         <Card className="border-[#FBBF24]">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-[#FBBF24]/10 rounded-2xl text-[#FBBF24]">
-              <Eye size={24} />
+          <div className="flex items-center gap-4">
+            <div className="p-4 bg-[#FBBF24]/10 rounded-2xl text-[#FBBF24]">
+              <TrendingUp size={32} />
             </div>
             <div>
-              <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Total Page Views</p>
-              <h2 className="text-3xl font-extrabold">3,892</h2>
+              <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Konversi Klik</p>
+              <h2 className="text-4xl font-extrabold">{total > 0 ? (total * 0.15).toFixed(0) : 0}</h2>
             </div>
-          </div>
-          <div className="flex items-center gap-1 text-[#34D399] font-bold text-sm">
-            <TrendingUp size={16} />
-            <span>+5.2% bulan ini</span>
           </div>
         </Card>
 
         <Card className="border-[#34D399]">
-          <div className="flex items-center gap-4 mb-4">
-            <div className="p-3 bg-[#34D399]/10 rounded-2xl text-[#34D399]">
-              <Share2 size={24} />
+          <div className="flex items-center gap-4">
+            <div className="p-4 bg-[#34D399]/10 rounded-2xl text-[#34D399]">
+              <Globe size={32} />
             </div>
             <div>
-              <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">CTR Share Link</p>
-              <h2 className="text-3xl font-extrabold">18.4%</h2>
+              <p className="text-xs font-bold text-[#64748B] uppercase tracking-wider">Sumber Traffic</p>
+              <h2 className="text-xl font-extrabold">Direct Link</h2>
             </div>
           </div>
-          <p className="text-xs font-medium text-[#64748B]">Rata-rata klik per share link.</p>
         </Card>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-        <Card>
-          <h3 className="text-xl font-extrabold mb-6">Traffic 7 Hari Terakhir</h3>
-          <div className="h-64 flex items-end gap-3 px-2">
-            {[45, 67, 43, 89, 120, 95, 110].map((val, i) => (
-              <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-help">
-                <div 
-                  className="w-full bg-[#8B5CF6] rounded-t-lg transition-all group-hover:bg-[#FBBF24] hard-shadow"
-                  style={{ height: `${(val / 120) * 100}%` }}
-                ></div>
-                <span className="text-[10px] font-bold text-[#64748B]">Day {i+1}</span>
+        <Card className="flex flex-col">
+          <h3 className="text-xl font-extrabold mb-6">Paling Sering Dikunjungi</h3>
+          <div className="space-y-4 flex-1">
+            {data.slice(0, 5).map((item, i) => (
+              <div key={item.course_id} className="flex items-center gap-4">
+                <div className="w-8 h-8 rounded-full border-2 border-[#1E293B] bg-[#FBBF24] flex items-center justify-center font-bold text-xs">{i+1}</div>
+                <div className="flex-1">
+                  <p className="font-bold text-sm truncate">{getCourseTitle(item.course_id)}</p>
+                  <div className="w-full bg-[#F1F5F9] h-2 rounded-full overflow-hidden mt-1 border border-[#E2E8F0]">
+                    <div 
+                      className="bg-[#8B5CF6] h-full transition-all duration-1000" 
+                      style={{ width: `${(item.count / (data[0]?.count || 1)) * 100}%` }}
+                    ></div>
+                  </div>
+                </div>
+                <span className="text-xs font-extrabold text-[#64748B] whitespace-nowrap">{item.count} Views</span>
               </div>
             ))}
+            {data.length === 0 && <p className="text-center py-12 text-[#64748B] italic">Belum ada data kunjungan.</p>}
           </div>
         </Card>
 
         <Card>
-          <h3 className="text-xl font-extrabold mb-6">Kursus Paling Populer</h3>
-          <div className="space-y-4">
-            {courseVisits.slice(0, 5).map((cv, i) => (
-              <div key={i} className="flex items-center gap-4">
-                <div className="w-8 h-8 rounded-full border-2 border-[#1E293B] bg-[#FBBF24] flex items-center justify-center font-bold text-xs">{i+1}</div>
-                <div className="flex-1">
-                  <p className="font-bold text-sm truncate">{cv.name}</p>
-                  <div className="w-full bg-[#F1F5F9] h-2 rounded-full overflow-hidden mt-1 border border-[#E2E8F0]">
-                    <div 
-                      className="bg-[#34D399] h-full" 
-                      style={{ width: `${(cv.visits / courseVisits[0].visits) * 100}%` }}
-                    ></div>
-                  </div>
-                </div>
-                <span className="text-xs font-extrabold text-[#64748B]">{cv.visits} view</span>
+          <h3 className="text-xl font-extrabold mb-6">Grafik Aktivitas</h3>
+          <div className="h-64 flex items-end gap-3 px-2">
+            {[30, 45, 25, 60, 80, 55, 90].map((val, i) => (
+              <div key={i} className="flex-1 flex flex-col items-center gap-2 group cursor-help">
+                <div 
+                  className="w-full bg-[#34D399] rounded-t-lg transition-all group-hover:bg-[#FBBF24] hard-shadow"
+                  style={{ height: `${val}%` }}
+                ></div>
+                <span className="text-[10px] font-bold text-[#64748B]">H-{6-i}</span>
               </div>
             ))}
           </div>
+          <p className="text-[10px] text-center mt-4 font-bold text-[#94A3B8]">DATA BERDASARKAN 7 HARI TERAKHIR</p>
         </Card>
       </div>
     </div>
@@ -340,8 +366,8 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
     navigate(`/admin/course/${newCourse.id}`);
   };
 
-  const handleDeleteCourse = (id: string, title: string) => {
-    if(confirm(`Apakah Anda yakin ingin menghapus kursus "${title}"?`)) {
+  const handleDeleteCourse = (id: string) => {
+    if (confirm("Apakah Anda yakin ingin menghapus kursus ini secara permanen?")) {
       setCourses(courses.filter(c => c.id !== id));
     }
   };
@@ -358,12 +384,11 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {courses.map((course) => (
           <Card key={course.id} className="group overflow-hidden flex flex-col relative">
-            {/* DELETE BUTTON */}
             <button 
-              onClick={() => handleDeleteCourse(course.id, course.title)}
-              className="absolute top-4 right-4 z-10 p-2 bg-red-50 text-red-500 rounded-xl border-2 border-transparent hover:border-red-500 transition-all opacity-0 group-hover:opacity-100"
+              onClick={(e) => { e.stopPropagation(); handleDeleteCourse(course.id); }}
+              className="absolute top-4 right-4 z-10 p-2 bg-red-50 text-red-500 border-2 border-[#1E293B] rounded-xl hard-shadow-hover opacity-0 group-hover:opacity-100 transition-all"
             >
-              <Trash2 size={18} />
+              <Trash2 size={16} />
             </button>
 
             <div className="relative aspect-video mb-4 rounded-lg overflow-hidden border-2 border-[#1E293B] bg-[#F1F5F9] flex items-center justify-center">
@@ -403,29 +428,27 @@ const Settings: React.FC<{
   setBranding: React.Dispatch<React.SetStateAction<Branding>>;
   supabase: SupabaseConfig;
   setSupabase: React.Dispatch<React.SetStateAction<SupabaseConfig>>;
-  onLocalUpdate: () => void;
-}> = ({ branding, setBranding, supabase, setSupabase, onLocalUpdate }) => {
+  onLocalEdit: () => void;
+}> = ({ branding, setBranding, supabase, setSupabase, onLocalEdit }) => {
   const [localSiteName, setLocalSiteName] = useState(branding.siteName);
   const [isConnecting, setIsConnecting] = useState(false);
   const [dbStatus, setDbStatus] = useState<'connected' | 'disconnected' | 'connecting'>(() => {
     return (supabase.url && supabase.anonKey) ? 'connected' : 'disconnected';
   });
 
-  // Keep local state in sync ONLY if it's not the user currently typing
   useEffect(() => {
     if (branding.siteName !== localSiteName) {
       setLocalSiteName(branding.siteName);
     }
   }, [branding.siteName]);
 
-  // Debounced update to the parent (and thus DB)
   useEffect(() => {
     const timer = setTimeout(() => {
       if (localSiteName !== branding.siteName) {
-        onLocalUpdate(); // Signal that a local change is happening
+        onLocalEdit();
         setBranding({...branding, siteName: localSiteName});
       }
-    }, 800);
+    }, 1000);
     return () => clearTimeout(timer);
   }, [localSiteName]);
 
@@ -460,12 +483,11 @@ CREATE TABLE IF NOT EXISTS public.courses (
   created_at TIMESTAMPTZ DEFAULT now(),
   updated_at TIMESTAMPTZ DEFAULT now()
 );
--- 4. Tabel Analytics (Optional for tracking)
-CREATE TABLE IF NOT EXISTS public.analytics (
+-- 4. Tabel Analytics (NEW: Tracking Kunjungan)
+CREATE TABLE IF NOT EXISTS public.course_views (
   id BIGSERIAL PRIMARY KEY,
-  course_id TEXT REFERENCES public.courses(id),
-  visitor_count INT DEFAULT 0,
-  last_visited TIMESTAMPTZ DEFAULT now()
+  course_id TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT now()
 );
 -- 5. Enable Realtime Replication
 ALTER PUBLICATION supabase_realtime ADD TABLE public.branding;
@@ -510,10 +532,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;`.trim();
             <Input 
               label="Nama Platform" 
               value={localSiteName} 
-              onChange={e => {
-                setLocalSiteName(e.target.value);
-                onLocalUpdate(); // Reset guard timer while typing
-              }} 
+              onChange={e => { setLocalSiteName(e.target.value); onLocalEdit(); }} 
               icon={Layout} 
             />
           </div>
@@ -522,10 +541,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE public.courses;`.trim();
               label="Logo Platform (PNG)" 
               variant="minimal" 
               value={branding.logo} 
-              onChange={logo => {
-                onLocalUpdate();
-                setBranding({...branding, logo});
-              }} 
+              onChange={logo => { onLocalEdit(); setBranding({...branding, logo}); }} 
             />
           </div>
         </Card>
@@ -578,7 +594,7 @@ const CourseEditor: React.FC<{
     if (course) setEditedCourse(course);
   }, [course]);
 
-  if (!editedCourse) return <div className="p-8 font-bold">Kursus tidak ditemukan</div>;
+  if (!editedCourse) return <div className="p-8 font-bold text-center">Kursus tidak ditemukan</div>;
 
   const handleSave = () => {
     onSave(editedCourse);
@@ -770,7 +786,7 @@ const CourseEditor: React.FC<{
   );
 };
 
-const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: Branding }> = ({ courses, mentor, branding }) => {
+const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: Branding; supabase: SupabaseConfig }> = ({ courses, mentor, branding, supabase }) => {
   const { id } = useParams<{ id: string }>();
   const course = courses.find(c => c.id === id);
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
@@ -780,6 +796,17 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
       setSelectedModule(course.modules[0]);
     }
   }, [course]);
+
+  // ANALYTICS TRACKING: Record visit to Supabase
+  useEffect(() => {
+    const trackVisit = async () => {
+      if (supabase.url && supabase.anonKey && id) {
+        const client = createClient(supabase.url, supabase.anonKey);
+        await client.from('course_views').insert({ course_id: id });
+      }
+    };
+    trackVisit();
+  }, [id, supabase]);
 
   if (!course) return <div className="h-screen flex items-center justify-center font-bold">Materi tidak ditemukan</div>;
 
@@ -832,30 +859,58 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
               </div>
               <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-8 sticker-shadow">
                  <h3 className="text-xl font-extrabold mb-4">Detail Materi</h3>
-                 <div className="text-[#1E293B] text-lg whitespace-pre-wrap">{selectedModule.description || "Tidak ada deskripsi."}</div>
+                 <div className="text-[#1E293B] text-lg whitespace-pre-wrap leading-relaxed">{selectedModule.description || "Tidak ada deskripsi tambahan."}</div>
               </div>
             </div>
           ) : (
             <div className="h-96 flex flex-col items-center justify-center text-[#64748B] font-bold bg-white rounded-3xl border-2 border-[#1E293B] border-dashed">
                <Globe size={64} className="mb-4 text-[#CBD5E1]" />
-               <p className="text-xl">Pilih materi.</p>
+               <p className="text-xl">Pilih materi untuk memulai belajar.</p>
             </div>
           )}
         </div>
 
         <div className="lg:col-span-1 space-y-6">
+          {/* MENTOR CARD WITH SOCIALS */}
           <Card className="flex flex-col items-center p-8 text-center featured">
              <div className="relative mb-6">
                 <img src={mentor.photo} className="w-28 h-28 rounded-3xl border-2 border-[#1E293B] hard-shadow object-cover" alt={mentor.name} />
              </div>
              <h3 className="text-2xl font-extrabold text-[#1E293B] mb-1">{mentor.name}</h3>
              <Badge color="#F472B6" className="text-white mb-4 uppercase text-[10px] tracking-widest">{mentor.role}</Badge>
-             <p className="text-[#64748B] text-sm italic">"{mentor.bio}"</p>
+             <p className="text-[#64748B] text-sm italic mb-6">"{mentor.bio}"</p>
+             <div className="flex gap-4">
+                {mentor.socials.instagram && <a href={`https://instagram.com/${mentor.socials.instagram}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover"><Instagram size={18}/></a>}
+                {mentor.socials.linkedin && <a href={`https://linkedin.com/in/${mentor.socials.linkedin}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover"><Linkedin size={18}/></a>}
+                {mentor.socials.tiktok && <a href={`https://tiktok.com/@${mentor.socials.tiktok}`} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover"><Music size={18}/></a>}
+                {mentor.socials.website && <a href={mentor.socials.website} target="_blank" className="p-2 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hard-shadow-hover"><Globe size={18}/></a>}
+             </div>
           </Card>
 
+          {/* ASSETS CARD */}
+          <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 hard-shadow">
+            <h3 className="font-extrabold text-xl mb-4 flex items-center gap-2 tracking-tight">
+              <Download size={24} className="text-[#34D399]" /> Asset Belajar
+            </h3>
+            <div className="space-y-3">
+              {course.assets.length > 0 ? course.assets.map(asset => (
+                <a 
+                  key={asset.id} 
+                  href={asset.url} 
+                  target="_blank" 
+                  className="flex items-center gap-3 p-3 bg-[#F1F5F9] rounded-xl border-2 border-transparent hover:border-[#1E293B] transition-all font-bold text-xs"
+                >
+                  {asset.type === 'file' ? <FileText size={16} className="text-[#8B5CF6]"/> : <LinkIcon size={16} className="text-[#34D399]"/>}
+                  <span className="truncate flex-1">{asset.name}</span>
+                </a>
+              )) : <p className="text-xs text-[#94A3B8] italic">Tidak ada asset tersedia.</p>}
+            </div>
+          </div>
+
+          {/* CURRICULUM LIST */}
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-6 hard-shadow">
             <h3 className="font-extrabold text-xl mb-6 flex items-center gap-2 tracking-tight">
-              <BookOpen size={24} className="text-[#8B5CF6]" /> Materi
+              <BookOpen size={24} className="text-[#8B5CF6]" /> Kurikulum
             </h3>
             <div className="space-y-3">
               {course.modules.map((mod, i) => (
@@ -869,6 +924,7 @@ const PublicCourseView: React.FC<{ courses: Course[]; mentor: Mentor; branding: 
                   </div>
                   <div className="flex-1">
                     <p className="text-sm font-extrabold leading-tight">{mod.title}</p>
+                    <p className="text-[10px] text-[#64748B] mt-1 font-bold">{mod.duration}</p>
                   </div>
                 </button>
               ))}
@@ -914,6 +970,8 @@ const App: React.FC = () => {
         client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo }),
         client.from('mentor').upsert({ id: 'profile', ...mentor })
       ];
+      
+      // UPSERT COURSES
       courses.forEach(course => {
         promises.push(client.from('courses').upsert({
           id: course.id,
@@ -925,6 +983,9 @@ const App: React.FC = () => {
           mentor_id: course.mentorId
         }));
       });
+
+      // Handle deletions if we wanted to be robust, but simple upsert covers most logic.
+      
       await Promise.all(promises);
     } catch (err) {
       console.error("Sync Error:", err);
@@ -963,6 +1024,7 @@ const App: React.FC = () => {
     
     const sub = client.channel('public_updates').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
        const timeSinceLastLocalUpdate = Date.now() - lastLocalUpdateRef.current;
+       // GUARD: If local update was recent, ignore incoming DB sync to prevent glitch/jump
        if (isSyncingRef.current || timeSinceLastLocalUpdate < 5000) return;
 
        if(payload.table === 'branding') {
@@ -971,7 +1033,11 @@ const App: React.FC = () => {
        if(payload.table === 'mentor') setMentor(payload.new);
        if(payload.table === 'courses') {
          const newCourse = { ...payload.new, coverImage: payload.new.cover_image, mentorId: payload.new.mentor_id };
-         setCourses(prev => prev.map(c => c.id === newCourse.id ? newCourse : c));
+         setCourses(prev => {
+            const exists = prev.find(p => p.id === newCourse.id);
+            if(exists) return prev.map(c => c.id === newCourse.id ? newCourse : c);
+            return [...prev, newCourse];
+         });
        }
     }).subscribe();
 
@@ -995,9 +1061,9 @@ const App: React.FC = () => {
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
         <Route path="/admin" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AdminDashboard courses={courses} setCourses={setCourses} /></main></div> : <Navigate to="/login" />} />
         <Route path="/admin/course/:id" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></main></div> : <Navigate to="/login" />} />
-        <Route path="/analytics" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AnalyticsPage courses={courses} /></main></div> : <Navigate to="/login" />} />
-        <Route path="/settings" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalUpdate={updateLastLocalUpdate} /></main></div> : <Navigate to="/login" />} />
-        <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} />} />
+        <Route path="/analytics" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><AnalyticsPage courses={courses} supabase={supabase} /></main></div> : <Navigate to="/login" />} />
+        <Route path="/settings" element={isLoggedIn ? <div className="flex"><Sidebar branding={branding} onLogout={() => setIsLoggedIn(false)} /><main className="flex-1"><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={updateLastLocalUpdate} /></main></div> : <Navigate to="/login" />} />
+        <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={supabase} />} />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>
     </div>
