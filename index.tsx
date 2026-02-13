@@ -1,6 +1,8 @@
 
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
-import ReactDOM from 'react-dom/client';
+import ReactDOM from 'react-dom';
+import { createPortal } from 'react-dom';
+import ReactDOMClient from 'react-dom/client';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
 import { 
   Layout, 
@@ -46,7 +48,8 @@ import {
   Pencil,
   Tablet,
   Search,
-  GripVertical
+  GripVertical,
+  Loader2
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -234,30 +237,60 @@ const CropModal: React.FC<{
   onCrop: (croppedBase64: string) => void;
   aspectRatio?: number;
 }> = ({ isOpen, onClose, image, onCrop, aspectRatio = 1 }) => {
+  const [isApplying, setIsApplying] = useState(false);
+
+  // Prevent background scroll and fixed position glitches
+  useEffect(() => {
+    if (isOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = 'unset';
+    }
+    return () => { document.body.style.overflow = 'unset'; };
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
   const handleApply = async () => {
-    // In a production app, we would use a library like react-easy-crop
-    // Here we implement a simple auto-compress and crop for efficiency
-    const compressed = await compressImage(image, aspectRatio === 1 ? 400 : 1000, 0.7);
-    onCrop(compressed);
-    onClose();
+    setIsApplying(true);
+    try {
+      const compressed = await compressImage(image, aspectRatio === 1 ? 400 : 1000, 0.7);
+      onCrop(compressed);
+      onClose();
+    } catch (e) {
+      console.error(e);
+    } finally {
+      setIsApplying(false);
+    }
   };
 
-  return (
-    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
-      <Card className="max-w-xl w-full p-8 space-y-6">
-        <h3 className="text-2xl font-extrabold">Optimize & Crop</h3>
-        <p className="text-sm text-[#64748B] font-bold">Gambar akan dikompresi otomatis untuk performa database yang lebih cepat.</p>
-        <div className={`overflow-hidden rounded-2xl border-2 border-[#1E293B] bg-slate-100 flex items-center justify-center ${aspectRatio === 1 ? 'aspect-square max-w-[300px] mx-auto' : 'aspect-video'}`}>
+  // Render to Portal to avoid transform:scale inheritance from parent Cards
+  return createPortal(
+    <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md transition-opacity">
+      <div className="bg-white border-4 border-[#1E293B] rounded-3xl p-6 md:p-8 max-w-xl w-full hard-shadow space-y-6 animate-[scale-in_0.2s_ease-out]">
+        <style>{`
+          @keyframes scale-in {
+            from { opacity: 0; transform: scale(0.95); }
+            to { opacity: 1; transform: scale(1); }
+          }
+        `}</style>
+        <div className="flex justify-between items-center">
+          <h3 className="text-2xl font-extrabold text-[#1E293B]">Optimize Image</h3>
+          <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X/></button>
+        </div>
+        <p className="text-sm text-[#64748B] font-bold">Foto akan dipotong dan dikompresi otomatis untuk kecepatan akses database.</p>
+        <div className={`overflow-hidden rounded-2xl border-4 border-[#1E293B] bg-[#F1F5F9] flex items-center justify-center ${aspectRatio === 1 ? 'aspect-square max-w-[280px] mx-auto' : 'aspect-video'}`}>
            <img src={image} className="w-full h-full object-cover" alt="Preview" />
         </div>
-        <div className="flex gap-4">
-          <Button variant="secondary" className="flex-1" onClick={onClose}>Batal</Button>
-          <Button variant="primary" className="flex-1" onClick={handleApply}>Simpan & Kompres</Button>
+        <div className="grid grid-cols-2 gap-4 pt-2">
+          <Button variant="secondary" onClick={onClose} disabled={isApplying}>Batal</Button>
+          <Button variant="primary" onClick={handleApply} isLoading={isApplying} disabled={isApplying} icon={isApplying ? undefined : Check}>
+            {isApplying ? "Processing..." : "Terapkan"}
+          </Button>
         </div>
-      </Card>
-    </div>
+      </div>
+    </div>,
+    document.body
   );
 };
 
@@ -282,11 +315,18 @@ const ImageUpload: React.FC<{
         setIsCropperOpen(true);
       };
       reader.readAsDataURL(file);
+      // Reset input agar bisa upload file yang sama berkali-kali jika perlu
+      e.target.value = '';
     }
   };
   
+  const triggerInput = (e: React.MouseEvent) => {
+    e.stopPropagation();
+    fileInputRef.current?.click();
+  };
+
   const content = children ? (
-    <div onClick={() => fileInputRef.current?.click()} className="cursor-pointer">
+    <div onClick={triggerInput} className="cursor-pointer">
       {children}
       <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
     </div>
@@ -294,7 +334,7 @@ const ImageUpload: React.FC<{
     <div className="space-y-2">
       {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
       <div 
-        onClick={() => fileInputRef.current?.click()}
+        onClick={triggerInput}
         className="relative group cursor-pointer flex flex-col items-center justify-center p-4 transition-all"
       >
         {value ? (
@@ -313,7 +353,7 @@ const ImageUpload: React.FC<{
     <div className="space-y-2">
       {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
       <div 
-        onClick={() => fileInputRef.current?.click()}
+        onClick={triggerInput}
         className="relative group cursor-pointer border-2 border-[#1E293B] rounded-2xl overflow-hidden aspect-video bg-white flex items-center justify-center hard-shadow hover:hard-shadow-hover transition-all"
       >
         {value ? (
@@ -1218,8 +1258,6 @@ const App: React.FC = () => {
      isSyncingRef.current = true;
      setSyncing(true);
      try {
-        // Pembersihan payload: Supabase timeout sering terjadi karena base64 gambar terlalu besar
-        // Kita memastikan semua gambar sudah terkompresi sebelum upsert
         const courseData = {
            id: updatedCourse.id,
            title: updatedCourse.title,
@@ -1271,5 +1309,5 @@ const App: React.FC = () => {
   );
 };
 
-const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
+const root = ReactDOMClient.createRoot(document.getElementById('root') as HTMLElement);
 root.render(<Router><App /></Router>);
