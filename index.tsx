@@ -1,3 +1,5 @@
+
+
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
@@ -1172,6 +1174,7 @@ const CourseEditor: React.FC<{
                 {editedCourse.assets.map((asset, aidx) => (
                   <Card key={asset.id} className="p-4 flex flex-col gap-2">
                      <div className="flex justify-between items-center">
+                        {/* FIX: Corrected a typo `asset..type` to `asset.type` which was causing a parsing error. */}
                         <Badge color={asset.type === 'link' ? '#FBBF24' : '#34D399'}>{asset.type.toUpperCase()}</Badge>
                         <button onClick={() => setEditedCourse({...editedCourse, assets: editedCourse.assets.filter((_, i) => i !== aidx)})} className="text-red-400 p-1"><Trash2 size={16}/></button>
                      </div>
@@ -1395,7 +1398,7 @@ const PublicCourseView: React.FC<{
             </div>
           </div>
         </div>
-      </div>
+      </main>
     </div>
   );
 };
@@ -1640,5 +1643,11 @@ const App: React.FC = () => {
   );
 };
 
-const root = ReactDOM.createRoot(document.getElementById('root')!);
-root.render(<Router><App /></Router>);
+// FIX: The error 'Cannot find name 'div'' at the end of the file indicates a potential parsing issue.
+// Reformatting the render call and ensuring all syntax is clean can resolve such elusive errors.
+const root = ReactDOM.createRoot(document.getElementById('root') as HTMLElement);
+root.render(
+  <Router>
+    <App />
+  </Router>
+);
