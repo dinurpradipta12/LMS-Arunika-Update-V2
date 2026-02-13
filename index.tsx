@@ -74,6 +74,7 @@ const defaultBranding: Branding = {
   siteName: 'Nama Platform Anda'
 };
 
+// Default Mentor now strictly uses ID 'profile'
 const defaultMentor: Mentor = {
   id: 'profile',
   name: '',
@@ -921,21 +922,21 @@ const CourseEditor: React.FC<{
   const course = courses.find(c => c.id === id);
   const [editedCourse, setEditedCourse] = useState<Course | null>(null);
   
-  // Initialize Local Mentor State to prevent glitches when typing
+  // Initialize Local Mentor State
   const [localMentor, setLocalMentor] = useState<Mentor>(mentor);
   
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Sync prop mentor to localMentor ONLY when initializing or if we are not editing
-  // This effectively ignores upstream updates while the user is working on this page, preventing "bounce"
+  // Sync prop mentor to localMentor freely since auto-sync is disabled
+  // This allows Realtime updates from other admins to show up unless we are actively typing
+  // Since we rely on manual Save, we can be more reactive here.
   useEffect(() => {
-    // We only update local mentor if the ID changes (e.g. data reloaded from scratch) 
-    // or if it's the first load. We do NOT sync on every keypress from App.
-    if (mentor && mentor.id !== localMentor.id) {
+    // Only update if there are actual data differences to avoid unnecessary re-renders
+    if (JSON.stringify(mentor) !== JSON.stringify(localMentor)) {
         setLocalMentor(mentor);
     }
-  }, [mentor.id]);
+  }, [mentor]);
 
   // Improved initialization logic for Course
   useEffect(() => {
@@ -1214,10 +1215,13 @@ const PublicCourseView: React.FC<{
     if (!client) return;
     
     const syncGlobalData = async () => {
-      const { data: b } = await client.from('branding').select('*').single();
+      const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
       if (b) setBranding({ siteName: b.site_name, logo: b.logo });
-      const { data: m } = await client.from('mentor').select('*').single();
+      
+      // Strict fetch for profile singleton
+      const { data: m } = await client.from('mentor').select('*').eq('id', 'profile').single();
       if (m) setMentor(m);
+      
       const { data: c } = await client.from('courses').select('*').eq('id', id).single();
       if (c) {
         const fullCourse: Course = { 
@@ -1227,7 +1231,6 @@ const PublicCourseView: React.FC<{
           assets: c.assets || [],
           modules: c.modules || []
         };
-        // Use functional state update with proper check to ensure new course is added
         setCourses((prev: Course[]) => {
           const exists = prev.find(p => p.id === id);
           if (exists) {
@@ -1463,9 +1466,10 @@ const App: React.FC = () => {
     updateLastLocalUpdate();
     
     try {
+      // Auto-sync removed for Mentor to prevent overwrite/bounce issues. 
+      // Synchronization is now handled by explicit Save actions and Realtime updates.
       const promises = [
         client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo }),
-        client.from('mentor').upsert({ id: 'profile', ...mentor })
       ];
       
       // REMOVED AUTO SYNC FOR COURSES TO PREVENT OVERWRITING EDIT STATE WITH STALE DATA
@@ -1480,12 +1484,12 @@ const App: React.FC = () => {
         isSyncingRef.current = false;
       }, 1000);
     }
-  }, [branding, mentor, supabase, updateLastLocalUpdate]);
+  }, [branding, supabase, updateLastLocalUpdate]);
 
   useEffect(() => {
     const timer = setTimeout(triggerForcedSync, 3000);
     return () => clearTimeout(timer);
-  }, [branding, mentor, triggerForcedSync]);
+  }, [branding, triggerForcedSync]);
 
   useEffect(() => {
     const client = getSupabaseClient(supabase);
@@ -1548,11 +1552,14 @@ const App: React.FC = () => {
 
   // UPDATED: Now accepts optional mentor data to force save it immediately
   const handleUpdateCourse = async (updatedCourse: Course, updatedMentor?: Mentor) => {
+     // Ensure Mentor ID is 'profile' for singleton consistency
+     const finalizedMentor = updatedMentor ? { ...updatedMentor, id: 'profile' } : undefined;
+
      // 1. Optimistic Update Local State
      setCourses(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
-     if (updatedMentor) {
-        setMentor(updatedMentor);
-        setStorageItem('mentor', updatedMentor);
+     if (finalizedMentor) {
+        setMentor(finalizedMentor);
+        setStorageItem('mentor', finalizedMentor);
      }
      
      // 2. Persist to LocalStorage immediately to prevent data loss on refresh
@@ -1578,8 +1585,10 @@ const App: React.FC = () => {
         }));
 
         // Save Mentor (if provided)
-        if (updatedMentor) {
-          promises.push(client.from('mentor').upsert({ id: 'profile', ...updatedMentor }));
+        if (finalizedMentor) {
+          // IMPORTANT: Spread 'finalizedMentor' FIRST, then overwrite ID to be absolutely sure
+          // although finalizedMentor already has it.
+          promises.push(client.from('mentor').upsert({ ...finalizedMentor, id: 'profile' }));
         }
 
         const results = await Promise.all(promises);
