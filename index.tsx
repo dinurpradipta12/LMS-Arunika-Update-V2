@@ -912,7 +912,7 @@ END $$;`.trim();
 
 const CourseEditor: React.FC<{ 
   courses: Course[]; 
-  onSave: (c: Course) => Promise<void>; 
+  onSave: (c: Course, m: Mentor) => Promise<void>; 
   mentor: Mentor; 
   setMentor: React.Dispatch<React.SetStateAction<Mentor>>;
   onLocalEdit: () => void;
@@ -920,15 +920,26 @@ const CourseEditor: React.FC<{
   const { id } = useParams<{ id: string }>();
   const course = courses.find(c => c.id === id);
   const [editedCourse, setEditedCourse] = useState<Course | null>(null);
+  
+  // Initialize Local Mentor State to prevent glitches when typing
+  const [localMentor, setLocalMentor] = useState<Mentor>(mentor);
+  
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Improved initialization logic:
-  // Only update editedCourse if the ID changes to prevent overwriting user's local edits
-  // with background sync data while they are typing or uploading.
+  // Sync prop mentor to localMentor ONLY when initializing or if we are not editing
+  // This effectively ignores upstream updates while the user is working on this page, preventing "bounce"
+  useEffect(() => {
+    // We only update local mentor if the ID changes (e.g. data reloaded from scratch) 
+    // or if it's the first load. We do NOT sync on every keypress from App.
+    if (mentor && mentor.id !== localMentor.id) {
+        setLocalMentor(mentor);
+    }
+  }, [mentor.id]);
+
+  // Improved initialization logic for Course
   useEffect(() => {
     if (course) {
-      // If we don't have an edited course yet, or if the ID has changed (user navigated)
       if (!editedCourse || editedCourse.id !== course.id) {
         setEditedCourse({
           ...course,
@@ -944,8 +955,13 @@ const CourseEditor: React.FC<{
   const handleSave = async () => {
     setIsSaving(true);
     try {
-      await onSave(editedCourse);
-      alert('Konten kursus berhasil disimpan ke database!');
+      // Pass BOTH course and localMentor to be saved immediately
+      await onSave(editedCourse, localMentor);
+      
+      // Update the upstream state to match our local state
+      setMentor(localMentor);
+      
+      alert('Konten kursus dan profil mentor berhasil disimpan ke database!');
     } catch (e) {
       console.error(e);
       alert('Gagal menyimpan.');
@@ -1014,7 +1030,7 @@ const CourseEditor: React.FC<{
   };
 
   // Default Geometric Person Avatar for Mentor
-  const defaultPhoto = `https://api.dicebear.com/7.x/avataaars/svg?seed=${mentor.name || 'Felix'}`;
+  const defaultPhoto = `https://api.dicebear.com/7.x/avataaars/svg?seed=${localMentor.name || 'Felix'}`;
 
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24 space-y-8">
@@ -1093,7 +1109,7 @@ const CourseEditor: React.FC<{
                 <div className="relative">
                     <div className="w-32 h-32 rounded-full border-2 border-[#1E293B] overflow-hidden hard-shadow bg-[#F1F5F9]">
                         <img 
-                            src={mentor.photo || defaultPhoto} 
+                            src={localMentor.photo || defaultPhoto} 
                             className="w-full h-full object-cover" 
                             alt="Mentor" 
                         />
@@ -1101,9 +1117,9 @@ const CourseEditor: React.FC<{
                     
                     {/* Edit Button */}
                     <div className="absolute -bottom-2 -right-2 z-10">
-                         <ImageUpload value={mentor.photo} onChange={photo => {
+                         <ImageUpload value={localMentor.photo} onChange={photo => {
                             onLocalEdit();
-                            setMentor({...mentor, photo});
+                            setLocalMentor({...localMentor, photo});
                          }}>
                             <div className="p-2.5 bg-[#FBBF24] text-[#1E293B] rounded-full border-2 border-[#1E293B] cursor-pointer hover:scale-110 hover:rotate-12 transition-transform shadow-sm">
                                 <Pencil size={16} strokeWidth={2.5} />
@@ -1112,12 +1128,12 @@ const CourseEditor: React.FC<{
                     </div>
 
                     {/* Delete Button */}
-                    {mentor.photo && (
+                    {localMentor.photo && (
                         <button 
                             onClick={() => {
                                 if(confirm("Hapus foto mentor?")) {
                                     onLocalEdit();
-                                    setMentor({...mentor, photo: ''});
+                                    setLocalMentor({...localMentor, photo: ''});
                                 }
                             }}
                             className="absolute -top-2 -right-2 z-10 p-2.5 bg-[#F472B6] text-white rounded-full border-2 border-[#1E293B] cursor-pointer hover:scale-110 hover:-rotate-12 transition-transform shadow-sm"
@@ -1129,14 +1145,14 @@ const CourseEditor: React.FC<{
                 <p className="text-[10px] text-[#64748B] font-extrabold uppercase tracking-widest">Foto Profil Mentor</p>
             </div>
             <div className="space-y-4">
-              <Input label="Nama Mentor" value={mentor.name} onChange={e => setMentor({...mentor, name: e.target.value})} />
-              <Input label="Role" value={mentor.role} onChange={e => setMentor({...mentor, role: e.target.value})} />
-              <Textarea label="Bio" value={mentor.bio} onChange={e => setMentor({...mentor, bio: e.target.value})} />
+              <Input label="Nama Mentor" value={localMentor.name} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, name: e.target.value}) }} />
+              <Input label="Role" value={localMentor.role} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, role: e.target.value}) }} />
+              <Textarea label="Bio" value={localMentor.bio} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, bio: e.target.value}) }} />
               <div className="grid grid-cols-1 gap-4">
-                <Input label="LinkedIn" value={mentor.socials.linkedin || ''} onChange={e => setMentor({...mentor, socials: {...mentor.socials, linkedin: e.target.value}})} icon={Linkedin} />
-                <Input label="TikTok" value={mentor.socials.tiktok || ''} onChange={e => setMentor({...mentor, socials: {...mentor.socials, tiktok: e.target.value}})} icon={TiktokIcon} />
-                <Input label="Instagram" value={mentor.socials.instagram || ''} onChange={e => setMentor({...mentor, socials: {...mentor.socials, instagram: e.target.value}})} icon={Instagram} />
-                <Input label="Website" value={mentor.socials.website || ''} onChange={e => setMentor({...mentor, socials: {...mentor.socials, website: e.target.value}})} icon={ExternalLink} />
+                <Input label="LinkedIn" value={localMentor.socials.linkedin || ''} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, socials: {...localMentor.socials, linkedin: e.target.value}}) }} icon={Linkedin} />
+                <Input label="TikTok" value={localMentor.socials.tiktok || ''} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, socials: {...localMentor.socials, tiktok: e.target.value}}) }} icon={TiktokIcon} />
+                <Input label="Instagram" value={localMentor.socials.instagram || ''} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, socials: {...localMentor.socials, instagram: e.target.value}}) }} icon={Instagram} />
+                <Input label="Website" value={localMentor.socials.website || ''} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, socials: {...localMentor.socials, website: e.target.value}}) }} icon={ExternalLink} />
               </div>
             </div>
           </Card>
@@ -1530,20 +1546,27 @@ const App: React.FC = () => {
     return () => { client.removeChannel(sub); };
   }, [supabase]);
 
-  const handleUpdateCourse = async (updatedCourse: Course) => {
+  // UPDATED: Now accepts optional mentor data to force save it immediately
+  const handleUpdateCourse = async (updatedCourse: Course, updatedMentor?: Mentor) => {
      // 1. Optimistic Update Local State
      setCourses(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
+     if (updatedMentor) {
+        setMentor(updatedMentor);
+        setStorageItem('mentor', updatedMentor);
+     }
      
      // 2. Persist to LocalStorage immediately to prevent data loss on refresh
-     // Use the updated course directly here
      const currentCourses = getStorageItem('courses', []);
      const newCourses = currentCourses.map((c: Course) => c.id === updatedCourse.id ? updatedCourse : c);
      setStorageItem('courses', newCourses);
 
-     // 3. Direct DB Write
+     // 3. Direct DB Write (Batched if mentor exists)
      const client = getSupabaseClient(supabase);
      if (client) {
-        const { error } = await client.from('courses').upsert({
+        const promises = [];
+        
+        // Save Course
+        promises.push(client.from('courses').upsert({
            id: updatedCourse.id,
            title: updatedCourse.title,
            description: updatedCourse.description,
@@ -1552,7 +1575,15 @@ const App: React.FC = () => {
            assets: updatedCourse.assets,
            mentor_id: updatedCourse.mentorId,
            updated_at: new Date().toISOString()
-        });
+        }));
+
+        // Save Mentor (if provided)
+        if (updatedMentor) {
+          promises.push(client.from('mentor').upsert({ id: 'profile', ...updatedMentor }));
+        }
+
+        const results = await Promise.all(promises);
+        const error = results.find(r => r.error)?.error;
         
         if (error) {
            console.error("DB Error:", error);
