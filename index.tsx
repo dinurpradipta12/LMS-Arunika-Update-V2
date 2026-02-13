@@ -49,7 +49,14 @@ import {
   Tablet,
   Search,
   GripVertical,
-  Loader2
+  Loader2,
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
+  ListOrdered,
+  MoveVertical,
+  Clock,
+  LayoutGrid
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -264,7 +271,6 @@ const CropModal: React.FC<{
     }
   };
 
-  // Render to Portal to avoid transform:scale inheritance from parent Cards
   return createPortal(
     <div className="fixed inset-0 z-[9999] flex items-center justify-center p-4 bg-black/60 backdrop-blur-md transition-opacity">
       <div className="bg-white border-4 border-[#1E293B] rounded-3xl p-6 md:p-8 max-w-xl w-full hard-shadow space-y-6 animate-[scale-in_0.2s_ease-out]">
@@ -315,7 +321,6 @@ const ImageUpload: React.FC<{
         setIsCropperOpen(true);
       };
       reader.readAsDataURL(file);
-      // Reset input agar bisa upload file yang sama berkali-kali jika perlu
       e.target.value = '';
     }
   };
@@ -393,19 +398,34 @@ const AdvancedEditor: React.FC<{ value: string; onChange: (v: string) => void; l
     <div className="space-y-2">
       <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>
       <div className="border-2 border-[#1E293B] rounded-2xl overflow-hidden bg-white hard-shadow focus-within:hard-shadow-hover transition-all">
-        <div className="bg-[#F1F5F9] border-b-2 border-[#1E293B] p-2 flex gap-2">
-          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><Bold size={14}/></div>
-          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><Italic size={14}/></div>
-          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><List size={14}/></div>
-          <div className="p-1.5 hover:bg-white rounded-lg transition-colors border border-transparent hover:border-[#1E293B] cursor-pointer"><Type size={14}/></div>
-          <div className="flex-1"></div>
-          <Badge className="text-[10px]" color="#8B5CF6"><span className="text-white">PRO EDITOR</span></Badge>
+        <div className="bg-[#F8FAFC] border-b-2 border-[#1E293B] p-2 flex items-center flex-wrap gap-1">
+          <div className="flex gap-1 border-r-2 border-[#E2E8F0] pr-2 mr-1">
+            <button className="p-1.5 hover:bg-white rounded-lg transition-all border border-transparent hover:border-[#1E293B]"><Bold size={14}/></button>
+            <button className="p-1.5 hover:bg-white rounded-lg transition-all border border-transparent hover:border-[#1E293B]"><Italic size={14}/></button>
+            <button className="p-1.5 hover:bg-white rounded-lg transition-all border border-transparent hover:border-[#1E293B]"><Type size={14}/></button>
+          </div>
+          <div className="flex gap-1 border-r-2 border-[#E2E8F0] pr-2 mr-1">
+            <button className="p-1.5 hover:bg-white rounded-lg transition-all border border-transparent hover:border-[#1E293B]"><List size={14}/></button>
+            <button className="p-1.5 hover:bg-white rounded-lg transition-all border border-transparent hover:border-[#1E293B]"><ListOrdered size={14}/></button>
+          </div>
+          <div className="flex gap-1 border-r-2 border-[#E2E8F0] pr-2 mr-1">
+            <button className="p-1.5 hover:bg-white rounded-lg transition-all border border-transparent hover:border-[#1E293B]"><AlignLeft size={14}/></button>
+            <button className="p-1.5 hover:bg-white rounded-lg transition-all border border-transparent hover:border-[#1E293B]"><AlignCenter size={14}/></button>
+            <button className="p-1.5 hover:bg-white rounded-lg transition-all border border-transparent hover:border-[#1E293B]"><AlignRight size={14}/></button>
+          </div>
+          <div className="flex gap-1">
+            <button className="p-1.5 hover:bg-white rounded-lg transition-all border border-transparent hover:border-[#1E293B]"><MoveVertical size={14}/></button>
+            <button className="p-1.5 hover:bg-white rounded-lg transition-all border border-transparent hover:border-[#1E293B]"><LinkIcon size={14}/></button>
+          </div>
+          <div className="ml-auto">
+            <Badge className="text-[8px]" color="#8B5CF6"><span className="text-white">PRO EDITOR</span></Badge>
+          </div>
         </div>
         <textarea 
           value={value} 
           onChange={e => onChange(e.target.value)}
           placeholder={placeholder}
-          className="w-full p-4 min-h-[120px] outline-none font-medium text-[#1E293B] bg-transparent resize-none"
+          className="w-full p-4 min-h-[160px] outline-none font-medium text-[#1E293B] bg-transparent resize-none leading-relaxed text-sm"
         />
       </div>
     </div>
@@ -852,7 +872,6 @@ const CourseEditor: React.FC<{
   const [localMentor, setLocalMentor] = useState<Mentor>(mentor);
   const [isSaving, setIsSaving] = useState(false);
   
-  // Drag and Drop States
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   useEffect(() => {
@@ -906,7 +925,6 @@ const CourseEditor: React.FC<{
     });
   };
 
-  // Drag and Drop Handlers
   const handleDragStart = (idx: number) => {
     setDraggedIndex(idx);
   };
@@ -1115,67 +1133,106 @@ const PublicCourseView: React.FC<{
       </header>
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
-          <Card>
-            <h1 className="text-2xl font-extrabold">{course.title}</h1>
-            <p className="text-[#64748B] mt-2">{course.description}</p>
+          <Card className="flex flex-col gap-1">
+            <h1 className="text-3xl font-extrabold text-[#1E293B]">{course.title}</h1>
+            {/* Deskripsi pada judul kelas dihilangkan sesuai permintaan */}
           </Card>
           {selectedModule && (
             <div className="space-y-6">
-              <Card className="p-0 overflow-hidden">
-                {selectedModule.type === 'video' ? (
-                  <iframe className="w-full aspect-video" src={`https://www.youtube.com/embed/${selectedModule.content.split('v=')[1]?.split('&')[0] || selectedModule.content.split('/').pop()}`} frameBorder="0" allowFullScreen />
-                ) : (
-                  <div className="p-8 prose max-w-none whitespace-pre-wrap font-medium leading-relaxed">{selectedModule.content}</div>
-                )}
-              </Card>
-              {selectedModule.description && (
-                <Card className="border-l-4 border-l-[#8B5CF6]">
-                  <h4 className="font-extrabold text-sm uppercase tracking-wide mb-2">Penjelasan:</h4>
-                  <p className="text-[#1E293B] text-sm">{selectedModule.description}</p>
+              <div className="space-y-4">
+                <Card className="p-0 overflow-hidden border-4 border-[#1E293B]">
+                  {selectedModule.type === 'video' ? (
+                    <iframe className="w-full aspect-video" src={`https://www.youtube.com/embed/${selectedModule.content.split('v=')[1]?.split('&')[0] || selectedModule.content.split('/').pop()}`} frameBorder="0" allowFullScreen />
+                  ) : (
+                    <div className="p-8 prose max-w-none whitespace-pre-wrap font-medium leading-relaxed bg-white">{selectedModule.content}</div>
+                  )}
                 </Card>
-              )}
+                {selectedModule.description && (
+                  <Card className="bg-[#F8FAFC] border-2 border-[#1E293B]">
+                    <h4 className="font-extrabold text-sm uppercase tracking-widest text-[#8B5CF6] mb-3 flex items-center gap-2">
+                       <FileText size={16}/> Deskripsi Materi
+                    </h4>
+                    <p className="text-[#1E293B] text-base font-medium leading-relaxed">{selectedModule.description}</p>
+                  </Card>
+                )}
+              </div>
             </div>
           )}
-          
+        </div>
+
+        <div className="lg:col-span-1 space-y-6">
+          {/* Card Mentor */}
+          <Card className="text-center">
+            <img src={initialMentor.photo} className="w-24 h-24 mx-auto rounded-full border-4 border-[#1E293B] mb-4 object-cover hard-shadow" />
+            <h3 className="font-bold text-lg">{initialMentor.name}</h3>
+            <p className="text-xs text-[#8B5CF6] font-extrabold uppercase tracking-widest mb-4">{initialMentor.role}</p>
+            <p className="text-xs text-[#64748B] line-clamp-3 mb-6 font-medium">{initialMentor.bio}</p>
+            
+            <div className="space-y-3">
+              {initialMentor.socials?.website && (
+                <a href={initialMentor.socials.website} target="_blank" className="block w-full">
+                  <Button variant="primary" className="w-full text-xs h-11" icon={LayoutGrid}>
+                    Template lainnya
+                  </Button>
+                </a>
+              )}
+              <div className="flex items-center justify-center gap-3 pt-2">
+                 {initialMentor.socials?.instagram && <a href={`https://instagram.com/${initialMentor.socials.instagram}`} className="p-2.5 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#E1306C] hover:text-white transition-all hard-shadow-active"><Instagram size={18}/></a>}
+                 {initialMentor.socials?.linkedin && <a href={`https://linkedin.com/in/${initialMentor.socials.linkedin}`} className="p-2.5 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-[#0077B5] hover:text-white transition-all hard-shadow-active"><Linkedin size={18}/></a>}
+                 {initialMentor.socials?.tiktok && <a href={`https://tiktok.com/@${initialMentor.socials.tiktok}`} className="p-2.5 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-black hover:text-white transition-all hard-shadow-active"><TiktokIcon size={18}/></a>}
+              </div>
+            </div>
+          </Card>
+
+          {/* Kurikulum */}
+          <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-5 hard-shadow space-y-3">
+            <h4 className="font-extrabold mb-4 flex items-center gap-2 text-[#1E293B] uppercase tracking-widest text-xs">
+              <List size={18} className="text-[#8B5CF6]"/> Daftar Materi
+            </h4>
+            <div className="space-y-2">
+              {course.modules.map((m, i) => (
+                <button 
+                  key={m.id} 
+                  onClick={() => setSelectedModule(m)} 
+                  className={`w-full text-left p-3 rounded-2xl border-2 transition-all group ${selectedModule?.id === m.id ? 'bg-[#FBBF24] border-[#1E293B] hard-shadow-active' : 'border-transparent hover:bg-[#F8FAFC] hover:border-[#1E293B]'}`}
+                >
+                  <div className="flex items-center gap-3">
+                    <span className={`w-8 h-8 rounded-full border-2 border-[#1E293B] flex-shrink-0 flex items-center justify-center text-xs font-black transition-colors ${selectedModule?.id === m.id ? 'bg-white' : 'bg-[#F1F5F9] group-hover:bg-white'}`}>
+                      {i+1}
+                    </span>
+                    <div className="min-w-0">
+                      <p className="text-xs font-extrabold truncate text-[#1E293B]">{m.title}</p>
+                      {m.duration && (
+                        <p className="text-[10px] font-bold text-[#64748B] flex items-center gap-1 mt-0.5">
+                          <Clock size={10}/> {m.duration}
+                        </p>
+                      )}
+                    </div>
+                  </div>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          {/* Asset Pendukung dipindah ke bawah kurikulum */}
           {course.assets && course.assets.length > 0 && (
-            <div className="space-y-4 pt-6">
-               <h3 className="font-extrabold text-xl">Asset Pendukung</h3>
-               <div className="grid md:grid-cols-2 gap-4">
+            <div className="space-y-3">
+               <h4 className="font-extrabold flex items-center gap-2 text-[#1E293B] uppercase tracking-widest text-xs ml-2">
+                 <Download size={18} className="text-[#34D399]"/> Asset Pendukung
+               </h4>
+               <div className="space-y-2">
                  {course.assets.map(asset => (
-                   <a key={asset.id} href={asset.url} target="_blank" className="bg-white border-2 border-[#1E293B] p-4 rounded-xl hard-shadow-hover flex items-center justify-between group transition-all">
-                     <div className="flex items-center gap-3">
-                       <div className="bg-[#34D399] p-2 rounded-lg border border-[#1E293B]"><Download size={18} /></div>
-                       <span className="font-bold text-sm">{asset.name}</span>
+                   <a key={asset.id} href={asset.url} target="_blank" className="bg-white border-2 border-[#1E293B] p-3 rounded-2xl hard-shadow-hover flex items-center justify-between group transition-all">
+                     <div className="flex items-center gap-2 min-w-0">
+                       <div className="bg-[#34D399] p-1.5 rounded-lg border-2 border-[#1E293B]"><Download size={14} /></div>
+                       <span className="font-bold text-[11px] truncate">{asset.name}</span>
                      </div>
-                     <ExternalLink size={16} className="text-[#64748B]" />
+                     <ExternalLink size={12} className="text-[#64748B] flex-shrink-0" />
                    </a>
                  ))}
                </div>
             </div>
           )}
-        </div>
-        <div className="lg:col-span-1 space-y-6">
-          <Card className="text-center">
-            <img src={initialMentor.photo} className="w-24 h-24 mx-auto rounded-full border-2 border-[#1E293B] mb-4 object-cover" />
-            <h3 className="font-bold">{initialMentor.name}</h3>
-            <p className="text-xs text-[#64748B] mb-4">{initialMentor.role}</p>
-            <p className="text-xs text-[#64748B] line-clamp-3">{initialMentor.bio}</p>
-            <div className="flex items-center justify-center gap-3 mt-4">
-               {initialMentor.socials?.instagram && <a href={`https://instagram.com/${initialMentor.socials.instagram}`} className="p-2 bg-[#F1F5F9] rounded-lg hover:text-[#E1306C] transition-colors"><Instagram size={18}/></a>}
-               {initialMentor.socials?.linkedin && <a href={`https://linkedin.com/in/${initialMentor.socials.linkedin}`} className="p-2 bg-[#F1F5F9] rounded-lg hover:text-[#0077B5] transition-colors"><Linkedin size={18}/></a>}
-               {initialMentor.socials?.tiktok && <a href={`https://tiktok.com/@${initialMentor.socials.tiktok}`} className="p-2 bg-[#F1F5F9] rounded-lg hover:text-black transition-colors"><TiktokIcon size={18}/></a>}
-               {initialMentor.socials?.website && <a href={initialMentor.socials.website} className="p-2 bg-[#F1F5F9] rounded-lg hover:text-[#8B5CF6] transition-colors"><Globe size={18}/></a>}
-            </div>
-          </Card>
-          <div className="bg-white border-2 border-[#1E293B] rounded-2xl p-4 hard-shadow space-y-2">
-            <h4 className="font-extrabold mb-4 flex items-center gap-2"><List size={18} className="text-[#8B5CF6]"/> Kurikulum</h4>
-            {course.modules.map((m, i) => (
-              <button key={m.id} onClick={() => setSelectedModule(m)} className={`w-full text-left p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${selectedModule?.id === m.id ? 'bg-[#FBBF24] border-[#1E293B]' : 'border-transparent hover:bg-[#F1F5F9]'}`}>
-                <span className="w-6 h-6 rounded-full bg-white border border-[#1E293B] flex-shrink-0 flex items-center justify-center text-[10px] font-bold">{i+1}</span>
-                <span className="text-xs font-bold truncate">{m.title}</span>
-              </button>
-            ))}
-          </div>
         </div>
       </main>
     </div>
