@@ -41,7 +41,8 @@ import {
   Smartphone,
   Monitor,
   Navigation,
-  RotateCcw
+  RotateCcw,
+  Pencil
 } from 'lucide-react';
 
 // Custom TikTok SVG Icon
@@ -913,8 +914,9 @@ const CourseEditor: React.FC<{
   courses: Course[]; 
   onSave: (c: Course) => Promise<void>; 
   mentor: Mentor; 
-  setMentor: React.Dispatch<React.SetStateAction<Mentor>> 
-}> = ({ courses, onSave, mentor, setMentor }) => {
+  setMentor: React.Dispatch<React.SetStateAction<Mentor>>;
+  onLocalEdit: () => void;
+}> = ({ courses, onSave, mentor, setMentor, onLocalEdit }) => {
   const { id } = useParams<{ id: string }>();
   const course = courses.find(c => c.id === id);
   const [editedCourse, setEditedCourse] = useState<Course | null>(null);
@@ -1011,6 +1013,9 @@ const CourseEditor: React.FC<{
     fileInput.click();
   };
 
+  // Default Geometric Person Avatar for Mentor
+  const defaultPhoto = `https://api.dicebear.com/7.x/avataaars/svg?seed=${mentor.name || 'Felix'}`;
+
   return (
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24 space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
@@ -1085,11 +1090,43 @@ const CourseEditor: React.FC<{
           <Card className="space-y-6">
             <h3 className="text-xl font-bold flex items-center gap-2">Profil Mentor</h3>
             <div className="flex flex-col items-center gap-4">
-              <ImageUpload value={mentor.photo} onChange={photo => setMentor({...mentor, photo})}>
-                <div className="relative group">
-                  <img src={mentor.photo} className="w-24 h-24 rounded-full border-2 border-[#1E293B] object-cover hard-shadow group-hover:hard-shadow-hover transition-all" alt="Mentor" />
+                <div className="relative">
+                    <div className="w-32 h-32 rounded-full border-2 border-[#1E293B] overflow-hidden hard-shadow bg-[#F1F5F9]">
+                        <img 
+                            src={mentor.photo || defaultPhoto} 
+                            className="w-full h-full object-cover" 
+                            alt="Mentor" 
+                        />
+                    </div>
+                    
+                    {/* Edit Button */}
+                    <div className="absolute -bottom-2 -right-2 z-10">
+                         <ImageUpload value={mentor.photo} onChange={photo => {
+                            onLocalEdit();
+                            setMentor({...mentor, photo});
+                         }}>
+                            <div className="p-2.5 bg-[#FBBF24] text-[#1E293B] rounded-full border-2 border-[#1E293B] cursor-pointer hover:scale-110 hover:rotate-12 transition-transform shadow-sm">
+                                <Pencil size={16} strokeWidth={2.5} />
+                            </div>
+                         </ImageUpload>
+                    </div>
+
+                    {/* Delete Button */}
+                    {mentor.photo && (
+                        <button 
+                            onClick={() => {
+                                if(confirm("Hapus foto mentor?")) {
+                                    onLocalEdit();
+                                    setMentor({...mentor, photo: ''});
+                                }
+                            }}
+                            className="absolute -top-2 -right-2 z-10 p-2.5 bg-[#F472B6] text-white rounded-full border-2 border-[#1E293B] cursor-pointer hover:scale-110 hover:-rotate-12 transition-transform shadow-sm"
+                        >
+                            <Trash2 size={16} strokeWidth={2.5} />
+                        </button>
+                    )}
                 </div>
-              </ImageUpload>
+                <p className="text-[10px] text-[#64748B] font-extrabold uppercase tracking-widest">Foto Profil Mentor</p>
             </div>
             <div className="space-y-4">
               <Input label="Nama Mentor" value={mentor.name} onChange={e => setMentor({...mentor, name: e.target.value})} />
@@ -1541,7 +1578,7 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
         <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/course/:id" element={
