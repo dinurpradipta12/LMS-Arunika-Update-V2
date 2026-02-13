@@ -1133,27 +1133,26 @@ const PublicCourseView: React.FC<{
       </header>
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
-          <Card className="flex flex-col gap-1">
-            <h1 className="text-3xl font-extrabold text-[#1E293B]">{course.title}</h1>
-            {/* Deskripsi pada judul kelas dihilangkan sesuai permintaan */}
-          </Card>
+          <div className="flex flex-col gap-1 pb-2">
+            <h1 className="text-xl md:text-2xl font-extrabold text-[#1E293B]">{course.title}</h1>
+          </div>
           {selectedModule && (
             <div className="space-y-6">
-              <div className="space-y-4">
-                <Card className="p-0 overflow-hidden border-4 border-[#1E293B]">
+              <div className="space-y-2">
+                <div className="bg-white border-4 border-[#1E293B] rounded-2xl p-0 overflow-hidden sticker-shadow">
                   {selectedModule.type === 'video' ? (
                     <iframe className="w-full aspect-video" src={`https://www.youtube.com/embed/${selectedModule.content.split('v=')[1]?.split('&')[0] || selectedModule.content.split('/').pop()}`} frameBorder="0" allowFullScreen />
                   ) : (
                     <div className="p-8 prose max-w-none whitespace-pre-wrap font-medium leading-relaxed bg-white">{selectedModule.content}</div>
                   )}
-                </Card>
+                </div>
                 {selectedModule.description && (
-                  <Card className="bg-[#F8FAFC] border-2 border-[#1E293B]">
+                  <div className="bg-[#F8FAFC] border-2 border-[#1E293B] rounded-2xl p-6 sticker-shadow mt-4">
                     <h4 className="font-extrabold text-sm uppercase tracking-widest text-[#8B5CF6] mb-3 flex items-center gap-2">
                        <FileText size={16}/> Deskripsi Materi
                     </h4>
                     <p className="text-[#1E293B] text-base font-medium leading-relaxed">{selectedModule.description}</p>
-                  </Card>
+                  </div>
                 )}
               </div>
             </div>
@@ -1161,8 +1160,8 @@ const PublicCourseView: React.FC<{
         </div>
 
         <div className="lg:col-span-1 space-y-6">
-          {/* Card Mentor */}
-          <Card className="text-center">
+          {/* Card Mentor (Tanpa Animasi Hover) */}
+          <div className="bg-white border-2 border-[#1E293B] rounded-2xl p-6 sticker-shadow text-center">
             <img src={initialMentor.photo} className="w-24 h-24 mx-auto rounded-full border-4 border-[#1E293B] mb-4 object-cover hard-shadow" />
             <h3 className="font-bold text-lg">{initialMentor.name}</h3>
             <p className="text-xs text-[#8B5CF6] font-extrabold uppercase tracking-widest mb-4">{initialMentor.role}</p>
@@ -1171,7 +1170,7 @@ const PublicCourseView: React.FC<{
             <div className="space-y-3">
               {initialMentor.socials?.website && (
                 <a href={initialMentor.socials.website} target="_blank" className="block w-full">
-                  <Button variant="primary" className="w-full text-xs h-11" icon={LayoutGrid}>
+                  <Button variant="primary" className="w-full text-xs h-11">
                     Template lainnya
                   </Button>
                 </a>
@@ -1182,7 +1181,7 @@ const PublicCourseView: React.FC<{
                  {initialMentor.socials?.tiktok && <a href={`https://tiktok.com/@${initialMentor.socials.tiktok}`} className="p-2.5 bg-[#F1F5F9] border-2 border-[#1E293B] rounded-xl hover:bg-black hover:text-white transition-all hard-shadow-active"><TiktokIcon size={18}/></a>}
               </div>
             </div>
-          </Card>
+          </div>
 
           {/* Kurikulum */}
           <div className="bg-white border-2 border-[#1E293B] rounded-3xl p-5 hard-shadow space-y-3">
@@ -1214,7 +1213,7 @@ const PublicCourseView: React.FC<{
             </div>
           </div>
 
-          {/* Asset Pendukung dipindah ke bawah kurikulum */}
+          {/* Asset Pendukung */}
           {course.assets && course.assets.length > 0 && (
             <div className="space-y-3">
                <h4 className="font-extrabold flex items-center gap-2 text-[#1E293B] uppercase tracking-widest text-xs ml-2">
