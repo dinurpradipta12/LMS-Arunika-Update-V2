@@ -76,7 +76,50 @@ const getStorageItem = <T,>(key: string, defaultValue: T): T => {
 };
 
 const setStorageItem = (key: string, value: any) => {
-  localStorage.setItem(key, JSON.stringify(value));
+  try {
+    localStorage.setItem(key, JSON.stringify(value));
+  } catch (e: any) {
+    // Handle QuotaExceededError gracefully to prevent app crash
+    if (
+      e.name === 'QuotaExceededError' ||
+      e.name === 'NS_ERROR_DOM_QUOTA_REACHED' ||
+      e.code === 22 || 
+      e.code === 1014
+    ) {
+      console.warn(`Storage quota exceeded for key "${key}". Data will not be persisted locally.`);
+    } else {
+      console.error(`Error saving ${key} to localStorage:`, e);
+    }
+  }
+};
+
+// Singleton Supabase Client to prevent multiple instances warning
+let supabaseInstance: any = null;
+let lastSupabaseConfig: SupabaseConfig | null = null;
+
+const getSupabaseClient = (config: SupabaseConfig) => {
+  if (!config.url || !config.anonKey) return null;
+  
+  if (supabaseInstance && lastSupabaseConfig && 
+      lastSupabaseConfig.url === config.url && 
+      lastSupabaseConfig.anonKey === config.anonKey) {
+    return supabaseInstance;
+  }
+  
+  try {
+    supabaseInstance = createClient(config.url, config.anonKey, {
+      auth: {
+        persistSession: false, // Disable auth persistence to avoid GoTrueClient warnings in public view
+        autoRefreshToken: false,
+        detectSessionInUrl: false
+      }
+    });
+    lastSupabaseConfig = config;
+    return supabaseInstance;
+  } catch (e) {
+    console.error("Failed to create Supabase client", e);
+    return null;
+  }
 };
 
 // Simple Visitor ID for Unique Tracking
@@ -84,7 +127,7 @@ const getVisitorId = () => {
   let id = localStorage.getItem('arunika_visitor_id');
   if (!id) {
     id = `vis_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
-    localStorage.setItem('arunika_visitor_id', id);
+    setStorageItem('arunika_visitor_id', id);
   }
   return id;
 };
@@ -107,9 +150,9 @@ const RouteTracker: React.FC<{ supabase: SupabaseConfig }> = ({ supabase }) => {
     if (lastTrackedPath.current === location.pathname + location.search) return;
     
     const track = async () => {
-      if (!supabase.url || !supabase.anonKey) return;
+      const client = getSupabaseClient(supabase);
+      if (!client) return;
       
-      const client = createClient(supabase.url, supabase.anonKey);
       const searchParams = new URLSearchParams(location.search);
       const source = searchParams.get('ref') || searchParams.get('utm_source') || 'direct';
       
@@ -403,8 +446,8 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
   }, [events]);
 
   useEffect(() => {
-    if (!supabase.url || !supabase.anonKey) return;
-    const client = createClient(supabase.url, supabase.anonKey);
+    const client = getSupabaseClient(supabase);
+    if (!client) return;
     
     const fetchInitial = async () => {
       const { data } = await client.from('events').select('*').order('created_at', { ascending: false });
@@ -415,14 +458,14 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
 
     // Listen to Real-time events
     const channel = client.channel('analytics_realtime')
-      .on('postgres_changes', { event: 'INSERT', table: 'events', schema: 'public' }, (payload) => {
+      .on('postgres_changes', { event: 'INSERT', table: 'events', schema: 'public' }, (payload: any) => {
         // Optimized update: just add the new event to the list
         setEvents(prev => [payload.new, ...prev]);
       })
       .subscribe();
 
     return () => { client.removeChannel(channel); };
-  }, [supabase.url, supabase.anonKey]);
+  }, [supabase]);
 
   const getCourseTitle = (id: string) => {
     const course = courses.find(c => c.id === id);
@@ -989,8 +1032,8 @@ const PublicCourseView: React.FC<{
 
   // GLOBAL SYNC: Always try to fetch data if needed
   useEffect(() => {
-    if (!supabase.url || !supabase.anonKey) return;
-    const client = createClient(supabase.url, supabase.anonKey);
+    const client = getSupabaseClient(supabase);
+    if (!client) return;
     
     const syncGlobalData = async () => {
       const { data: b } = await client.from('branding').select('*').single();
@@ -1006,8 +1049,14 @@ const PublicCourseView: React.FC<{
           assets: c.assets || [],
           modules: c.modules || []
         };
-        // Use functional state update to prevent stale closures and data loss
-        setCourses((prev: Course[]) => prev.map(item => item.id === id ? fullCourse : item));
+        // Use functional state update with proper check to ensure new course is added
+        setCourses((prev: Course[]) => {
+          const exists = prev.find(p => p.id === id);
+          if (exists) {
+            return prev.map(item => item.id === id ? fullCourse : item);
+          }
+          return [...prev, fullCourse];
+        });
       }
     };
     syncGlobalData();
@@ -1044,7 +1093,7 @@ const PublicCourseView: React.FC<{
         <div className="lg:col-span-3 space-y-6">
           <div className="bg-white border-2 border-[#1E293B] p-4 md:p-6 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex-1">
-              <Badge color="#8B5CF6" className="text-white mb-2">Video Course</Badge>
+              <Badge color="#8B5CF6" className="text-white mb-2">Public Course</Badge>
               <h1 className="text-xl md:text-2xl font-extrabold text-[#1E293B] leading-tight">{course.title}</h1>
             </div>
           </div>
@@ -1191,14 +1240,14 @@ const App: React.FC = () => {
   }, []);
 
   const triggerForcedSync = useCallback(async () => {
-    if (!supabase.url || !supabase.anonKey || isSyncingRef.current) return;
+    const client = getSupabaseClient(supabase);
+    if (!client || isSyncingRef.current) return;
     
     setSyncing(true);
     isSyncingRef.current = true;
     updateLastLocalUpdate();
     
     try {
-      const client = createClient(supabase.url, supabase.anonKey);
       const promises = [
         client.from('branding').upsert({ id: 'config', site_name: branding.siteName, logo: branding.logo }),
         client.from('mentor').upsert({ id: 'profile', ...mentor })
@@ -1233,8 +1282,8 @@ const App: React.FC = () => {
   }, [branding, mentor, courses, triggerForcedSync]);
 
   useEffect(() => {
-    if (!supabase.url || !supabase.anonKey) return;
-    const client = createClient(supabase.url, supabase.anonKey);
+    const client = getSupabaseClient(supabase);
+    if (!client) return;
     
     const initialFetch = async () => {
       try {
@@ -1285,7 +1334,7 @@ const App: React.FC = () => {
     }).subscribe();
 
     return () => { client.removeChannel(sub); };
-  }, [supabase.url, supabase.anonKey]);
+  }, [supabase]);
 
   const updateCourse = (updated: Course) => {
     setCourses(prev => prev.map(c => c.id === updated.id ? updated : c));
