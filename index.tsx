@@ -44,6 +44,10 @@ import {
   RotateCcw,
   Pencil
 } from 'lucide-react';
+import { createClient } from '@supabase/supabase-js';
+
+import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
+import { Button, Card, Input, Textarea, Badge } from './components/UI';
 
 // Custom TikTok SVG Icon
 const TiktokIcon = ({ size = 18 }) => (
@@ -60,13 +64,6 @@ const TiktokIcon = ({ size = 18 }) => (
     <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
   </svg>
 );
-
-import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1?external=react,react-dom';
-
-import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
-// MOCK DATA REMOVED: Imports removed to prevent resetting to sample data
-// import { initialCourses, initialMentor, initialBranding } from './mockData'; 
-import { Button, Card, Input, Textarea, Badge } from './components/UI';
 
 // --- DEFAULTS (EMPTY STATES) ---
 const defaultBranding: Branding = {
@@ -924,17 +921,22 @@ const CourseEditor: React.FC<{
   
   // Initialize Local Mentor State
   const [localMentor, setLocalMentor] = useState<Mentor>(mentor);
+
+  // Ref to track the last committed mentor data from props
+  // This ensures we only update local state when the SERVER/PARENT data actually changes,
+  // preventing re-renders or tab switches from wiping out unsaved local edits.
+  const prevMentorPropJson = useRef(JSON.stringify(mentor));
   
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Sync prop mentor to localMentor freely since auto-sync is disabled
-  // This allows Realtime updates from other admins to show up unless we are actively typing
-  // Since we rely on manual Save, we can be more reactive here.
+  // Sync prop mentor to localMentor ONLY when upstream prop actually changes content
   useEffect(() => {
-    // Only update if there are actual data differences to avoid unnecessary re-renders
-    if (JSON.stringify(mentor) !== JSON.stringify(localMentor)) {
+    const currentMentorPropJson = JSON.stringify(mentor);
+    // Only update if the upstream data is different from what we last saw from upstream
+    if (currentMentorPropJson !== prevMentorPropJson.current) {
         setLocalMentor(mentor);
+        prevMentorPropJson.current = currentMentorPropJson;
     }
   }, [mentor]);
 
@@ -1227,7 +1229,7 @@ const PublicCourseView: React.FC<{
         const fullCourse: Course = { 
           ...c, 
           coverImage: c.cover_image, 
-          mentorId: c.mentor_id,
+          mentorId: c.mentor_id, 
           assets: c.assets || [],
           modules: c.modules || []
         };
@@ -1393,7 +1395,7 @@ const PublicCourseView: React.FC<{
             </div>
           </div>
         </div>
-      </main>
+      </div>
     </div>
   );
 };
