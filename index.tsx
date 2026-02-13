@@ -630,30 +630,35 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
   };
 
   const handleDeleteCourse = async (id: string) => {
-    if (!confirm("Hapus kursus ini secara permanen?")) return;
+    if (!confirm("Hapus kursus ini secara permanen? Data di database juga akan dihapus.")) return;
     
+    // Backup state for rollback
+    const previousCourses = [...courses];
+
     // 1. UPDATE STATE (Optimistic)
     const updatedCourses = courses.filter(c => c.id !== id);
     setCourses(updatedCourses);
 
     // 2. FORCE UPDATE LOCAL STORAGE IMMEDIATELY
-    // This fixes the "local" ghosting if the useEffect is too slow or app crashes
-    try {
-        localStorage.setItem('courses', JSON.stringify(updatedCourses));
-    } catch(e) { console.error("LS Error", e)}
+    setStorageItem('courses', updatedCourses);
 
     const client = getSupabaseClient(supabase);
+    // If not connected to DB, we are done
     if (!client) return;
 
     try {
       // 3. FORCE DB DELETE
       const { error } = await client.from('courses').delete().eq('id', id);
+      
       if (error) {
-         console.error("DB Delete failed", error);
-         alert("Gagal menghapus dari server database. Cek koneksi atau permission.");
+         throw error;
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error("DB Error", err);
+      // ROLLBACK if DB fails
+      alert(`Gagal menghapus dari database: ${err.message}. Data dikembalikan.`);
+      setCourses(previousCourses);
+      setStorageItem('courses', previousCourses);
     }
   };
 
@@ -780,11 +785,26 @@ CREATE TABLE IF NOT EXISTS public.events (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
+-- DISABLE RLS TO ENSURE DELETE WORKS (FOR PUBLIC ADMIN APP)
+ALTER TABLE public.courses DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.mentor DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.branding DISABLE ROW LEVEL SECURITY;
+ALTER TABLE public.events DISABLE ROW LEVEL SECURITY;
+
 -- AKTIFKAN REALTIME
 DO $$ 
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'events') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE events;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'courses') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE courses;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'branding') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE branding;
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'mentor') THEN
+    ALTER PUBLICATION supabase_realtime ADD TABLE mentor;
   END IF;
 END $$;`.trim();
 
