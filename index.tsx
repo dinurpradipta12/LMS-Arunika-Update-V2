@@ -632,22 +632,28 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
   const handleDeleteCourse = async (id: string) => {
     if (!confirm("Hapus kursus ini secara permanen?")) return;
     
-    // Optimistic Update: Hapus dari state lokal segera
-    setCourses(courses.filter(c => c.id !== id));
+    // 1. UPDATE STATE (Optimistic)
+    const updatedCourses = courses.filter(c => c.id !== id);
+    setCourses(updatedCourses);
+
+    // 2. FORCE UPDATE LOCAL STORAGE IMMEDIATELY
+    // This fixes the "local" ghosting if the useEffect is too slow or app crashes
+    try {
+        localStorage.setItem('courses', JSON.stringify(updatedCourses));
+    } catch(e) { console.error("LS Error", e)}
 
     const client = getSupabaseClient(supabase);
-    // Jika tidak terhubung ke DB, hanya hapus lokal (sudah dilakukan di atas)
     if (!client) return;
 
     try {
-      // Hapus dari database Supabase
+      // 3. FORCE DB DELETE
       const { error } = await client.from('courses').delete().eq('id', id);
       if (error) {
-        console.error("Database deletion failed:", error);
-        alert("Gagal menghapus dari database, namun telah dihapus secara lokal.");
+         console.error("DB Delete failed", error);
+         alert("Gagal menghapus dari server database. Cek koneksi atau permission.");
       }
-    } catch (e) {
-      console.error("Error deleting course:", e);
+    } catch (err) {
+      console.error("DB Error", err);
     }
   };
 
