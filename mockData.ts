@@ -8,8 +8,8 @@ export const initialBranding: Branding = {
 
 export const initialMentor: Mentor = {
   id: 'mentor-1',
-  name: 'Alex Rivera',
-  role: 'Senior Product Designer',
+  name: 'Dinur Pradipta',
+  role: 'Social Media Content Strategist',
   bio: 'Helping creative minds build better digital products for over 10 years.',
   photo: 'https://picsum.photos/seed/mentor1/300/300',
   socials: {
