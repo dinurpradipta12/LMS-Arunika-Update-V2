@@ -63,8 +63,24 @@ const TiktokIcon = ({ size = 18 }) => (
 import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.45.1?external=react,react-dom';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
-import { initialCourses, initialMentor, initialBranding } from './mockData';
+// MOCK DATA REMOVED: Imports removed to prevent resetting to sample data
+// import { initialCourses, initialMentor, initialBranding } from './mockData'; 
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
+
+// --- DEFAULTS (EMPTY STATES) ---
+const defaultBranding: Branding = {
+  logo: '',
+  siteName: 'Nama Platform Anda'
+};
+
+const defaultMentor: Mentor = {
+  id: 'profile',
+  name: '',
+  role: '',
+  bio: '',
+  photo: '',
+  socials: {}
+};
 
 // --- Storage & Analytics Helpers ---
 const getStorageItem = <T,>(key: string, defaultValue: T): T => {
@@ -1311,11 +1327,27 @@ const PublicCourseView: React.FC<{
 };
 
 const App: React.FC = () => {
+  // --- KONFIGURASI SUPABASE (HARDCODED) ---
+  // Masukkan kredensial project Anda di sini agar tersimpan otomatis.
+  const EMBEDDED_SUPABASE_URL = "https://mhuqqbbqlovdiquaktzd.supabase.co"; 
+  const EMBEDDED_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1odXFxYmJxbG92ZGlxdWFrdHpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4OTQxNTksImV4cCI6MjA4NjQ3MDE1OX0.pJud95i77m-01lce_Pq6q2FovPxapUy-gKTYne6PZ18"; 
+
   const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
-  const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', initialCourses));
-  const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', initialMentor));
-  const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', initialBranding));
-  const [supabase, setSupabase] = useState<SupabaseConfig>(() => getStorageItem('supabase', { url: '', anonKey: '' }));
+  
+  // Use empty arrays/objects as defaults instead of mock data
+  const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', []));
+  const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', defaultMentor));
+  const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', defaultBranding));
+  
+  // Logic to prioritize LocalStorage, then embedded constants, then empty strings
+  const [supabase, setSupabase] = useState<SupabaseConfig>(() => {
+    const saved = localStorage.getItem('supabase');
+    if (saved) {
+      try { return JSON.parse(saved); } catch(e) {}
+    }
+    return { url: EMBEDDED_SUPABASE_URL, anonKey: EMBEDDED_ANON_KEY };
+  });
+
   const [syncing, setSyncing] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   
