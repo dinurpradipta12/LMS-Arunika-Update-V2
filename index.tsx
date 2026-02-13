@@ -669,63 +669,141 @@ const CourseEditor: React.FC<{
     });
   };
 
+  const addAsset = () => {
+    setEditedCourse({
+      ...editedCourse,
+      assets: [...editedCourse.assets, {
+        id: `a-${Date.now()}`,
+        name: 'Asset Baru',
+        type: 'link',
+        url: ''
+      }]
+    });
+  };
+
   return (
-    <div className="p-4 md:p-8 max-w-5xl mx-auto space-y-8 pb-32">
-      <div className="flex justify-between items-center">
-        <h1 className="text-2xl font-extrabold">Edit: {editedCourse.title}</h1>
-        <Button onClick={handleSave} icon={Save} isLoading={isSaving}>Simpan Perubahan</Button>
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8 pb-32">
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+        <div>
+          <Link to="/admin" className="text-xs font-bold text-[#64748B] flex items-center gap-1 mb-1 hover:text-[#8B5CF6]">
+            <ChevronRight size={14} className="rotate-180" /> Kembali ke Dashboard
+          </Link>
+          <h1 className="text-3xl font-extrabold">Course Editor</h1>
+        </div>
+        <Button onClick={handleSave} icon={Save} isLoading={isSaving} className="w-full md:w-auto">Simpan Perubahan</Button>
       </div>
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
+          {/* Section: Utama */}
           <Card className="space-y-6">
-            <h3 className="font-bold">Info Utama</h3>
-            <Input label="Judul" value={editedCourse.title} onChange={e => setEditedCourse({...editedCourse, title: e.target.value})} />
-            <Textarea label="Deskripsi" value={editedCourse.description} onChange={e => setEditedCourse({...editedCourse, description: e.target.value})} />
-            <ImageUpload label="Cover" value={editedCourse.coverImage} onChange={img => setEditedCourse({...editedCourse, coverImage: img})} />
+            <h3 className="font-extrabold text-xl flex items-center gap-2"><Pencil size={20} className="text-[#8B5CF6]"/> Informasi Utama</h3>
+            <Input label="Judul Kursus" value={editedCourse.title} onChange={e => setEditedCourse({...editedCourse, title: e.target.value})} />
+            <Textarea label="Deskripsi Singkat" value={editedCourse.description} onChange={e => setEditedCourse({...editedCourse, description: e.target.value})} />
+            <ImageUpload label="Gambar Cover (16:9)" value={editedCourse.coverImage} onChange={img => setEditedCourse({...editedCourse, coverImage: img})} />
           </Card>
 
+          {/* Section: Kurikulum */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
-              <h3 className="font-bold">Materi</h3>
+              <h3 className="font-extrabold text-xl flex items-center gap-2"><BookOpen size={20} className="text-[#FBBF24]"/> Kurikulum Materi</h3>
               <div className="flex gap-2">
-                <Button variant="yellow" className="h-10 text-xs" onClick={() => addModule('video')}>+ Video</Button>
-                <Button variant="yellow" className="h-10 text-xs" onClick={() => addModule('text')}>+ Teks</Button>
+                <Button variant="yellow" className="h-10 text-xs px-4" onClick={() => addModule('video')} icon={Video}>+ Video</Button>
+                <Button variant="yellow" className="h-10 text-xs px-4" onClick={() => addModule('text')} icon={FileText}>+ Teks</Button>
               </div>
             </div>
+            {editedCourse.modules.length === 0 && (
+              <div className="bg-white border-2 border-dashed border-[#CBD5E1] rounded-2xl p-8 text-center">
+                <p className="text-[#64748B] font-bold">Belum ada materi. Tambahkan Video atau Teks.</p>
+              </div>
+            )}
             {editedCourse.modules.map((mod, idx) => (
-              <Card key={mod.id} className="space-y-4">
+              <Card key={mod.id} className="space-y-4 relative group">
+                <button 
+                  onClick={() => setEditedCourse({...editedCourse, modules: editedCourse.modules.filter((_, i) => i !== idx)})} 
+                  className="absolute top-4 right-4 text-red-500 hover:bg-red-50 p-2 rounded-xl"
+                >
+                  <Trash2 size={18} />
+                </button>
+                <div className="flex items-center gap-2">
+                  <Badge color={mod.type === 'video' ? '#8B5CF6' : '#F472B6'}>
+                    <span className="text-white">{mod.type.toUpperCase()}</span>
+                  </Badge>
+                  <span className="font-extrabold text-sm">Materi #{idx + 1}</span>
+                </div>
                 <Input label="Judul Materi" value={mod.title} onChange={e => {
                   const m = [...editedCourse.modules]; m[idx].title = e.target.value; setEditedCourse({...editedCourse, modules: m});
                 }} />
                 {mod.type === 'video' ? (
-                  <Input label="YT URL" value={mod.content} onChange={e => {
+                  <Input label="YouTube Link" icon={LinkIcon} placeholder="https://youtube.com/watch?v=..." value={mod.content} onChange={e => {
                     const m = [...editedCourse.modules]; m[idx].content = e.target.value; setEditedCourse({...editedCourse, modules: m});
                   }} />
                 ) : (
-                  <AdvancedEditor label="Konten" value={mod.content} onChange={v => {
+                  <AdvancedEditor label="Konten Markdown" value={mod.content} onChange={v => {
                     const m = [...editedCourse.modules]; m[idx].content = v; setEditedCourse({...editedCourse, modules: m});
                   }} />
                 )}
-                <button onClick={() => setEditedCourse({...editedCourse, modules: editedCourse.modules.filter((_, i) => i !== idx)})} className="text-red-500 text-xs font-bold">Hapus Materi</button>
+                <Textarea label="Catatan / Deskripsi Materi" placeholder="Keterangan tambahan untuk materi ini..." value={mod.description} onChange={e => {
+                  const m = [...editedCourse.modules]; m[idx].description = e.target.value; setEditedCourse({...editedCourse, modules: m});
+                }} />
               </Card>
             ))}
+          </div>
+
+          {/* Section: Assets */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="font-extrabold text-xl flex items-center gap-2"><Download size={20} className="text-[#34D399]"/> Asset Pendukung</h3>
+              <Button variant="green" className="h-10 text-xs px-4" onClick={addAsset} icon={Plus}>Tambah Asset</Button>
+            </div>
+            <Card className="space-y-4">
+              {editedCourse.assets.length === 0 && <p className="text-sm text-[#64748B] font-bold text-center">Belum ada asset tambahan.</p>}
+              {editedCourse.assets.map((asset, idx) => (
+                <div key={asset.id} className="flex flex-col md:flex-row gap-4 p-4 bg-[#F8FAFC] rounded-xl border-2 border-[#E2E8F0]">
+                  <div className="flex-1 space-y-3">
+                    <Input label="Nama Asset (Contoh: PDF Slide)" value={asset.name} onChange={e => {
+                      const a = [...editedCourse.assets]; a[idx].name = e.target.value; setEditedCourse({...editedCourse, assets: a});
+                    }} />
+                    <Input label="URL Asset" icon={Globe} value={asset.url} onChange={e => {
+                      const a = [...editedCourse.assets]; a[idx].url = e.target.value; setEditedCourse({...editedCourse, assets: a});
+                    }} />
+                  </div>
+                  <button 
+                    onClick={() => setEditedCourse({...editedCourse, assets: editedCourse.assets.filter((_, i) => i !== idx)})}
+                    className="self-end md:self-center p-3 text-red-500 hover:bg-white rounded-xl hard-shadow-hover transition-all"
+                  >
+                    <Trash2 size={20} />
+                  </button>
+                </div>
+              ))}
+            </Card>
           </div>
         </div>
 
         <div className="space-y-8">
-          <Card className="space-y-6">
-            <h3 className="font-bold">Mentor</h3>
+          {/* Section: Profil Mentor */}
+          <Card className="space-y-6 sticky top-8">
+            <h3 className="font-extrabold text-xl flex items-center gap-2"><Users size={20} className="text-[#F472B6]"/> Info Mentor</h3>
             <div className="flex flex-col items-center gap-4">
-              <div className="w-24 h-24 rounded-full border-2 border-[#1E293B] overflow-hidden hard-shadow">
+              <div className="w-32 h-32 rounded-full border-4 border-[#1E293B] overflow-hidden hard-shadow bg-[#F1F5F9]">
                 <img src={localMentor.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${localMentor.name}`} className="w-full h-full object-cover" />
               </div>
               <ImageUpload value={localMentor.photo} onChange={p => { onLocalEdit(); setLocalMentor({...localMentor, photo: p}) }}>
-                <Button variant="secondary" className="text-xs h-8">Ganti Foto</Button>
+                <Button variant="secondary" className="text-xs h-10 px-4">Upload Foto Profil</Button>
               </ImageUpload>
             </div>
-            <Input label="Nama" value={localMentor.name} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, name: e.target.value}) }} />
-            <Input label="Role" value={localMentor.role} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, role: e.target.value}) }} />
+            
+            <Input label="Nama Lengkap" value={localMentor.name} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, name: e.target.value}) }} />
+            <Input label="Role / Jabatan" placeholder="Contoh: Digital Marketer" value={localMentor.role} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, role: e.target.value}) }} />
+            <Textarea label="Bio Mentor" placeholder="Tuliskan pengalaman singkat..." value={localMentor.bio} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, bio: e.target.value}) }} />
+            
+            <div className="space-y-4 pt-4 border-t-2 border-[#F1F5F9]">
+              <h4 className="text-xs font-black uppercase tracking-widest text-[#64748B]">Social Media</h4>
+              <Input label="Instagram" icon={Instagram} placeholder="@username" value={localMentor.socials.instagram || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, instagram: e.target.value}})} />
+              <Input label="LinkedIn" icon={Linkedin} placeholder="profile-id" value={localMentor.socials.linkedin || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, linkedin: e.target.value}})} />
+              <Input label="TikTok" icon={TiktokIcon} placeholder="@username" value={localMentor.socials.tiktok || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, tiktok: e.target.value}})} />
+              <Input label="Website" icon={Globe} placeholder="https://..." value={localMentor.socials.website || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, website: e.target.value}})} />
+            </div>
           </Card>
         </div>
       </div>
@@ -790,26 +868,66 @@ const PublicCourseView: React.FC<{
             <p className="text-[#64748B] mt-2">{course.description}</p>
           </Card>
           {selectedModule && (
-            <Card className="p-0 overflow-hidden">
-              {selectedModule.type === 'video' ? (
-                <iframe className="w-full aspect-video" src={`https://www.youtube.com/embed/${selectedModule.content.split('v=')[1]?.split('&')[0] || selectedModule.content.split('/').pop()}`} frameBorder="0" allowFullScreen />
-              ) : (
-                <div className="p-8 prose max-w-none whitespace-pre-wrap">{selectedModule.content}</div>
+            <div className="space-y-6">
+              <Card className="p-0 overflow-hidden">
+                {selectedModule.type === 'video' ? (
+                  <iframe 
+                    className="w-full aspect-video" 
+                    src={`https://www.youtube.com/embed/${selectedModule.content.split('v=')[1]?.split('&')[0] || selectedModule.content.split('/').pop()}`} 
+                    frameBorder="0" 
+                    allowFullScreen 
+                  />
+                ) : (
+                  <div className="p-8 prose max-w-none whitespace-pre-wrap font-medium leading-relaxed">{selectedModule.content}</div>
+                )}
+              </Card>
+              {selectedModule.description && (
+                <Card className="border-l-4 border-l-[#8B5CF6]">
+                  <h4 className="font-extrabold text-sm uppercase tracking-wide mb-2">Penjelasan Materi:</h4>
+                  <p className="text-[#1E293B] text-sm md:text-base">{selectedModule.description}</p>
+                </Card>
               )}
-            </Card>
+            </div>
+          )}
+          
+          {course.assets && course.assets.length > 0 && (
+            <div className="space-y-4 pt-6">
+               <h3 className="font-extrabold text-xl">Asset & File Pendukung</h3>
+               <div className="grid md:grid-cols-2 gap-4">
+                 {course.assets.map(asset => (
+                   <a 
+                    key={asset.id} 
+                    href={asset.url} 
+                    target="_blank" 
+                    className="bg-white border-2 border-[#1E293B] p-4 rounded-xl hard-shadow-hover flex items-center justify-between group transition-all"
+                   >
+                     <div className="flex items-center gap-3">
+                       <div className="bg-[#34D399] p-2 rounded-lg border border-[#1E293B]">
+                         <Download size={18} className="text-[#1E293B]" />
+                       </div>
+                       <span className="font-bold text-sm">{asset.name}</span>
+                     </div>
+                     <ExternalLink size={16} className="text-[#64748B] group-hover:text-[#8B5CF6]" />
+                   </a>
+                 ))}
+               </div>
+            </div>
           )}
         </div>
         <div className="lg:col-span-1 space-y-6">
           <Card className="text-center">
-            <img src={initialMentor.photo} className="w-24 h-24 mx-auto rounded-full border-2 border-[#1E293B] mb-4" />
+            <img src={initialMentor.photo} className="w-24 h-24 mx-auto rounded-full border-2 border-[#1E293B] mb-4 object-cover" />
             <h3 className="font-bold">{initialMentor.name}</h3>
-            <p className="text-xs text-[#64748B]">{initialMentor.role}</p>
+            <p className="text-xs text-[#64748B] mb-4">{initialMentor.role}</p>
+            <p className="text-xs text-[#64748B] line-clamp-3">{initialMentor.bio}</p>
           </Card>
           <div className="bg-white border-2 border-[#1E293B] rounded-2xl p-4 hard-shadow space-y-2">
-            <h4 className="font-bold mb-4">Kurikulum</h4>
+            <h4 className="font-extrabold mb-4 flex items-center gap-2">
+              <List size={18} className="text-[#8B5CF6]"/> Kurikulum
+            </h4>
             {course.modules.map((m, i) => (
               <button key={m.id} onClick={() => setSelectedModule(m)} className={`w-full text-left p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${selectedModule?.id === m.id ? 'bg-[#FBBF24] border-[#1E293B]' : 'border-transparent hover:bg-[#F1F5F9]'}`}>
-                <span className="w-6 h-6 rounded-full bg-white border border-[#1E293B] flex items-center justify-center text-[10px] font-bold">{i+1}</span>
+                <span className="w-6 h-6 rounded-full bg-white border border-[#1E293B] flex-shrink-0 flex items-center justify-center text-[10px] font-bold">{i+1}</span>
                 <span className="text-xs font-bold truncate">{m.title}</span>
               </button>
             ))}
@@ -924,6 +1042,8 @@ const App: React.FC = () => {
      }
   };
 
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+
   return (
     <div className="min-h-screen">
       <RouteTracker supabase={supabase} />
@@ -935,10 +1055,10 @@ const App: React.FC = () => {
       )}
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
-        <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={false} setIsSidebarOpen={()=>{}}><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={false} setIsSidebarOpen={()=>{}}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={false} setIsSidebarOpen={()=>{}}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={false} setIsSidebarOpen={()=>{}}><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={supabase} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} />} />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>
