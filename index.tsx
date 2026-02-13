@@ -58,7 +58,9 @@ import {
   Clock,
   LayoutGrid,
   Tag,
-  Palette
+  Palette,
+  Terminal,
+  FileCode
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -463,13 +465,13 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
               <Layout className="text-white" size={40} />
             </div>
             <h1 className="text-3xl font-extrabold text-[#1E293B]">Admin Login</h1>
-            <p className="text-[#64748B]">Arunika Learning Hub</p>
+            <p className="text-[#64748B]">SaaS LMS Arunika Edition</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
-            <Input label="Username" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username/Email" />
-            <Input label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" />
+            <Input label="Username" value={username} onChange={e => setUsername(e.target.value)} placeholder="arunika" />
+            <Input label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
             {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-lg border border-red-200">{error}</p>}
-            <Button type="submit" className="w-full h-12" icon={ChevronRight}>Login</Button>
+            <Button type="submit" className="w-full h-12" icon={ChevronRight}>Masuk Dashboard</Button>
           </form>
         </Card>
       </div>
@@ -830,6 +832,63 @@ const Settings: React.FC<{
 }> = ({ branding, setBranding, supabase, setSupabase, onLocalEdit }) => {
   const [isConnecting, setIsConnecting] = useState(false);
   
+  const sqlScript = `
+-- COPY & PASTE SCRIPT INI KE SQL EDITOR SUPABASE ANDA --
+
+-- 1. Tabel Kursus (Wajib memiliki kolom categories jsonb)
+CREATE TABLE IF NOT EXISTS courses (
+  id TEXT PRIMARY KEY,
+  title TEXT,
+  description TEXT,
+  cover_image TEXT,
+  modules JSONB DEFAULT '[]'::jsonb,
+  assets JSONB DEFAULT '[]'::jsonb,
+  categories JSONB DEFAULT '[]'::jsonb, -- Pastikan kolom ini ada
+  mentor_id TEXT DEFAULT 'profile',
+  created_at TIMESTAMPTZ DEFAULT NOW(),
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Pastikan kolom categories ada jika tabel sudah dibuat sebelumnya
+ALTER TABLE courses ADD COLUMN IF NOT EXISTS categories JSONB DEFAULT '[]'::jsonb;
+
+-- 2. Tabel Mentor
+CREATE TABLE IF NOT EXISTS mentor (
+  id TEXT PRIMARY KEY DEFAULT 'profile',
+  name TEXT,
+  role TEXT,
+  bio TEXT,
+  photo TEXT,
+  socials JSONB DEFAULT '{}'::jsonb,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 3. Tabel Branding
+CREATE TABLE IF NOT EXISTS branding (
+  id TEXT PRIMARY KEY DEFAULT 'config',
+  site_name TEXT,
+  logo TEXT,
+  updated_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- 4. Tabel Events (Analitik)
+CREATE TABLE IF NOT EXISTS events (
+  id BIGSERIAL PRIMARY KEY,
+  event_name TEXT,
+  course_id TEXT,
+  visitor_id TEXT,
+  device_type TEXT,
+  user_agent TEXT,
+  referrer TEXT,
+  source TEXT,
+  full_path TEXT,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- AKTIFKAN REALTIME (OPSIONAL TAPI DISARANKAN)
+ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
+  `;
+
   const handleConnect = async () => {
     if (!supabase.url || !supabase.anonKey) return;
     setIsConnecting(true);
@@ -843,6 +902,11 @@ const Settings: React.FC<{
     } finally {
       setIsConnecting(false);
     }
+  };
+
+  const copySql = () => {
+    navigator.clipboard.writeText(sqlScript);
+    alert('Script SQL berhasil disalin!');
   };
 
   return (
@@ -863,6 +927,24 @@ const Settings: React.FC<{
           <Input label="Supabase URL" value={supabase.url} onChange={e => setSupabase({...supabase, url: e.target.value})} />
           <Input label="Anon Key" value={supabase.anonKey} type="password" onChange={e => setSupabase({...supabase, anonKey: e.target.value})} />
           <Button variant="green" onClick={handleConnect} isLoading={isConnecting}>Verify & Connect</Button>
+        </Card>
+      </section>
+
+      <section className="space-y-6">
+        <h2 className="text-xl font-bold flex items-center gap-2"><Terminal size={20}/> Database Setup (Wajib)</h2>
+        <Card className="bg-[#1E293B] text-white border-none space-y-4">
+           <div className="flex justify-between items-center mb-2">
+              <p className="text-xs font-bold text-[#94A3B8] uppercase tracking-widest flex items-center gap-2">
+                 <FileCode size={14}/> SQL Init Script
+              </p>
+              <Button variant="secondary" className="h-8 py-0 px-3 text-[10px] bg-white text-[#1E293B] hard-shadow-none" onClick={copySql}>Salin Script</Button>
+           </div>
+           <div className="p-4 bg-black/30 rounded-xl font-mono text-[10px] leading-relaxed overflow-x-auto max-h-[300px]">
+              <pre>{sqlScript}</pre>
+           </div>
+           <p className="text-xs font-bold text-[#94A3B8] italic">
+             * Jalankan script di atas pada "SQL Editor" di Dashboard Supabase Anda untuk memastikan tabel `courses` memiliki kolom `categories`.
+           </p>
         </Card>
       </section>
     </div>
@@ -906,7 +988,9 @@ const CourseEditor: React.FC<{
       alert('Berhasil disimpan!');
     } catch (e: any) {
       console.error("Editor Save Error:", e);
-      if (e.message?.includes('timeout') || e.message?.includes('canceling statement')) {
+      if (e.message?.includes('column "categories" of relation "courses" does not exist')) {
+         alert('Gagal menyimpan: Kolom "categories" belum ada di tabel database Anda. Silakan ke halaman "Settings" dan jalankan script SQL yang tersedia.');
+      } else if (e.message?.includes('timeout') || e.message?.includes('canceling statement')) {
         alert('Gagal menyimpan: Database Timeout. Sistem akan mencoba melakukan kompresi ulang gambar Anda. Silakan klik simpan kembali.');
       } else {
         alert('Gagal menyimpan: ' + (e.message || "Periksa koneksi database."));
@@ -1436,8 +1520,7 @@ const App: React.FC = () => {
            cover_image: updatedCourse.coverImage,
            modules: updatedCourse.modules,
            assets: updatedCourse.assets,
-           // OMITTED: 'categories' to prevent schema cache error if column doesn't exist
-           // categories: updatedCourse.categories || [],
+           categories: updatedCourse.categories || [], // RE-ENABLED Persistence
            mentor_id: updatedCourse.mentorId || "profile",
            updated_at: new Date().toISOString()
         };
