@@ -911,31 +911,41 @@ END $$;`.trim();
 
 const CourseEditor: React.FC<{ 
   courses: Course[]; 
-  onSave: (c: Course) => void; 
+  onSave: (c: Course) => Promise<void>; 
   mentor: Mentor; 
   setMentor: React.Dispatch<React.SetStateAction<Mentor>> 
 }> = ({ courses, onSave, mentor, setMentor }) => {
   const { id } = useParams<{ id: string }>();
   const course = courses.find(c => c.id === id);
-  const [editedCourse, setEditedCourse] = useState<Course | null>(course || null);
+  const [editedCourse, setEditedCourse] = useState<Course | null>(null);
   const [showAddMenu, setShowAddMenu] = useState(false);
+  const [isSaving, setIsSaving] = useState(false);
 
+  // Initialize once on mount or ID change, but don't auto-update from props 
+  // to avoid overwriting user edits with background sync data
   useEffect(() => {
-    if (!course) return;
+    if (course && !editedCourse) {
+      setEditedCourse({
+        ...course,
+        modules: course.modules ? [...course.modules] : [],
+        assets: course.assets ? [...course.assets] : []
+      });
+    }
+  }, [id, course]); 
 
-    setEditedCourse({
-      ...course,
-      modules: course.modules ? [...course.modules] : [],
-      assets: course.assets ? [...course.assets] : []
-    });
+  if (!editedCourse) return <div className="p-8 font-bold text-center">Kursus tidak ditemukan / Loading...</div>;
 
-  }, [id]); // hanya depend ke id
-
-  if (!editedCourse) return <div className="p-8 font-bold text-center">Kursus tidak ditemukan</div>;
-
-  const handleSave = () => {
-    onSave(editedCourse);
-    alert('Konten kursus berhasil disimpan!');
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      await onSave(editedCourse);
+      alert('Konten kursus berhasil disimpan ke database!');
+    } catch (e) {
+      console.error(e);
+      alert('Gagal menyimpan.');
+    } finally {
+      setIsSaving(false);
+    }
   };
 
   const addModule = (type: 'video' | 'text') => {
@@ -1001,7 +1011,9 @@ const CourseEditor: React.FC<{
     <div className="p-4 md:p-8 max-w-5xl mx-auto pb-24 space-y-8">
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
         <h1 className="text-2xl md:text-3xl font-extrabold text-[#1E293B]">Editor: {editedCourse.title}</h1>
-        <Button onClick={handleSave} icon={Save} className="w-full sm:w-auto h-12">Simpan Perubahan</Button>
+        <Button onClick={handleSave} icon={Save} isLoading={isSaving} className="w-full sm:w-auto h-12">
+          {isSaving ? 'Menyimpan...' : 'Simpan Perubahan'}
+        </Button>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
@@ -1486,8 +1498,35 @@ const App: React.FC = () => {
     return () => { client.removeChannel(sub); };
   }, [supabase]);
 
-  const updateCourse = (updated: Course) => {
-    setCourses(prev => prev.map(c => c.id === updated.id ? updated : c));
+  const handleUpdateCourse = async (updatedCourse: Course) => {
+     // 1. Optimistic Update Local State
+     setCourses(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
+     
+     // 2. Persist to LocalStorage immediately to prevent data loss on refresh
+     // Use the updated course directly here
+     const currentCourses = getStorageItem('courses', []);
+     const newCourses = currentCourses.map((c: Course) => c.id === updatedCourse.id ? updatedCourse : c);
+     setStorageItem('courses', newCourses);
+
+     // 3. Direct DB Write
+     const client = getSupabaseClient(supabase);
+     if (client) {
+        const { error } = await client.from('courses').upsert({
+           id: updatedCourse.id,
+           title: updatedCourse.title,
+           description: updatedCourse.description,
+           cover_image: updatedCourse.coverImage,
+           modules: updatedCourse.modules,
+           assets: updatedCourse.assets,
+           mentor_id: updatedCourse.mentorId,
+           updated_at: new Date().toISOString()
+        });
+        
+        if (error) {
+           console.error("DB Error:", error);
+           throw error; // Propagate error to Editor to show failure
+        }
+     }
   };
 
   return (
@@ -1507,7 +1546,7 @@ const App: React.FC = () => {
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
         <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/course/:id" element={
