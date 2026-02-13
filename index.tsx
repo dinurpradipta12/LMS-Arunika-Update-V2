@@ -921,15 +921,19 @@ const CourseEditor: React.FC<{
   const [showAddMenu, setShowAddMenu] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
 
-  // Initialize once on mount or ID change, but don't auto-update from props 
-  // to avoid overwriting user edits with background sync data
+  // Improved initialization logic:
+  // Only update editedCourse if the ID changes to prevent overwriting user's local edits
+  // with background sync data while they are typing or uploading.
   useEffect(() => {
-    if (course && !editedCourse) {
-      setEditedCourse({
-        ...course,
-        modules: course.modules ? [...course.modules] : [],
-        assets: course.assets ? [...course.assets] : []
-      });
+    if (course) {
+      // If we don't have an edited course yet, or if the ID has changed (user navigated)
+      if (!editedCourse || editedCourse.id !== course.id) {
+        setEditedCourse({
+          ...course,
+          modules: course.modules ? [...course.modules] : [],
+          assets: course.assets ? [...course.assets] : []
+        });
+      }
     }
   }, [id, course]); 
 
@@ -1411,17 +1415,8 @@ const App: React.FC = () => {
         client.from('mentor').upsert({ id: 'profile', ...mentor })
       ];
       
-      courses.forEach(course => {
-        promises.push(client.from('courses').upsert({
-          id: course.id,
-          title: course.title,
-          description: course.description,
-          cover_image: course.coverImage,
-          modules: course.modules,
-          assets: course.assets,
-          mentor_id: course.mentorId
-        }));
-      });
+      // REMOVED AUTO SYNC FOR COURSES TO PREVENT OVERWRITING EDIT STATE WITH STALE DATA
+      // Courses are now saved explicitly via the Save button or Realtime subscription events.
       
       await Promise.all(promises);
     } catch (err) {
@@ -1432,12 +1427,12 @@ const App: React.FC = () => {
         isSyncingRef.current = false;
       }, 1000);
     }
-  }, [branding, mentor, courses, supabase, updateLastLocalUpdate]);
+  }, [branding, mentor, supabase, updateLastLocalUpdate]);
 
   useEffect(() => {
     const timer = setTimeout(triggerForcedSync, 3000);
     return () => clearTimeout(timer);
-  }, [branding, mentor, courses, triggerForcedSync]);
+  }, [branding, mentor, triggerForcedSync]);
 
   useEffect(() => {
     const client = getSupabaseClient(supabase);
