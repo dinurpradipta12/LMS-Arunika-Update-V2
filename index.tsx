@@ -213,8 +213,7 @@ const RouteTracker: React.FC<{ supabase: SupabaseConfig }> = ({ supabase }) => {
       
       const searchParams = new URLSearchParams(location.search);
       const source = searchParams.get('ref') || searchParams.get('utm_source') || 'direct';
-      const courseMatch = location.pathname.match(/^\/course\/([^/?]+)/);
-      const courseId = courseMatch ? courseMatch[1] : null;
+      const courseId = courseIdMatch ? courseIdMatch[1] : null;
 
       try {
         await client.from('events').insert({
@@ -233,6 +232,7 @@ const RouteTracker: React.FC<{ supabase: SupabaseConfig }> = ({ supabase }) => {
         console.error("Tracking failed", e);
       }
     };
+    const courseIdMatch = location.pathname.match(/^\/course\/([^/?]+)/);
     track();
   }, [location, supabase]);
 
@@ -1326,6 +1326,15 @@ const PublicCourseView: React.FC<{
                 ))}
               </div>
             )}
+            {selectedModule && (
+              <div className="space-y-4 pt-2">
+                <div className="border-t-2 border-[#1E293B]/10 w-full" />
+                <h2 className="text-lg md:text-xl font-bold text-[#8B5CF6] flex items-center gap-2">
+                  <span className="bg-[#8B5CF6] text-white text-[10px] px-2 py-0.5 rounded-md font-black">MATERI</span>
+                  {selectedModule.title}
+                </h2>
+              </div>
+            )}
           </div>
           {selectedModule && (
             <div className="space-y-6">
@@ -1391,8 +1400,8 @@ const PublicCourseView: React.FC<{
                     <span className={`w-8 h-8 rounded-full border-2 border-[#1E293B] flex-shrink-0 flex items-center justify-center text-xs font-black transition-colors ${selectedModule?.id === m.id ? 'bg-white' : 'bg-[#F1F5F9] group-hover:bg-white'}`}>
                       {i+1}
                     </span>
-                    <div className="min-w-0">
-                      <p className="text-xs font-extrabold truncate text-[#1E293B]">{m.title}</p>
+                    <div className="min-w-0 flex-1">
+                      <p className="text-xs font-extrabold text-[#1E293B] leading-tight break-words">{m.title}</p>
                       {m.duration && (
                         <p className="text-[10px] font-bold text-[#64748B] flex items-center gap-1 mt-0.5">
                           <Clock size={10}/> {m.duration}
