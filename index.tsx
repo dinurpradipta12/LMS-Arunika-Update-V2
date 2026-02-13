@@ -56,11 +56,13 @@ import {
   ListOrdered,
   MoveVertical,
   Clock,
-  LayoutGrid
+  LayoutGrid,
+  Tag,
+  Palette
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
-import { Course, Mentor, Branding, SupabaseConfig, Module, Asset } from './types';
+import { Course, Mentor, Branding, SupabaseConfig, Module, Asset, Category } from './types';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
 
 // Custom TikTok SVG Icon
@@ -760,7 +762,8 @@ const AdminDashboard: React.FC<{
       coverImage: '',
       mentorId: 'profile',
       modules: [],
-      assets: []
+      assets: [],
+      categories: []
     };
     setCourses([...courses, newCourse]);
     navigate(`/admin/course/${newCourse.id}`);
@@ -780,6 +783,13 @@ const AdminDashboard: React.FC<{
             </button>
             <div className="aspect-video mb-4 rounded-xl overflow-hidden border-2 border-[#1E293B] bg-[#F1F5F9]">
               {course.coverImage && <img src={course.coverImage} className="w-full h-full object-cover" />}
+            </div>
+            <div className="flex flex-wrap gap-2 mb-2">
+              {course.categories?.map((cat, idx) => (
+                <span key={idx} className="text-[9px] font-black uppercase px-2 py-0.5 border border-[#1E293B] rounded-md" style={{ backgroundColor: cat.color }}>
+                  {cat.label}
+                </span>
+              ))}
             </div>
             <h3 className="text-xl font-bold mb-2">{course.title}</h3>
             <p className="text-sm text-[#64748B] line-clamp-2 mb-4">{course.description}</p>
@@ -872,10 +882,17 @@ const CourseEditor: React.FC<{
   const [localMentor, setLocalMentor] = useState<Mentor>(mentor);
   const [isSaving, setIsSaving] = useState(false);
   
+  // Category logic
+  const [newCatLabel, setNewCatLabel] = useState('');
+  const [newCatColor, setNewCatColor] = useState('#FBBF24');
+  const presetColors = ['#FBBF24', '#F472B6', '#8B5CF6', '#34D399', '#38BDF8', '#FB7185', '#FFFDF5'];
+
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   useEffect(() => {
-    if (course) setEditedCourse({ ...course });
+    if (course) {
+      setEditedCourse({ ...course, categories: course.categories || [] });
+    }
     setLocalMentor({ ...mentor });
   }, [id, course, mentor]);
 
@@ -897,6 +914,18 @@ const CourseEditor: React.FC<{
     } finally {
       setIsSaving(false);
     }
+  };
+
+  const addCategory = () => {
+    if (!newCatLabel.trim()) return;
+    const updatedCats = [...(editedCourse.categories || []), { label: newCatLabel, color: newCatColor }];
+    setEditedCourse({ ...editedCourse, categories: updatedCats });
+    setNewCatLabel('');
+  };
+
+  const removeCategory = (idx: number) => {
+    const updatedCats = (editedCourse.categories || []).filter((_, i) => i !== idx);
+    setEditedCourse({ ...editedCourse, categories: updatedCats });
   };
 
   const addModule = (type: 'video' | 'text') => {
@@ -981,6 +1010,44 @@ const CourseEditor: React.FC<{
           <Card className="space-y-6">
             <h3 className="font-extrabold text-xl flex items-center gap-2"><Pencil size={20} className="text-[#8B5CF6]"/> Informasi Utama</h3>
             <Input label="Judul Kursus" value={editedCourse.title} onChange={e => setEditedCourse({...editedCourse, title: e.target.value})} />
+            
+            {/* Category Management */}
+            <div className="space-y-4">
+              <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1 flex items-center gap-2">
+                <Tag size={14}/> Kategori Kursus
+              </label>
+              <div className="flex flex-wrap gap-2 mb-4 min-h-[40px] p-4 bg-[#F8FAFC] rounded-2xl border-2 border-[#E2E8F0]">
+                {editedCourse.categories?.map((cat, idx) => (
+                  <div key={idx} className="flex items-center gap-2 px-3 py-1 border-2 border-[#1E293B] rounded-xl hard-shadow text-[10px] font-black uppercase" style={{ backgroundColor: cat.color }}>
+                    {cat.label}
+                    <button onClick={() => removeCategory(idx)} className="hover:text-red-600 transition-colors">
+                      <X size={12} strokeWidth={3}/>
+                    </button>
+                  </div>
+                ))}
+                {(!editedCourse.categories || editedCourse.categories.length === 0) && (
+                  <p className="text-[10px] font-bold text-[#94A3B8] italic">Belum ada kategori terpilih.</p>
+                )}
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Input placeholder="Label Kategori (e.g. Design)" value={newCatLabel} onChange={e => setNewCatLabel(e.target.value)} />
+                <div className="flex flex-col gap-2">
+                  <div className="flex gap-2">
+                    {presetColors.map(c => (
+                      <button 
+                        key={c} 
+                        onClick={() => setNewCatColor(c)} 
+                        className={`w-8 h-8 rounded-lg border-2 border-[#1E293B] transition-transform ${newCatColor === c ? 'scale-110 hard-shadow-active' : 'hover:scale-105'}`} 
+                        style={{ backgroundColor: c }}
+                      />
+                    ))}
+                    <input type="color" value={newCatColor} onChange={e => setNewCatColor(e.target.value)} className="w-8 h-8 rounded-lg border-2 border-[#1E293B] bg-transparent p-0 overflow-hidden cursor-pointer" />
+                  </div>
+                  <Button variant="secondary" className="h-10 text-[10px] w-full" onClick={addCategory} icon={Plus}>Tambah Kategori</Button>
+                </div>
+              </div>
+            </div>
+
             <Textarea label="Deskripsi Singkat" value={editedCourse.description} onChange={e => setEditedCourse({...editedCourse, description: e.target.value})} />
             <ImageUpload label="Gambar Cover (16:9)" aspectRatio={1.77} value={editedCourse.coverImage} onChange={img => setEditedCourse({...editedCourse, coverImage: img})} />
           </Card>
@@ -1131,7 +1198,14 @@ const PublicCourseView: React.FC<{
       
       const { data: c } = await client.from('courses').select('*').eq('id', id).single();
       if (c) {
-        const full: Course = { ...c, coverImage: c.cover_image, mentorId: c.mentor_id, assets: c.assets || [], modules: c.modules || [] };
+        const full: Course = { 
+          ...c, 
+          coverImage: c.cover_image, 
+          mentorId: c.mentor_id, 
+          assets: c.assets || [], 
+          modules: c.modules || [],
+          categories: c.categories || []
+        };
         setLocalCourse(full);
         if (!selectedModule && full.modules.length > 0) setSelectedModule(full.modules[0]);
       }
@@ -1157,8 +1231,17 @@ const PublicCourseView: React.FC<{
       </header>
       <main className="max-w-7xl mx-auto p-4 md:p-8 grid lg:grid-cols-4 gap-8 flex-1">
         <div className="lg:col-span-3 space-y-6">
-          <div className="flex flex-col gap-1 pb-2">
-            <h1 className="text-xl md:text-2xl font-extrabold text-[#1E293B]">{course.title}</h1>
+          <div className="flex flex-col gap-3 pb-2">
+            <h1 className="text-xl md:text-3xl font-extrabold text-[#1E293B] leading-tight">{course.title}</h1>
+            {course.categories && course.categories.length > 0 && (
+              <div className="flex flex-wrap gap-2">
+                {course.categories.map((cat, idx) => (
+                  <span key={idx} className="px-3 py-1 text-[10px] font-black uppercase border-2 border-[#1E293B] rounded-lg hard-shadow" style={{ backgroundColor: cat.color }}>
+                    {cat.label}
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
           {selectedModule && (
             <div className="space-y-6">
@@ -1299,7 +1382,14 @@ const App: React.FC = () => {
       if (m) setMentor(m);
       const { data: c } = await client.from('courses').select('*').order('created_at', { ascending: false });
       if (c) {
-        setCourses(c.map((item: any) => ({ ...item, coverImage: item.cover_image, mentorId: item.mentor_id, assets: item.assets || [], modules: item.modules || [] })));
+        setCourses(c.map((item: any) => ({ 
+          ...item, 
+          coverImage: item.cover_image, 
+          mentorId: item.mentor_id, 
+          assets: item.assets || [], 
+          modules: item.modules || [],
+          categories: item.categories || []
+        })));
       }
     } catch (e) { console.warn("Fetch error", e); }
   }, [supabase]);
@@ -1346,6 +1436,7 @@ const App: React.FC = () => {
            cover_image: updatedCourse.coverImage,
            modules: updatedCourse.modules,
            assets: updatedCourse.assets,
+           categories: updatedCourse.categories || [],
            mentor_id: updatedCourse.mentorId || "profile",
            updated_at: new Date().toISOString()
         };

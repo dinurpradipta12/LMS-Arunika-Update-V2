@@ -2,18 +2,12 @@
 export type ContentType = 'video' | 'text';
 export type AssetType = 'link' | 'file';
 
-export interface Category {
-  id: string;
-  name: string;
-  color: string;
-}
-
 export interface Module {
   id: string;
   title: string;
   type: ContentType;
   content: string; // YouTube URL or Markdown Text
-  description: string; // Description below video
+  description: string; // New: Description below video
   duration?: string;
 }
 
@@ -25,6 +19,11 @@ export interface Asset {
   fileName?: string;
 }
 
+export interface Category {
+  label: string;
+  color: string;
+}
+
 export interface Course {
   id: string;
   title: string;
@@ -33,7 +32,7 @@ export interface Course {
   modules: Module[];
   assets: Asset[];
   mentorId: string;
-  categoryIds?: string[]; // New: support multiple categories
+  categories?: Category[];
 }
 
 export interface Mentor {
@@ -54,7 +53,6 @@ export interface Mentor {
 export interface Branding {
   logo: string;
   siteName: string;
-  availableCategories?: Category[]; // New: system-wide category options
 }
 
 export interface SupabaseConfig {
