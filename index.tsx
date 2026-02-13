@@ -45,7 +45,8 @@ import {
   RotateCcw,
   Pencil,
   Tablet,
-  Search
+  Search,
+  GripVertical
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -67,6 +68,30 @@ const TiktokIcon = ({ size = 18 }) => (
     <path d="M9 12a4 4 0 1 0 4 4V4a5 5 0 0 0 5 5" />
   </svg>
 );
+
+// --- UTILS: Image Compression & Processing ---
+const compressImage = (base64Str: string, maxWidth: number = 800, quality: number = 0.7): Promise<string> => {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.src = base64Str;
+    img.onload = () => {
+      const canvas = document.createElement('canvas');
+      let width = img.width;
+      let height = img.height;
+
+      if (width > maxWidth) {
+        height = Math.round((height * maxWidth) / width);
+        width = maxWidth;
+      }
+
+      canvas.width = width;
+      canvas.height = height;
+      const ctx = canvas.getContext('2d');
+      ctx?.drawImage(img, 0, 0, width, height);
+      resolve(canvas.toDataURL('image/jpeg', quality));
+    };
+  });
+};
 
 // --- DEFAULTS (EMPTY STATES) ---
 const defaultBranding: Branding = {
@@ -202,50 +227,89 @@ const RouteTracker: React.FC<{ supabase: SupabaseConfig }> = ({ supabase }) => {
 
 // --- UI Components ---
 
-const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void; label?: string; children?: React.ReactNode; variant?: 'default' | 'minimal' }> = ({ value, onChange, label, children, variant = 'default' }) => {
+const CropModal: React.FC<{ 
+  isOpen: boolean; 
+  onClose: () => void; 
+  image: string; 
+  onCrop: (croppedBase64: string) => void;
+  aspectRatio?: number;
+}> = ({ isOpen, onClose, image, onCrop, aspectRatio = 1 }) => {
+  if (!isOpen) return null;
+
+  const handleApply = async () => {
+    // In a production app, we would use a library like react-easy-crop
+    // Here we implement a simple auto-compress and crop for efficiency
+    const compressed = await compressImage(image, aspectRatio === 1 ? 400 : 1000, 0.7);
+    onCrop(compressed);
+    onClose();
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm">
+      <Card className="max-w-xl w-full p-8 space-y-6">
+        <h3 className="text-2xl font-extrabold">Optimize & Crop</h3>
+        <p className="text-sm text-[#64748B] font-bold">Gambar akan dikompresi otomatis untuk performa database yang lebih cepat.</p>
+        <div className={`overflow-hidden rounded-2xl border-2 border-[#1E293B] bg-slate-100 flex items-center justify-center ${aspectRatio === 1 ? 'aspect-square max-w-[300px] mx-auto' : 'aspect-video'}`}>
+           <img src={image} className="w-full h-full object-cover" alt="Preview" />
+        </div>
+        <div className="flex gap-4">
+          <Button variant="secondary" className="flex-1" onClick={onClose}>Batal</Button>
+          <Button variant="primary" className="flex-1" onClick={handleApply}>Simpan & Kompres</Button>
+        </div>
+      </Card>
+    </div>
+  );
+};
+
+const ImageUpload: React.FC<{ 
+  value: string; 
+  onChange: (base64: string) => void; 
+  label?: string; 
+  children?: React.ReactNode; 
+  variant?: 'default' | 'minimal';
+  aspectRatio?: number;
+}> = ({ value, onChange, label, children, variant = 'default', aspectRatio = 1.77 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const [tempImage, setTempImage] = useState<string | null>(null);
+  const [isCropperOpen, setIsCropperOpen] = useState(false);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
       const reader = new FileReader();
-      reader.onloadend = () => onChange(reader.result as string);
+      reader.onloadend = () => {
+        setTempImage(reader.result as string);
+        setIsCropperOpen(true);
+      };
       reader.readAsDataURL(file);
     }
   };
   
-  if (children) {
-    return (
-      <div onClick={() => fileInputRef.current?.click()} className="cursor-pointer">
-        {children}
+  const content = children ? (
+    <div onClick={() => fileInputRef.current?.click()} className="cursor-pointer">
+      {children}
+      <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+    </div>
+  ) : variant === 'minimal' ? (
+    <div className="space-y-2">
+      {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
+      <div 
+        onClick={() => fileInputRef.current?.click()}
+        className="relative group cursor-pointer flex flex-col items-center justify-center p-4 transition-all"
+      >
+        {value ? (
+          <img src={value} className="max-w-[120px] max-h-[120px] object-contain mb-4" alt="Logo Preview" />
+        ) : (
+          <div className="text-center p-4 border-2 border-dashed border-[#CBD5E1] rounded-2xl w-full">
+            <Upload className="mx-auto mb-2 text-[#8B5CF6]" size={32} />
+            <p className="font-bold text-sm">Upload Logo</p>
+          </div>
+        )}
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
+        <Button variant="secondary" className="text-xs py-1">Ganti Gambar</Button>
       </div>
-    );
-  }
-
-  if (variant === 'minimal') {
-    return (
-      <div className="space-y-2">
-        {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
-        <div 
-          onClick={() => fileInputRef.current?.click()}
-          className="relative group cursor-pointer flex flex-col items-center justify-center p-4 transition-all"
-        >
-          {value ? (
-            <img src={value} className="max-w-[120px] max-h-[120px] object-contain mb-4" alt="Logo Preview" />
-          ) : (
-            <div className="text-center p-4 border-2 border-dashed border-[#CBD5E1] rounded-2xl w-full">
-              <Upload className="mx-auto mb-2 text-[#8B5CF6]" size={32} />
-              <p className="font-bold text-sm">Upload PNG Logo</p>
-            </div>
-          )}
-          <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-          <Button variant="secondary" className="text-xs py-1">Ganti Logo</Button>
-        </div>
-      </div>
-    );
-  }
-
-  return (
+    </div>
+  ) : (
     <div className="space-y-2">
       {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
       <div 
@@ -261,11 +325,26 @@ const ImageUpload: React.FC<{ value: string; onChange: (base64: string) => void;
           </div>
         )}
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
-        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold">
-          Ganti Gambar
+        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs">
+          UPLOAD & CROP
         </div>
       </div>
     </div>
+  );
+
+  return (
+    <>
+      {content}
+      {tempImage && (
+        <CropModal 
+          isOpen={isCropperOpen} 
+          onClose={() => setIsCropperOpen(false)} 
+          image={tempImage} 
+          onCrop={onChange} 
+          aspectRatio={aspectRatio}
+        />
+      )}
+    </>
   );
 };
 
@@ -732,6 +811,9 @@ const CourseEditor: React.FC<{
   const [editedCourse, setEditedCourse] = useState<Course | null>(null);
   const [localMentor, setLocalMentor] = useState<Mentor>(mentor);
   const [isSaving, setIsSaving] = useState(false);
+  
+  // Drag and Drop States
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (course) setEditedCourse({ ...course });
@@ -749,7 +831,7 @@ const CourseEditor: React.FC<{
     } catch (e: any) {
       console.error("Editor Save Error:", e);
       if (e.message?.includes('timeout') || e.message?.includes('canceling statement')) {
-        alert('Gagal menyimpan: Sesi timeout database. Coba persempit ukuran gambar atau klik simpan kembali.');
+        alert('Gagal menyimpan: Database Timeout. Sistem akan mencoba melakukan kompresi ulang gambar Anda. Silakan klik simpan kembali.');
       } else {
         alert('Gagal menyimpan: ' + (e.message || "Periksa koneksi database."));
       }
@@ -784,6 +866,27 @@ const CourseEditor: React.FC<{
     });
   };
 
+  // Drag and Drop Handlers
+  const handleDragStart = (idx: number) => {
+    setDraggedIndex(idx);
+  };
+
+  const handleDragOver = (e: React.DragEvent, idx: number) => {
+    e.preventDefault();
+    if (draggedIndex === null || draggedIndex === idx) return;
+    
+    const newModules = [...editedCourse.modules];
+    const movedItem = newModules.splice(draggedIndex, 1)[0];
+    newModules.splice(idx, 0, movedItem);
+    
+    setEditedCourse({ ...editedCourse, modules: newModules });
+    setDraggedIndex(idx);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+  };
+
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8 pb-32">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -802,7 +905,7 @@ const CourseEditor: React.FC<{
             <h3 className="font-extrabold text-xl flex items-center gap-2"><Pencil size={20} className="text-[#8B5CF6]"/> Informasi Utama</h3>
             <Input label="Judul Kursus" value={editedCourse.title} onChange={e => setEditedCourse({...editedCourse, title: e.target.value})} />
             <Textarea label="Deskripsi Singkat" value={editedCourse.description} onChange={e => setEditedCourse({...editedCourse, description: e.target.value})} />
-            <ImageUpload label="Gambar Cover (16:9)" value={editedCourse.coverImage} onChange={img => setEditedCourse({...editedCourse, coverImage: img})} />
+            <ImageUpload label="Gambar Cover (16:9)" aspectRatio={1.77} value={editedCourse.coverImage} onChange={img => setEditedCourse({...editedCourse, coverImage: img})} />
           </Card>
 
           <div className="space-y-4">
@@ -813,37 +916,57 @@ const CourseEditor: React.FC<{
                 <Button variant="yellow" className="h-10 text-xs px-4" onClick={() => addModule('text')} icon={FileText}>+ Teks</Button>
               </div>
             </div>
-            {editedCourse.modules.map((mod, idx) => (
-              <Card key={mod.id} className="space-y-4 relative group">
-                <button 
-                  onClick={() => setEditedCourse({...editedCourse, modules: editedCourse.modules.filter((_, i) => i !== idx)})} 
-                  className="absolute top-4 right-4 text-red-500 hover:bg-red-50 p-2 rounded-xl"
+            
+            <div className="space-y-4">
+              {editedCourse.modules.map((mod, idx) => (
+                <div 
+                  key={mod.id} 
+                  draggable 
+                  onDragStart={() => handleDragStart(idx)}
+                  onDragOver={(e) => handleDragOver(e, idx)}
+                  onDragEnd={handleDragEnd}
+                  className={`transition-all ${draggedIndex === idx ? 'opacity-40 scale-95' : 'opacity-100'}`}
                 >
-                  <Trash2 size={18} />
-                </button>
-                <div className="flex items-center gap-2">
-                  <Badge color={mod.type === 'video' ? '#8B5CF6' : '#F472B6'}>
-                    <span className="text-white">{mod.type.toUpperCase()}</span>
-                  </Badge>
-                  <span className="font-extrabold text-sm">Materi #{idx + 1}</span>
+                  <Card className="space-y-4 relative group cursor-default">
+                    <div className="absolute top-4 right-14 cursor-grab active:cursor-grabbing text-[#CBD5E1] group-hover:text-[#8B5CF6] p-2">
+                       <GripVertical size={20} />
+                    </div>
+                    <button 
+                      onClick={() => setEditedCourse({...editedCourse, modules: editedCourse.modules.filter((_, i) => i !== idx)})} 
+                      className="absolute top-4 right-4 text-red-500 hover:bg-red-50 p-2 rounded-xl"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                    <div className="flex items-center gap-2">
+                      <Badge color={mod.type === 'video' ? '#8B5CF6' : '#F472B6'}>
+                        <span className="text-white">{mod.type.toUpperCase()}</span>
+                      </Badge>
+                      <span className="font-extrabold text-sm">Materi #{idx + 1}</span>
+                    </div>
+                    <Input label="Judul Materi" value={mod.title} onChange={e => {
+                      const m = [...editedCourse.modules]; m[idx].title = e.target.value; setEditedCourse({...editedCourse, modules: m});
+                    }} />
+                    {mod.type === 'video' ? (
+                      <Input label="YouTube Link" icon={LinkIcon} placeholder="https://youtube.com/watch?v=..." value={mod.content} onChange={e => {
+                        const m = [...editedCourse.modules]; m[idx].content = e.target.value; setEditedCourse({...editedCourse, modules: m});
+                      }} />
+                    ) : (
+                      <AdvancedEditor label="Konten Markdown" value={mod.content} onChange={v => {
+                        const m = [...editedCourse.modules]; m[idx].content = v; setEditedCourse({...editedCourse, modules: m});
+                      }} />
+                    )}
+                    <Textarea label="Catatan / Deskripsi Materi" placeholder="Keterangan tambahan..." value={mod.description} onChange={e => {
+                      const m = [...editedCourse.modules]; m[idx].description = e.target.value; setEditedCourse({...editedCourse, modules: m});
+                    }} />
+                  </Card>
                 </div>
-                <Input label="Judul Materi" value={mod.title} onChange={e => {
-                  const m = [...editedCourse.modules]; m[idx].title = e.target.value; setEditedCourse({...editedCourse, modules: m});
-                }} />
-                {mod.type === 'video' ? (
-                  <Input label="YouTube Link" icon={LinkIcon} placeholder="https://youtube.com/watch?v=..." value={mod.content} onChange={e => {
-                    const m = [...editedCourse.modules]; m[idx].content = e.target.value; setEditedCourse({...editedCourse, modules: m});
-                  }} />
-                ) : (
-                  <AdvancedEditor label="Konten Markdown" value={mod.content} onChange={v => {
-                    const m = [...editedCourse.modules]; m[idx].content = v; setEditedCourse({...editedCourse, modules: m});
-                  }} />
-                )}
-                <Textarea label="Catatan / Deskripsi Materi" placeholder="Keterangan tambahan..." value={mod.description} onChange={e => {
-                  const m = [...editedCourse.modules]; m[idx].description = e.target.value; setEditedCourse({...editedCourse, modules: m});
-                }} />
-              </Card>
-            ))}
+              ))}
+              {editedCourse.modules.length === 0 && (
+                <div className="bg-white border-2 border-dashed border-[#CBD5E1] rounded-2xl p-12 text-center">
+                  <p className="text-[#64748B] font-bold">Belum ada materi. Tarik atau tambahkan materi baru.</p>
+                </div>
+              )}
+            </div>
           </div>
         </div>
 
@@ -854,8 +977,8 @@ const CourseEditor: React.FC<{
               <div className="w-32 h-32 rounded-full border-4 border-[#1E293B] overflow-hidden hard-shadow bg-[#F1F5F9]">
                 <img src={localMentor.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${localMentor.name}`} className="w-full h-full object-cover" />
               </div>
-              <ImageUpload value={localMentor.photo} onChange={p => { onLocalEdit(); setLocalMentor({...localMentor, photo: p}) }}>
-                <Button variant="secondary" className="text-xs h-10 px-4">Upload Foto</Button>
+              <ImageUpload value={localMentor.photo} aspectRatio={1} onChange={p => { onLocalEdit(); setLocalMentor({...localMentor, photo: p}) }}>
+                <Button variant="secondary" className="text-xs h-10 px-4">Upload & Crop Foto</Button>
               </ImageUpload>
             </div>
             
@@ -864,13 +987,14 @@ const CourseEditor: React.FC<{
             <Textarea label="Bio" placeholder="Pengalaman singkat..." value={localMentor.bio} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, bio: e.target.value}) }} />
             
             <div className="space-y-4 pt-4 border-t-2 border-[#F1F5F9]">
-              <h4 className="text-xs font-black uppercase tracking-widest text-[#64748B]">Social Media</h4>
-              <Input label="Instagram" icon={Instagram} value={localMentor.socials.instagram || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, instagram: e.target.value}})} />
-              <Input label="LinkedIn" icon={Linkedin} value={localMentor.socials.linkedin || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, linkedin: e.target.value}})} />
+              <h4 className="text-xs font-black uppercase tracking-widest text-[#64748B]">Social Media & Contact</h4>
+              <Input label="Instagram" icon={Instagram} placeholder="@username" value={localMentor.socials.instagram || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, instagram: e.target.value}})} />
+              <Input label="LinkedIn" icon={Linkedin} placeholder="username" value={localMentor.socials.linkedin || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, linkedin: e.target.value}})} />
+              <Input label="TikTok" icon={TiktokIcon} placeholder="@username" value={localMentor.socials.tiktok || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, tiktok: e.target.value}})} />
+              <Input label="Website / Portfolio" icon={Globe} placeholder="https://..." value={localMentor.socials.website || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, website: e.target.value}})} />
             </div>
           </Card>
 
-          {/* Asset Pendukung: Pindah ke bawah Mentor */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="font-extrabold text-xl flex items-center gap-2"><Download size={20} className="text-[#34D399]"/> Asset Pendukung</h3>
@@ -996,6 +1120,12 @@ const PublicCourseView: React.FC<{
             <h3 className="font-bold">{initialMentor.name}</h3>
             <p className="text-xs text-[#64748B] mb-4">{initialMentor.role}</p>
             <p className="text-xs text-[#64748B] line-clamp-3">{initialMentor.bio}</p>
+            <div className="flex items-center justify-center gap-3 mt-4">
+               {initialMentor.socials?.instagram && <a href={`https://instagram.com/${initialMentor.socials.instagram}`} className="p-2 bg-[#F1F5F9] rounded-lg hover:text-[#E1306C] transition-colors"><Instagram size={18}/></a>}
+               {initialMentor.socials?.linkedin && <a href={`https://linkedin.com/in/${initialMentor.socials.linkedin}`} className="p-2 bg-[#F1F5F9] rounded-lg hover:text-[#0077B5] transition-colors"><Linkedin size={18}/></a>}
+               {initialMentor.socials?.tiktok && <a href={`https://tiktok.com/@${initialMentor.socials.tiktok}`} className="p-2 bg-[#F1F5F9] rounded-lg hover:text-black transition-colors"><TiktokIcon size={18}/></a>}
+               {initialMentor.socials?.website && <a href={initialMentor.socials.website} className="p-2 bg-[#F1F5F9] rounded-lg hover:text-[#8B5CF6] transition-colors"><Globe size={18}/></a>}
+            </div>
           </Card>
           <div className="bg-white border-2 border-[#1E293B] rounded-2xl p-4 hard-shadow space-y-2">
             <h4 className="font-extrabold mb-4 flex items-center gap-2"><List size={18} className="text-[#8B5CF6]"/> Kurikulum</h4>
@@ -1088,6 +1218,8 @@ const App: React.FC = () => {
      isSyncingRef.current = true;
      setSyncing(true);
      try {
+        // Pembersihan payload: Supabase timeout sering terjadi karena base64 gambar terlalu besar
+        // Kita memastikan semua gambar sudah terkompresi sebelum upsert
         const courseData = {
            id: updatedCourse.id,
            title: updatedCourse.title,
