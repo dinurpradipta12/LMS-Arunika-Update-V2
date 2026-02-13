@@ -1183,10 +1183,10 @@ const PublicCourseView: React.FC<{
     <div className="min-h-screen bg-[#FFFDF5] flex flex-col">
       <header className="bg-white border-b-2 border-[#1E293B] p-4 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <Link to="/" className="flex items-center gap-3">
+          <div className="flex items-center gap-3">
             <img src={localBranding.logo} className="w-8 h-8 md:w-10 md:h-10 object-contain" alt="Logo" />
             <span className="font-extrabold text-lg md:text-xl truncate max-w-[150px] md:max-w-none">{localBranding.siteName}</span>
-          </Link>
+          </div>
           <div className="flex items-center gap-2 md:gap-3">
             <Badge className="hidden sm:inline-flex">{course.modules.length} Materi</Badge>
             <Button variant="secondary" className="px-3 md:px-4 h-10 text-xs" icon={Share2} onClick={() => {
