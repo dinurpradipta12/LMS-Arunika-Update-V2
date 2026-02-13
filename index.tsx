@@ -43,7 +43,9 @@ import {
   Monitor,
   Navigation,
   RotateCcw,
-  Pencil
+  Pencil,
+  Tablet,
+  Search
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -435,20 +437,25 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
     const totalViews = events.length;
     const uniqueVisitors = new Set(events.map(e => e.visitor_id)).size;
     const courseViews = events.reduce((acc: any, curr: any) => {
-      if (curr.course_id) acc[curr.course_id] = (acc[curr.course_id] || 0) + 1;
+      if (curr.course_id) {
+        const c = courses.find(item => item.id === curr.course_id);
+        const name = c ? c.title : 'Deleted Course';
+        acc[name] = (acc[name] || 0) + 1;
+      }
       return acc;
     }, {});
     const deviceBreakdown = events.reduce((acc: any, curr: any) => {
-      acc[curr.device_type] = (acc[curr.device_type] || 0) + 1;
+      const type = curr.device_type || 'unknown';
+      acc[type] = (acc[type] || 0) + 1;
       return acc;
-    }, {});
+    }, { desktop: 0, mobile: 0, tablet: 0 });
     const sourceBreakdown = events.reduce((acc: any, curr: any) => {
       const src = curr.source || 'direct';
       acc[src] = (acc[src] || 0) + 1;
       return acc;
     }, {});
     return { totalViews, uniqueVisitors, courseViews, deviceBreakdown, sourceBreakdown };
-  }, [events]);
+  }, [events, courses]);
 
   useEffect(() => {
     const client = getSupabaseClient(supabase);
@@ -485,33 +492,125 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
   };
 
   return (
-    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6">
+    <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-extrabold text-[#1E293B]">Analytics</h1>
-          <p className="text-[#64748B]">Data real-time pengunjung.</p>
+          <p className="text-[#64748B]">Data performa dan aktivitas pengunjung real-time.</p>
         </div>
-        <Button variant="secondary" onClick={handleResetData} isLoading={isResetting} icon={RotateCcw}>Reset</Button>
+        <Button variant="secondary" onClick={handleResetData} isLoading={isResetting} icon={RotateCcw}>Reset Data</Button>
       </div>
+
       <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
         <Card className="featured border-[#8B5CF6]">
-          <p className="text-xs font-bold text-[#64748B] uppercase">Total Views</p>
-          <h2 className="text-3xl font-extrabold">{stats.totalViews}</h2>
+          <div className="flex justify-between items-start mb-4">
+             <div className="p-2 bg-[#F1F5F9] rounded-xl"><Eye size={20} className="text-[#8B5CF6]"/></div>
+             <Badge color="#F1F5F9">Real-time</Badge>
+          </div>
+          <p className="text-xs font-bold text-[#64748B] uppercase tracking-widest">Total Views</p>
+          <h2 className="text-4xl font-extrabold mt-1">{stats.totalViews}</h2>
         </Card>
         <Card className="border-[#F472B6]">
-          <p className="text-xs font-bold text-[#64748B] uppercase">Visitors</p>
-          <h2 className="text-3xl font-extrabold">{stats.uniqueVisitors}</h2>
+           <div className="flex justify-between items-start mb-4">
+             <div className="p-2 bg-[#F1F5F9] rounded-xl"><Users size={20} className="text-[#F472B6]"/></div>
+             <Badge color="#F1F5F9">Unik</Badge>
+          </div>
+          <p className="text-xs font-bold text-[#64748B] uppercase tracking-widest">Visitors</p>
+          <h2 className="text-4xl font-extrabold mt-1">{stats.uniqueVisitors}</h2>
         </Card>
         <Card className="border-[#34D399]">
-          <p className="text-xs font-bold text-[#64748B] uppercase">Uptime</p>
-          <h2 className="text-3xl font-extrabold">100%</h2>
+          <div className="flex justify-between items-start mb-4">
+             <div className="p-2 bg-[#F1F5F9] rounded-xl"><Activity size={20} className="text-[#34D399]"/></div>
+             <Badge color="#F1F5F9">Aktif</Badge>
+          </div>
+          <p className="text-xs font-bold text-[#64748B] uppercase tracking-widest">Database Uptime</p>
+          <h2 className="text-4xl font-extrabold mt-1 text-[#34D399]">100%</h2>
         </Card>
       </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+        <Card className="space-y-6">
+          <h3 className="font-extrabold text-xl flex items-center gap-2"><Smartphone size={20} className="text-[#FBBF24]"/> Device Breakdown</h3>
+          <div className="space-y-4">
+            {Object.entries(stats.deviceBreakdown).map(([device, count]: [string, any]) => (
+              <div key={device} className="flex items-center justify-between p-4 bg-[#F8FAFC] rounded-xl border-2 border-[#E2E8F0]">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white rounded-lg border border-[#E2E8F0]">
+                    {device === 'desktop' ? <Monitor size={18}/> : device === 'mobile' ? <Smartphone size={18}/> : <Tablet size={18}/>}
+                  </div>
+                  <span className="font-bold capitalize">{device}</span>
+                </div>
+                <div className="flex items-center gap-4">
+                   <div className="w-32 bg-[#E2E8F0] h-2 rounded-full overflow-hidden hidden md:block">
+                      <div 
+                        className="h-full bg-[#8B5CF6]" 
+                        style={{ width: `${stats.totalViews > 0 ? (count / stats.totalViews) * 100 : 0}%` }}
+                      />
+                   </div>
+                   <span className="font-extrabold">{count}</span>
+                </div>
+              </div>
+            ))}
+          </div>
+        </Card>
+
+        <Card className="space-y-6">
+          <h3 className="font-extrabold text-xl flex items-center gap-2"><Navigation size={20} className="text-[#8B5CF6]"/> Traffic Sources</h3>
+          <div className="space-y-4">
+            {Object.entries(stats.sourceBreakdown).map(([source, count]: [string, any]) => (
+              <div key={source} className="flex items-center justify-between p-4 bg-[#F8FAFC] rounded-xl border-2 border-[#E2E8F0]">
+                <div className="flex items-center gap-3">
+                  <div className="p-2 bg-white rounded-lg border border-[#E2E8F0]">
+                    {source === 'direct' ? <Search size={18}/> : source.includes('insta') ? <Instagram size={18}/> : <LinkIcon size={18}/>}
+                  </div>
+                  <span className="font-bold capitalize">{source}</span>
+                </div>
+                <span className="font-extrabold">{count}</span>
+              </div>
+            ))}
+            {Object.keys(stats.sourceBreakdown).length === 0 && <p className="text-center text-[#64748B] font-bold py-4">Belum ada data traffic.</p>}
+          </div>
+        </Card>
+      </div>
+
+      <Card className="space-y-6">
+          <h3 className="font-extrabold text-xl flex items-center gap-2"><TrendingUp size={20} className="text-[#F472B6]"/> Popular Courses</h3>
+          <div className="overflow-x-auto">
+            <table className="w-full text-left">
+              <thead>
+                <tr className="border-b-2 border-[#1E293B]">
+                  <th className="py-4 font-black uppercase text-xs tracking-widest text-[#64748B]">Judul Kursus</th>
+                  <th className="py-4 font-black uppercase text-xs tracking-widest text-[#64748B]">Views</th>
+                  <th className="py-4 font-black uppercase text-xs tracking-widest text-[#64748B]">Engagement</th>
+                </tr>
+              </thead>
+              <tbody>
+                {Object.entries(stats.courseViews).sort((a:any, b:any) => b[1] - a[1]).map(([name, count]: [string, any]) => (
+                  <tr key={name} className="border-b border-[#E2E8F0]">
+                    <td className="py-4 font-bold">{name}</td>
+                    <td className="py-4 font-extrabold">{count}</td>
+                    <td className="py-4">
+                       <Badge color="#34D399"><span className="text-[#1E293B]">High</span></Badge>
+                    </td>
+                  </tr>
+                ))}
+                {Object.keys(stats.courseViews).length === 0 && (
+                  <tr><td colSpan={3} className="py-8 text-center text-[#64748B] font-bold">Belum ada data kursus yang dilihat.</td></tr>
+                )}
+              </tbody>
+            </table>
+          </div>
+      </Card>
     </div>
   );
 };
 
-const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<React.SetStateAction<Course[]>>; supabase: SupabaseConfig }> = ({ courses, setCourses, supabase }) => {
+const AdminDashboard: React.FC<{ 
+  courses: Course[]; 
+  setCourses: React.Dispatch<React.SetStateAction<Course[]>>; 
+  supabase: SupabaseConfig;
+  onDeleteCourse: (id: string) => Promise<void>;
+}> = ({ courses, setCourses, supabase, onDeleteCourse }) => {
   const navigate = useNavigate();
 
   const handleAddCourse = () => {
@@ -528,15 +627,6 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
     navigate(`/admin/course/${newCourse.id}`);
   };
 
-  const handleDeleteCourse = async (id: string) => {
-    if (!confirm("Hapus kursus ini?")) return;
-    const client = getSupabaseClient(supabase);
-    setCourses(courses.filter(c => c.id !== id));
-    if (client) {
-      await client.from('courses').delete().eq('id', id);
-    }
-  };
-
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
       <div className="flex justify-between items-center mb-8">
@@ -546,13 +636,14 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
         {courses.map(course => (
           <Card key={course.id} className="group relative">
-            <button onClick={() => handleDeleteCourse(course.id)} className="absolute top-4 right-4 z-10 p-2 bg-red-50 text-red-500 rounded-xl hard-shadow-hover opacity-0 group-hover:opacity-100 transition-all">
+            <button onClick={() => onDeleteCourse(course.id)} className="absolute top-4 right-4 z-10 p-2 bg-red-50 text-red-500 rounded-xl hard-shadow-hover opacity-0 group-hover:opacity-100 transition-all">
               <Trash2 size={16} />
             </button>
             <div className="aspect-video mb-4 rounded-xl overflow-hidden border-2 border-[#1E293B] bg-[#F1F5F9]">
               {course.coverImage && <img src={course.coverImage} className="w-full h-full object-cover" />}
             </div>
-            <h3 className="text-xl font-bold mb-4">{course.title}</h3>
+            <h3 className="text-xl font-bold mb-2">{course.title}</h3>
+            <p className="text-sm text-[#64748B] line-clamp-2 mb-4">{course.description}</p>
             <div className="flex flex-col gap-2">
               <Button onClick={() => navigate(`/admin/course/${course.id}`)} variant="secondary" className="text-xs h-10">Edit Content</Button>
               <Button 
@@ -568,6 +659,14 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
             </div>
           </Card>
         ))}
+        {courses.length === 0 && (
+           <div className="col-span-full py-20 text-center space-y-4">
+              <div className="bg-[#F1F5F9] w-20 h-20 rounded-full mx-auto flex items-center justify-center border-2 border-[#E2E8F0]">
+                 <BookOpen size={32} className="text-[#CBD5E1]" />
+              </div>
+              <p className="text-[#64748B] font-bold">Belum ada kursus. Klik tombol tambah di atas.</p>
+           </div>
+        )}
       </div>
     </div>
   );
@@ -649,7 +748,11 @@ const CourseEditor: React.FC<{
       alert('Berhasil disimpan!');
     } catch (e: any) {
       console.error("Editor Save Error:", e);
-      alert('Gagal menyimpan: ' + (e.message || "Pastikan Supabase terhubung."));
+      if (e.message?.includes('timeout') || e.message?.includes('canceling statement')) {
+        alert('Gagal menyimpan: Sesi timeout database. Coba persempit ukuran gambar atau klik simpan kembali.');
+      } else {
+        alert('Gagal menyimpan: ' + (e.message || "Periksa koneksi database."));
+      }
     } finally {
       setIsSaving(false);
     }
@@ -695,7 +798,6 @@ const CourseEditor: React.FC<{
 
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8">
-          {/* Section: Utama */}
           <Card className="space-y-6">
             <h3 className="font-extrabold text-xl flex items-center gap-2"><Pencil size={20} className="text-[#8B5CF6]"/> Informasi Utama</h3>
             <Input label="Judul Kursus" value={editedCourse.title} onChange={e => setEditedCourse({...editedCourse, title: e.target.value})} />
@@ -703,7 +805,6 @@ const CourseEditor: React.FC<{
             <ImageUpload label="Gambar Cover (16:9)" value={editedCourse.coverImage} onChange={img => setEditedCourse({...editedCourse, coverImage: img})} />
           </Card>
 
-          {/* Section: Kurikulum */}
           <div className="space-y-4">
             <div className="flex justify-between items-center">
               <h3 className="font-extrabold text-xl flex items-center gap-2"><BookOpen size={20} className="text-[#FBBF24]"/> Kurikulum Materi</h3>
@@ -712,11 +813,6 @@ const CourseEditor: React.FC<{
                 <Button variant="yellow" className="h-10 text-xs px-4" onClick={() => addModule('text')} icon={FileText}>+ Teks</Button>
               </div>
             </div>
-            {editedCourse.modules.length === 0 && (
-              <div className="bg-white border-2 border-dashed border-[#CBD5E1] rounded-2xl p-8 text-center">
-                <p className="text-[#64748B] font-bold">Belum ada materi. Tambahkan Video atau Teks.</p>
-              </div>
-            )}
             {editedCourse.modules.map((mod, idx) => (
               <Card key={mod.id} className="space-y-4 relative group">
                 <button 
@@ -743,45 +839,15 @@ const CourseEditor: React.FC<{
                     const m = [...editedCourse.modules]; m[idx].content = v; setEditedCourse({...editedCourse, modules: m});
                   }} />
                 )}
-                <Textarea label="Catatan / Deskripsi Materi" placeholder="Keterangan tambahan untuk materi ini..." value={mod.description} onChange={e => {
+                <Textarea label="Catatan / Deskripsi Materi" placeholder="Keterangan tambahan..." value={mod.description} onChange={e => {
                   const m = [...editedCourse.modules]; m[idx].description = e.target.value; setEditedCourse({...editedCourse, modules: m});
                 }} />
               </Card>
             ))}
           </div>
-
-          {/* Section: Assets */}
-          <div className="space-y-4">
-            <div className="flex justify-between items-center">
-              <h3 className="font-extrabold text-xl flex items-center gap-2"><Download size={20} className="text-[#34D399]"/> Asset Pendukung</h3>
-              <Button variant="green" className="h-10 text-xs px-4" onClick={addAsset} icon={Plus}>Tambah Asset</Button>
-            </div>
-            <Card className="space-y-4">
-              {editedCourse.assets.length === 0 && <p className="text-sm text-[#64748B] font-bold text-center">Belum ada asset tambahan.</p>}
-              {editedCourse.assets.map((asset, idx) => (
-                <div key={asset.id} className="flex flex-col md:flex-row gap-4 p-4 bg-[#F8FAFC] rounded-xl border-2 border-[#E2E8F0]">
-                  <div className="flex-1 space-y-3">
-                    <Input label="Nama Asset (Contoh: PDF Slide)" value={asset.name} onChange={e => {
-                      const a = [...editedCourse.assets]; a[idx].name = e.target.value; setEditedCourse({...editedCourse, assets: a});
-                    }} />
-                    <Input label="URL Asset" icon={Globe} value={asset.url} onChange={e => {
-                      const a = [...editedCourse.assets]; a[idx].url = e.target.value; setEditedCourse({...editedCourse, assets: a});
-                    }} />
-                  </div>
-                  <button 
-                    onClick={() => setEditedCourse({...editedCourse, assets: editedCourse.assets.filter((_, i) => i !== idx)})}
-                    className="self-end md:self-center p-3 text-red-500 hover:bg-white rounded-xl hard-shadow-hover transition-all"
-                  >
-                    <Trash2 size={20} />
-                  </button>
-                </div>
-              ))}
-            </Card>
-          </div>
         </div>
 
         <div className="space-y-8">
-          {/* Section: Profil Mentor */}
           <Card className="space-y-6 sticky top-8">
             <h3 className="font-extrabold text-xl flex items-center gap-2"><Users size={20} className="text-[#F472B6]"/> Info Mentor</h3>
             <div className="flex flex-col items-center gap-4">
@@ -789,22 +855,44 @@ const CourseEditor: React.FC<{
                 <img src={localMentor.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${localMentor.name}`} className="w-full h-full object-cover" />
               </div>
               <ImageUpload value={localMentor.photo} onChange={p => { onLocalEdit(); setLocalMentor({...localMentor, photo: p}) }}>
-                <Button variant="secondary" className="text-xs h-10 px-4">Upload Foto Profil</Button>
+                <Button variant="secondary" className="text-xs h-10 px-4">Upload Foto</Button>
               </ImageUpload>
             </div>
             
             <Input label="Nama Lengkap" value={localMentor.name} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, name: e.target.value}) }} />
-            <Input label="Role / Jabatan" placeholder="Contoh: Digital Marketer" value={localMentor.role} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, role: e.target.value}) }} />
-            <Textarea label="Bio Mentor" placeholder="Tuliskan pengalaman singkat..." value={localMentor.bio} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, bio: e.target.value}) }} />
+            <Input label="Role" placeholder="Digital Marketer" value={localMentor.role} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, role: e.target.value}) }} />
+            <Textarea label="Bio" placeholder="Pengalaman singkat..." value={localMentor.bio} onChange={e => { onLocalEdit(); setLocalMentor({...localMentor, bio: e.target.value}) }} />
             
             <div className="space-y-4 pt-4 border-t-2 border-[#F1F5F9]">
               <h4 className="text-xs font-black uppercase tracking-widest text-[#64748B]">Social Media</h4>
-              <Input label="Instagram" icon={Instagram} placeholder="@username" value={localMentor.socials.instagram || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, instagram: e.target.value}})} />
-              <Input label="LinkedIn" icon={Linkedin} placeholder="profile-id" value={localMentor.socials.linkedin || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, linkedin: e.target.value}})} />
-              <Input label="TikTok" icon={TiktokIcon} placeholder="@username" value={localMentor.socials.tiktok || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, tiktok: e.target.value}})} />
-              <Input label="Website" icon={Globe} placeholder="https://..." value={localMentor.socials.website || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, website: e.target.value}})} />
+              <Input label="Instagram" icon={Instagram} value={localMentor.socials.instagram || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, instagram: e.target.value}})} />
+              <Input label="LinkedIn" icon={Linkedin} value={localMentor.socials.linkedin || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, linkedin: e.target.value}})} />
             </div>
           </Card>
+
+          {/* Asset Pendukung: Pindah ke bawah Mentor */}
+          <div className="space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="font-extrabold text-xl flex items-center gap-2"><Download size={20} className="text-[#34D399]"/> Asset Pendukung</h3>
+              <Button variant="green" className="h-10 text-xs px-4" onClick={addAsset} icon={Plus}>Tambah</Button>
+            </div>
+            <Card className="space-y-4">
+              {editedCourse.assets.map((asset, idx) => (
+                <div key={asset.id} className="p-4 bg-[#F8FAFC] rounded-xl border-2 border-[#E2E8F0] relative">
+                  <button onClick={() => setEditedCourse({...editedCourse, assets: editedCourse.assets.filter((_, i) => i !== idx)})} className="absolute top-2 right-2 text-red-500 hover:bg-white rounded-lg"><X size={16} /></button>
+                  <div className="space-y-2">
+                    <Input className="h-9 py-1 text-xs" label="Nama Asset" value={asset.name} onChange={e => {
+                      const a = [...editedCourse.assets]; a[idx].name = e.target.value; setEditedCourse({...editedCourse, assets: a});
+                    }} />
+                    <Input className="h-9 py-1 text-xs" label="URL" value={asset.url} onChange={e => {
+                      const a = [...editedCourse.assets]; a[idx].url = e.target.value; setEditedCourse({...editedCourse, assets: a});
+                    }} />
+                  </div>
+                </div>
+              ))}
+              {editedCourse.assets.length === 0 && <p className="text-sm text-[#64748B] font-bold text-center">Belum ada asset.</p>}
+            </Card>
+          </div>
         </div>
       </div>
     </div>
@@ -844,11 +932,11 @@ const PublicCourseView: React.FC<{
     } catch (e) {
       console.error(e);
     }
-  }, [id, supabase]);
+  }, [id, supabase, selectedModule]);
 
-  useEffect(() => { fetchLatest(); }, [fetchLatest]);
+  useEffect(() => { fetchLatest(); }, [id]);
 
-  if (!course) return <div className="h-screen flex items-center justify-center font-bold">Mencari Materi...</div>;
+  if (!course) return <div className="h-screen flex items-center justify-center font-bold text-[#64748B]">Mencari Materi Kursus...</div>;
 
   return (
     <div className="min-h-screen bg-[#FFFDF5] flex flex-col">
@@ -871,20 +959,15 @@ const PublicCourseView: React.FC<{
             <div className="space-y-6">
               <Card className="p-0 overflow-hidden">
                 {selectedModule.type === 'video' ? (
-                  <iframe 
-                    className="w-full aspect-video" 
-                    src={`https://www.youtube.com/embed/${selectedModule.content.split('v=')[1]?.split('&')[0] || selectedModule.content.split('/').pop()}`} 
-                    frameBorder="0" 
-                    allowFullScreen 
-                  />
+                  <iframe className="w-full aspect-video" src={`https://www.youtube.com/embed/${selectedModule.content.split('v=')[1]?.split('&')[0] || selectedModule.content.split('/').pop()}`} frameBorder="0" allowFullScreen />
                 ) : (
                   <div className="p-8 prose max-w-none whitespace-pre-wrap font-medium leading-relaxed">{selectedModule.content}</div>
                 )}
               </Card>
               {selectedModule.description && (
                 <Card className="border-l-4 border-l-[#8B5CF6]">
-                  <h4 className="font-extrabold text-sm uppercase tracking-wide mb-2">Penjelasan Materi:</h4>
-                  <p className="text-[#1E293B] text-sm md:text-base">{selectedModule.description}</p>
+                  <h4 className="font-extrabold text-sm uppercase tracking-wide mb-2">Penjelasan:</h4>
+                  <p className="text-[#1E293B] text-sm">{selectedModule.description}</p>
                 </Card>
               )}
             </div>
@@ -892,22 +975,15 @@ const PublicCourseView: React.FC<{
           
           {course.assets && course.assets.length > 0 && (
             <div className="space-y-4 pt-6">
-               <h3 className="font-extrabold text-xl">Asset & File Pendukung</h3>
+               <h3 className="font-extrabold text-xl">Asset Pendukung</h3>
                <div className="grid md:grid-cols-2 gap-4">
                  {course.assets.map(asset => (
-                   <a 
-                    key={asset.id} 
-                    href={asset.url} 
-                    target="_blank" 
-                    className="bg-white border-2 border-[#1E293B] p-4 rounded-xl hard-shadow-hover flex items-center justify-between group transition-all"
-                   >
+                   <a key={asset.id} href={asset.url} target="_blank" className="bg-white border-2 border-[#1E293B] p-4 rounded-xl hard-shadow-hover flex items-center justify-between group transition-all">
                      <div className="flex items-center gap-3">
-                       <div className="bg-[#34D399] p-2 rounded-lg border border-[#1E293B]">
-                         <Download size={18} className="text-[#1E293B]" />
-                       </div>
+                       <div className="bg-[#34D399] p-2 rounded-lg border border-[#1E293B]"><Download size={18} /></div>
                        <span className="font-bold text-sm">{asset.name}</span>
                      </div>
-                     <ExternalLink size={16} className="text-[#64748B] group-hover:text-[#8B5CF6]" />
+                     <ExternalLink size={16} className="text-[#64748B]" />
                    </a>
                  ))}
                </div>
@@ -922,9 +998,7 @@ const PublicCourseView: React.FC<{
             <p className="text-xs text-[#64748B] line-clamp-3">{initialMentor.bio}</p>
           </Card>
           <div className="bg-white border-2 border-[#1E293B] rounded-2xl p-4 hard-shadow space-y-2">
-            <h4 className="font-extrabold mb-4 flex items-center gap-2">
-              <List size={18} className="text-[#8B5CF6]"/> Kurikulum
-            </h4>
+            <h4 className="font-extrabold mb-4 flex items-center gap-2"><List size={18} className="text-[#8B5CF6]"/> Kurikulum</h4>
             {course.modules.map((m, i) => (
               <button key={m.id} onClick={() => setSelectedModule(m)} className={`w-full text-left p-3 rounded-xl border-2 transition-all flex items-center gap-3 ${selectedModule?.id === m.id ? 'bg-[#FBBF24] border-[#1E293B]' : 'border-transparent hover:bg-[#F1F5F9]'}`}>
                 <span className="w-6 h-6 rounded-full bg-white border border-[#1E293B] flex-shrink-0 flex items-center justify-center text-[10px] font-bold">{i+1}</span>
@@ -964,81 +1038,80 @@ const App: React.FC = () => {
     setStorageItem('supabase', supabase);
   }, [isLoggedIn, courses, mentor, branding, supabase]);
 
-  const updateLastLocalUpdate = useCallback(() => { lastLocalUpdateRef.current = Date.now(); }, []);
-
-  useEffect(() => {
+  const fetchAllData = useCallback(async () => {
     const client = getSupabaseClient(supabase);
     if (!client) return;
-    
-    const initialFetch = async () => {
-      try {
-        const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
-        if (b) setBranding({ siteName: b.site_name, logo: b.logo });
-        const { data: m } = await client.from('mentor').select('*').eq('id', 'profile').single();
-        if (m) setMentor(m);
-        const { data: c } = await client.from('courses').select('*');
-        if (c) setCourses(c.map((item: any) => ({ ...item, coverImage: item.cover_image, mentorId: item.mentor_id, assets: item.assets || [], modules: item.modules || [] })));
-      } catch (e) { console.warn("Supabase init fetch warn", e); }
-    };
-    initialFetch();
-    
-    const sub = client.channel('global_updates').on('postgres_changes', { event: '*', table: '*' }, (payload: any) => {
+    try {
+      const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
+      if (b) setBranding({ siteName: b.site_name, logo: b.logo });
+      const { data: m } = await client.from('mentor').select('*').eq('id', 'profile').single();
+      if (m) setMentor(m);
+      const { data: c } = await client.from('courses').select('*').order('created_at', { ascending: false });
+      if (c) {
+        setCourses(c.map((item: any) => ({ ...item, coverImage: item.cover_image, mentorId: item.mentor_id, assets: item.assets || [], modules: item.modules || [] })));
+      }
+    } catch (e) { console.warn("Fetch error", e); }
+  }, [supabase]);
+
+  useEffect(() => {
+    fetchAllData();
+    const client = getSupabaseClient(supabase);
+    if (!client) return;
+    const sub = client.channel('global_updates').on('postgres_changes', { event: '*', table: '*' }, () => {
        if (isSyncingRef.current || (Date.now() - lastLocalUpdateRef.current < 2000)) return;
-       if(payload.table === 'branding' && payload.new) setBranding({siteName: payload.new.site_name, logo: payload.new.logo});
-       if(payload.table === 'mentor' && payload.new) setMentor(payload.new);
+       fetchAllData();
     }).subscribe();
     return () => { client.removeChannel(sub); };
-  }, [supabase]);
+  }, [supabase, fetchAllData]);
+
+  const handleDeleteCourse = async (id: string) => {
+    if (!confirm("Hapus kursus ini secara permanen dari database?")) return;
+    const client = getSupabaseClient(supabase);
+    if (client) {
+      try {
+        const { error } = await client.from('courses').delete().eq('id', id);
+        if (error) throw error;
+        setCourses(prev => prev.filter(c => c.id !== id));
+        alert("Kursus berhasil dihapus permanen.");
+      } catch (err) {
+        console.error("Delete failed", err);
+        alert("Gagal menghapus kursus.");
+      }
+    } else {
+       setCourses(prev => prev.filter(c => c.id !== id));
+    }
+  };
 
   const handleUpdateCourse = async (updatedCourse: Course, updatedMentor?: Mentor) => {
      const client = getSupabaseClient(supabase);
-     if (!client) throw new Error("Database belum terhubung. Periksa Settings.");
-
+     if (!client) throw new Error("Database belum terhubung.");
      isSyncingRef.current = true;
      setSyncing(true);
-
      try {
-        // Pembersihan data null/undefined
         const courseData = {
            id: updatedCourse.id,
-           title: updatedCourse.title || "Untitled",
-           description: updatedCourse.description || "",
-           cover_image: updatedCourse.coverImage || "",
-           modules: updatedCourse.modules || [],
-           assets: updatedCourse.assets || [],
+           title: updatedCourse.title,
+           description: updatedCourse.description,
+           cover_image: updatedCourse.coverImage,
+           modules: updatedCourse.modules,
+           assets: updatedCourse.assets,
            mentor_id: updatedCourse.mentorId || "profile",
            updated_at: new Date().toISOString()
         };
-
         const { error: cErr } = await client.from('courses').upsert(courseData, { onConflict: 'id' });
         if (cErr) throw cErr;
 
         if (updatedMentor) {
-          const mentorData = {
-            id: 'profile',
-            name: updatedMentor.name || "",
-            role: updatedMentor.role || "",
-            bio: updatedMentor.bio || "",
-            photo: updatedMentor.photo || "",
-            socials: updatedMentor.socials || {},
-            updated_at: new Date().toISOString()
-          };
+          const mentorData = { id: 'profile', name: updatedMentor.name, role: updatedMentor.role, bio: updatedMentor.bio, photo: updatedMentor.photo, socials: updatedMentor.socials, updated_at: new Date().toISOString() };
           const { error: mErr } = await client.from('mentor').upsert(mentorData, { onConflict: 'id' });
           if (mErr) throw mErr;
         }
-
-        // Update Local State Optimistically
         setCourses(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
         if (updatedMentor) setMentor(updatedMentor);
-
      } catch (err: any) {
-        console.error("DB Sync Error:", err);
         throw err;
      } finally {
-        setTimeout(() => {
-          isSyncingRef.current = false;
-          setSyncing(false);
-        }, 800);
+        setTimeout(() => { isSyncingRef.current = false; setSyncing(false); }, 1000);
      }
   };
 
@@ -1055,10 +1128,10 @@ const App: React.FC = () => {
       )}
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
-        <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} onDeleteCourse={handleDeleteCourse} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={supabase} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} />} />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>
