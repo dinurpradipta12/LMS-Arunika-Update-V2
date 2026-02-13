@@ -40,7 +40,8 @@ import {
   Activity,
   Smartphone,
   Monitor,
-  Navigation
+  Navigation,
+  RotateCcw
 } from 'lucide-react';
 
 // Custom TikTok SVG Icon
@@ -122,6 +123,19 @@ const getSupabaseClient = (config: SupabaseConfig) => {
   }
 };
 
+// Helper to generate share link with embedded config
+const generateShareLink = (courseId: string, supabase: SupabaseConfig) => {
+   const baseUrl = `${window.location.origin}${window.location.pathname}#/course/${courseId}`;
+   // If supabase is configured, we embed the config in the URL so the visitor can access the data
+   // This is necessary for a client-side only app without a backend proxy
+   if (supabase.url && supabase.anonKey) {
+      const configStr = JSON.stringify({ u: supabase.url, k: supabase.anonKey });
+      const encoded = btoa(configStr);
+      return `${baseUrl}?cfg=${encoded}`;
+   }
+   return baseUrl;
+};
+
 // Simple Visitor ID for Unique Tracking
 const getVisitorId = () => {
   let id = localStorage.getItem('arunika_visitor_id');
@@ -158,7 +172,7 @@ const RouteTracker: React.FC<{ supabase: SupabaseConfig }> = ({ supabase }) => {
       
       // Check if we are on a course page
       // Matches /course/:id where :id is any character except /
-      const courseMatch = location.pathname.match(/^\/course\/([^/]+)/);
+      const courseMatch = location.pathname.match(/^\/course\/([^/?]+)/);
       const courseId = courseMatch ? courseMatch[1] : null;
 
       const eventData = {
@@ -418,6 +432,7 @@ const AdminLayout: React.FC<{
 
 const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> = ({ courses, supabase }) => {
   const [events, setEvents] = useState<any[]>([]);
+  const [isResetting, setIsResetting] = useState(false);
   
   // Real-time Agregasi (Memoized to prevent flicker)
   const stats = useMemo(() => {
@@ -462,6 +477,10 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
         // Optimized update: just add the new event to the list
         setEvents(prev => [payload.new, ...prev]);
       })
+      .on('postgres_changes', { event: 'DELETE', table: 'events', schema: 'public' }, () => {
+        // Clear events on delete
+        setEvents([]);
+      })
       .subscribe();
 
     return () => { client.removeChannel(channel); };
@@ -472,6 +491,27 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
     return course ? course.title : `Unknown Course (ID: ${id})`;
   };
 
+  const handleResetData = async () => {
+    if (!confirm("PERINGATAN: Apakah Anda yakin ingin menghapus SEMUA data analitik? Tindakan ini tidak dapat dibatalkan.")) return;
+    
+    const client = getSupabaseClient(supabase);
+    if (!client) return;
+    
+    setIsResetting(true);
+    try {
+      // Using a not-null filter to delete all rows. 'id' is always present.
+      const { error } = await client.from('events').delete().not('id', 'is', null);
+      if (error) throw error;
+      setEvents([]);
+      alert("Data analitik berhasil direset.");
+    } catch (e: any) {
+      console.error("Reset failed", e);
+      alert("Gagal mereset data: " + e.message);
+    } finally {
+      setIsResetting(false);
+    }
+  };
+
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 md:space-y-8">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -479,12 +519,23 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
           <h1 className="text-3xl md:text-4xl font-extrabold mb-2 text-[#1E293B]">Production Analytics</h1>
           <p className="text-sm md:text-base text-[#64748B]">Data real-time tanpa delay dan flicker.</p>
         </div>
-        <Badge color="#34D399" className="h-10">
-          <div className="flex items-center gap-2 px-1">
-             <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
-             <span className="text-white font-black">STREAMING DATA...</span>
-          </div>
-        </Badge>
+        <div className="flex items-center gap-2">
+          <Badge color="#34D399" className="h-10">
+            <div className="flex items-center gap-2 px-1">
+               <div className="w-2 h-2 rounded-full bg-white animate-pulse" />
+               <span className="text-white font-black">STREAMING DATA...</span>
+            </div>
+          </Badge>
+          <Button 
+            variant="secondary" 
+            className="h-10 text-xs px-4" 
+            icon={RotateCcw} 
+            onClick={handleResetData}
+            isLoading={isResetting}
+          >
+            Reset Data
+          </Button>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4 md:gap-6">
@@ -561,7 +612,7 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
   );
 };
 
-const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<React.SetStateAction<Course[]>> }> = ({ courses, setCourses }) => {
+const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<React.SetStateAction<Course[]>>; supabase: SupabaseConfig }> = ({ courses, setCourses, supabase }) => {
   const navigate = useNavigate();
 
   const handleAddCourse = () => {
@@ -618,10 +669,10 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
               <Button onClick={() => navigate(`/admin/course/${course.id}`)} variant="secondary" className="text-xs h-10">Edit Content</Button>
               <Button 
                 onClick={() => {
-                  const url = `${window.location.origin}${window.location.pathname}#/course/${course.id}`;
+                  const url = generateShareLink(course.id, supabase);
                   navigator.clipboard.writeText(url);
                   window.open(url, '_blank');
-                  alert('Link publik berhasil disalin & halaman dibuka!');
+                  alert('Link publik berhasil disalin & halaman dibuka! Link ini berisi konfigurasi akses.');
                 }} 
                 variant="green" className="text-xs h-10" icon={Share2}
               >
@@ -1081,7 +1132,7 @@ const PublicCourseView: React.FC<{
           <div className="flex items-center gap-2 md:gap-3">
             <Badge className="hidden sm:inline-flex">{course.modules.length} Materi</Badge>
             <Button variant="secondary" className="px-3 md:px-4 h-10 text-xs" icon={Share2} onClick={() => {
-              const url = window.location.href;
+              const url = generateShareLink(course.id, supabase);
               navigator.clipboard.writeText(url);
               alert('Link publik berhasil disalin!');
             }}>Bagikan</Button>
@@ -1228,12 +1279,33 @@ const App: React.FC = () => {
   
   const isSyncingRef = useRef(false);
   const lastLocalUpdateRef = useRef<number>(0);
+  const location = useLocation();
 
   useEffect(() => setStorageItem('isLoggedIn', isLoggedIn), [isLoggedIn]);
   useEffect(() => setStorageItem('courses', courses), [courses]);
   useEffect(() => setStorageItem('mentor', mentor), [mentor]);
   useEffect(() => setStorageItem('branding', branding), [branding]);
   useEffect(() => setStorageItem('supabase', supabase), [supabase]);
+
+  // Check for shared config in URL
+  useEffect(() => {
+    const searchParams = new URLSearchParams(location.search);
+    const cfg = searchParams.get('cfg');
+    if (cfg) {
+      try {
+        const decoded = JSON.parse(atob(cfg));
+        if (decoded.u && decoded.k) {
+          // Update supabase config from URL if it differs, allowing public viewers to connect
+          if (supabase.url !== decoded.u || supabase.anonKey !== decoded.k) {
+            setSupabase({ url: decoded.u, anonKey: decoded.k });
+            // Optionally clear the query param to clean up URL, but keeping it ensures reload works
+          }
+        }
+      } catch (e) {
+        console.error("Invalid config in URL");
+      }
+    }
+  }, [location.search]);
 
   const updateLastLocalUpdate = useCallback(() => {
     lastLocalUpdateRef.current = Date.now();
@@ -1354,7 +1426,7 @@ const App: React.FC = () => {
       
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
-        <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
