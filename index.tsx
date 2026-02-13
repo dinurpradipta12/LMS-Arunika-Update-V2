@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import ReactDOM from 'react-dom/client';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
@@ -115,7 +114,8 @@ const RouteTracker: React.FC<{ supabase: SupabaseConfig }> = ({ supabase }) => {
       const source = searchParams.get('ref') || searchParams.get('utm_source') || 'direct';
       
       // Check if we are on a course page
-      const courseMatch = location.pathname.match(/\/course\/([^/]+)/);
+      // Matches /course/:id where :id is any character except /
+      const courseMatch = location.pathname.match(/^\/course\/([^/]+)/);
       const courseId = courseMatch ? courseMatch[1] : null;
 
       const eventData = {
@@ -341,6 +341,38 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
   );
 };
 
+const AdminLayout: React.FC<{ 
+  children: React.ReactNode; 
+  branding: Branding; 
+  isSidebarOpen: boolean; 
+  setIsSidebarOpen: (open: boolean) => void;
+  onLogout: () => void;
+}> = ({ children, branding, isSidebarOpen, setIsSidebarOpen, onLogout }) => (
+  <div className="flex min-h-screen">
+    <Sidebar 
+      branding={branding} 
+      onLogout={onLogout} 
+      isOpen={isSidebarOpen} 
+      onClose={() => setIsSidebarOpen(false)} 
+    />
+    <main className="flex-1 min-w-0 bg-[#FFFDF5] dot-grid flex flex-col">
+      <header className="md:hidden bg-white border-b-2 border-[#1E293B] p-4 flex items-center justify-between sticky top-0 z-30 h-16">
+        <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-[#1E293B] hover:bg-[#F1F5F9] rounded-xl transition-colors">
+          <Menu size={24} />
+        </button>
+        <div className="flex items-center gap-2">
+          <img src={branding.logo} className="w-8 h-8 object-contain" alt="Logo" />
+          <span className="font-extrabold text-sm truncate max-w-[120px]">{branding.siteName}</span>
+        </div>
+        <div className="w-10"></div>
+      </header>
+      <div className="flex-1 overflow-y-auto">
+        {children}
+      </div>
+    </main>
+  </div>
+);
+
 const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> = ({ courses, supabase }) => {
   const [events, setEvents] = useState<any[]>([]);
   
@@ -392,7 +424,10 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
     return () => { client.removeChannel(channel); };
   }, [supabase.url, supabase.anonKey]);
 
-  const getCourseTitle = (id: string) => courses.find(c => c.id === id)?.title || "Unknown Course";
+  const getCourseTitle = (id: string) => {
+    const course = courses.find(c => c.id === id);
+    return course ? course.title : `Unknown Course (ID: ${id})`;
+  };
 
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-6 md:space-y-8">
@@ -438,6 +473,7 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
                 <span className="font-black text-[#CBD5E1] text-lg">0{i+1}</span>
                 <div className="flex-1">
                   <p className="font-bold text-sm truncate">{getCourseTitle(id)}</p>
+                  <p className="text-[10px] text-[#94A3B8] font-mono">ID: {id}</p>
                   <div className="w-full bg-[#F1F5F9] h-2 rounded-full mt-1 overflow-hidden">
                     <div className="bg-[#8B5CF6] h-full" style={{ width: `${(count / stats.totalViews) * 100}%` }} />
                   </div>
@@ -733,8 +769,15 @@ const CourseEditor: React.FC<{
   const [showAddMenu, setShowAddMenu] = useState(false);
 
   useEffect(() => {
-    if (course) setEditedCourse(course);
-  }, [course]);
+    if (!course) return;
+
+    setEditedCourse({
+      ...course,
+      modules: course.modules ? [...course.modules] : [],
+      assets: course.assets ? [...course.assets] : []
+    });
+
+  }, [id]); // hanya depend ke id
 
   if (!editedCourse) return <div className="p-8 font-bold text-center">Kursus tidak ditemukan</div>;
 
@@ -938,7 +981,7 @@ const PublicCourseView: React.FC<{
   supabase: SupabaseConfig;
   setBranding: (b: Branding) => void;
   setMentor: (m: Mentor) => void;
-  setCourses: (c: Course[]) => void;
+  setCourses: (c: any) => void;
 }> = ({ courses, mentor: localMentor, branding: localBranding, supabase, setBranding, setMentor, setCourses }) => {
   const { id } = useParams<{ id: string }>();
   const course = courses.find(c => c.id === id);
@@ -956,8 +999,15 @@ const PublicCourseView: React.FC<{
       if (m) setMentor(m);
       const { data: c } = await client.from('courses').select('*').eq('id', id).single();
       if (c) {
-        const fullCourse = { ...c, coverImage: c.cover_image, mentorId: c.mentor_id };
-        setCourses(courses.map(item => item.id === id ? fullCourse : item));
+        const fullCourse: Course = { 
+          ...c, 
+          coverImage: c.cover_image, 
+          mentorId: c.mentor_id,
+          assets: c.assets || [],
+          modules: c.modules || []
+        };
+        // Use functional state update to prevent stale closures and data loss
+        setCourses((prev: Course[]) => prev.map(item => item.id === id ? fullCourse : item));
       }
     };
     syncGlobalData();
@@ -994,7 +1044,7 @@ const PublicCourseView: React.FC<{
         <div className="lg:col-span-3 space-y-6">
           <div className="bg-white border-2 border-[#1E293B] p-4 md:p-6 rounded-3xl hard-shadow flex flex-col md:flex-row md:items-center justify-between gap-4">
             <div className="flex-1">
-              <Badge color="#8B5CF6" className="text-white mb-2">Public Course</Badge>
+              <Badge color="#8B5CF6" className="text-white mb-2">Video Course</Badge>
               <h1 className="text-xl md:text-2xl font-extrabold text-[#1E293B] leading-tight">{course.title}</h1>
             </div>
           </div>
@@ -1194,10 +1244,13 @@ const App: React.FC = () => {
         if (m) setMentor(m);
         const { data: c } = await client.from('courses').select('*');
         if (c && c.length > 0) {
+          // Normalize inbound data from DB to ensure local state consistency
           setCourses(c.map((item: any) => ({
             ...item,
             coverImage: item.cover_image,
-            mentorId: item.mentor_id
+            mentorId: item.mentor_id,
+            assets: item.assets || [],
+            modules: item.modules || []
           })));
         }
       } catch (e) {
@@ -1210,13 +1263,20 @@ const App: React.FC = () => {
        const timeSinceLastLocalUpdate = Date.now() - lastLocalUpdateRef.current;
        if (isSyncingRef.current || timeSinceLastLocalUpdate < 3000) return;
 
-       if(payload.table === 'branding') {
+       if(payload.table === 'branding' && payload.new) {
          setBranding(prev => ({...prev, siteName: payload.new.site_name, logo: payload.new.logo}));
        }
-       if(payload.table === 'mentor') setMentor(payload.new);
-       if(payload.table === 'courses') {
-         const newCourse = { ...payload.new, coverImage: payload.new.cover_image, mentorId: payload.new.mentor_id };
-         setCourses(prev => {
+       if(payload.table === 'mentor' && payload.new) setMentor(payload.new);
+       if(payload.table === 'courses' && payload.new) {
+         const raw = payload.new;
+         const newCourse: Course = { 
+           ...raw, 
+           coverImage: raw.cover_image, 
+           mentorId: raw.mentor_id,
+           assets: raw.assets || [],
+           modules: raw.modules || []
+         };
+         setCourses((prev: Course[]) => {
             const exists = prev.find(p => p.id === newCourse.id);
             if(exists) return prev.map(c => c.id === newCourse.id ? newCourse : c);
             return [...prev, newCourse];
@@ -1230,32 +1290,6 @@ const App: React.FC = () => {
   const updateCourse = (updated: Course) => {
     setCourses(prev => prev.map(c => c.id === updated.id ? updated : c));
   };
-
-  const AdminLayout = ({ children }: { children: React.ReactNode }) => (
-    <div className="flex min-h-screen">
-      <Sidebar 
-        branding={branding} 
-        onLogout={() => setIsLoggedIn(false)} 
-        isOpen={isSidebarOpen} 
-        onClose={() => setIsSidebarOpen(false)} 
-      />
-      <main className="flex-1 min-w-0 bg-[#FFFDF5] dot-grid flex flex-col">
-        <header className="md:hidden bg-white border-b-2 border-[#1E293B] p-4 flex items-center justify-between sticky top-0 z-30 h-16">
-          <button onClick={() => setIsSidebarOpen(true)} className="p-2 text-[#1E293B] hover:bg-[#F1F5F9] rounded-xl transition-colors">
-            <Menu size={24} />
-          </button>
-          <div className="flex items-center gap-2">
-            <img src={branding.logo} className="w-8 h-8 object-contain" alt="Logo" />
-            <span className="font-extrabold text-sm truncate max-w-[120px]">{branding.siteName}</span>
-          </div>
-          <div className="w-10"></div>
-        </header>
-        <div className="flex-1 overflow-y-auto">
-          {children}
-        </div>
-      </main>
-    </div>
-  );
 
   return (
     <div className="min-h-screen">
@@ -1271,10 +1305,10 @@ const App: React.FC = () => {
       
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
-        <Route path="/admin" element={isLoggedIn ? <AdminLayout><AdminDashboard courses={courses} setCourses={setCourses} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/analytics" element={isLoggedIn ? <AdminLayout><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/settings" element={isLoggedIn ? <AdminLayout><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={updateCourse} mentor={mentor} setMentor={setMentor} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={updateLastLocalUpdate} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/course/:id" element={
           <PublicCourseView 
             courses={courses} 
