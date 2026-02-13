@@ -629,9 +629,25 @@ const AdminDashboard: React.FC<{ courses: Course[]; setCourses: React.Dispatch<R
     navigate(`/admin/course/${newCourse.id}`);
   };
 
-  const handleDeleteCourse = (id: string) => {
-    if (confirm("Hapus kursus ini secara permanen?")) {
-      setCourses(courses.filter(c => c.id !== id));
+  const handleDeleteCourse = async (id: string) => {
+    if (!confirm("Hapus kursus ini secara permanen?")) return;
+    
+    // Optimistic Update: Hapus dari state lokal segera
+    setCourses(courses.filter(c => c.id !== id));
+
+    const client = getSupabaseClient(supabase);
+    // Jika tidak terhubung ke DB, hanya hapus lokal (sudah dilakukan di atas)
+    if (!client) return;
+
+    try {
+      // Hapus dari database Supabase
+      const { error } = await client.from('courses').delete().eq('id', id);
+      if (error) {
+        console.error("Database deletion failed:", error);
+        alert("Gagal menghapus dari database, namun telah dihapus secara lokal.");
+      }
+    } catch (e) {
+      console.error("Error deleting course:", e);
     }
   };
 
@@ -1393,7 +1409,7 @@ const App: React.FC = () => {
          const newCourse: Course = { 
            ...raw, 
            coverImage: raw.cover_image, 
-           mentorId: raw.mentor_id,
+           mentorId: raw.mentor_id, 
            assets: raw.assets || [],
            modules: raw.modules || []
          };
@@ -1402,6 +1418,10 @@ const App: React.FC = () => {
             if(exists) return prev.map(c => c.id === newCourse.id ? newCourse : c);
             return [...prev, newCourse];
          });
+       }
+       // Handle deleted courses from realtime
+       if(payload.table === 'courses' && payload.eventType === 'DELETE') {
+         setCourses(prev => prev.filter(c => c.id !== payload.old.id));
        }
     }).subscribe();
 
@@ -1417,12 +1437,14 @@ const App: React.FC = () => {
       {/* Route Tracker for Analytics */}
       <RouteTracker supabase={supabase} />
 
-      <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-500 ease-in-out transform ${syncing ? 'translate-y-0 opacity-100' : '-translate-y-12 opacity-0'}`}>
-        <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-5 py-2 flex items-center gap-3 hard-shadow">
-           <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
-           <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#1E293B]">Auto Sync Hub...</span>
+      {isLoggedIn && (
+        <div className={`fixed top-6 left-1/2 -translate-x-1/2 z-[999] transition-all duration-500 ease-in-out transform ${syncing ? 'translate-y-0 opacity-100' : '-translate-y-12 opacity-0'}`}>
+          <div className="bg-[#34D399] border-2 border-[#1E293B] rounded-full px-5 py-2 flex items-center gap-3 hard-shadow">
+             <RefreshCw size={18} className="text-[#1E293B] animate-spin" />
+             <span className="text-[10px] font-extrabold uppercase tracking-widest text-[#1E293B]">Auto Sync Hub...</span>
+          </div>
         </div>
-      </div>
+      )}
       
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
