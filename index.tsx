@@ -448,7 +448,7 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
       onLogin();
       navigate('/admin');
     } else {
-      setError('Username atau password salah (Gunakan arunika / ar4925)');
+      setError('Username atau password salah');
     }
   };
 
@@ -461,11 +461,11 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
               <Layout className="text-white" size={40} />
             </div>
             <h1 className="text-3xl font-extrabold text-[#1E293B]">Admin Login</h1>
-            <p className="text-[#64748B]">SaaS LMS Arunika Edition</p>
+            <p className="text-[#64748B]">Arunika Learning Hub</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
-            <Input label="Username" value={username} onChange={e => setUsername(e.target.value)} placeholder="arunika" />
-            <Input label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="••••••••" />
+            <Input label="Username" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username/email" />
+            <Input label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" />
             {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-lg border border-red-200">{error}</p>}
             <Button type="submit" className="w-full h-12" icon={ChevronRight}>Masuk Dashboard</Button>
           </form>
