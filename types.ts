@@ -52,6 +52,7 @@ export interface Mentor {
 
 export interface Branding {
   logo: string;
+  favicon: string;
   siteName: string;
 }
 

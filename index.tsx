@@ -60,7 +60,8 @@ import {
   Tag,
   Palette,
   Terminal,
-  FileCode
+  FileCode,
+  Image as ImageIcon
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -110,6 +111,7 @@ const compressImage = (base64Str: string, maxWidth: number = 800, quality: numbe
 // --- DEFAULTS (EMPTY STATES) ---
 const defaultBranding: Branding = {
   logo: '',
+  favicon: '',
   siteName: 'Platform Arunika'
 };
 
@@ -351,7 +353,7 @@ const ImageUpload: React.FC<{
         ) : (
           <div className="text-center p-4 border-2 border-dashed border-[#CBD5E1] rounded-2xl w-full">
             <Upload className="mx-auto mb-2 text-[#8B5CF6]" size={32} />
-            <p className="font-bold text-sm">Upload Logo</p>
+            <p className="font-bold text-sm">Upload File</p>
           </div>
         )}
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
@@ -452,7 +454,7 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
       onLogin();
       navigate('/admin');
     } else {
-      setError('Username atau password salah. Silakan coba lagi.');
+      setError('Username atau password salah. Coba lagi!');
     }
   };
 
@@ -471,7 +473,7 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
             <Input label="Username" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username/Email" />
             <Input label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" />
             {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-lg border border-red-200">{error}</p>}
-            <Button type="submit" className="w-full h-12" icon={ChevronRight}>Masuk Dashboard</Button>
+            <Button type="submit" className="w-full h-12" icon={ChevronRight}>Masuk Administrator</Button>
           </form>
         </Card>
       </div>
@@ -826,16 +828,18 @@ const AdminDashboard: React.FC<{
 const Settings: React.FC<{ 
   branding: Branding; 
   setBranding: React.Dispatch<React.SetStateAction<Branding>>;
+  onSaveBranding: (b: Branding) => Promise<void>;
   supabase: SupabaseConfig;
   setSupabase: React.Dispatch<React.SetStateAction<SupabaseConfig>>;
   onLocalEdit: () => void;
-}> = ({ branding, setBranding, supabase, setSupabase, onLocalEdit }) => {
+}> = ({ branding, setBranding, onSaveBranding, supabase, setSupabase, onLocalEdit }) => {
   const [isConnecting, setIsConnecting] = useState(false);
+  const [isSavingBranding, setIsSavingBranding] = useState(false);
   
   const sqlScript = `
 -- COPY & PASTE SCRIPT INI KE SQL EDITOR SUPABASE ANDA --
 
--- 1. Tabel Kursus (Wajib memiliki kolom categories jsonb)
+-- 1. Tabel Kursus
 CREATE TABLE IF NOT EXISTS courses (
   id TEXT PRIMARY KEY,
   title TEXT,
@@ -843,13 +847,12 @@ CREATE TABLE IF NOT EXISTS courses (
   cover_image TEXT,
   modules JSONB DEFAULT '[]'::jsonb,
   assets JSONB DEFAULT '[]'::jsonb,
-  categories JSONB DEFAULT '[]'::jsonb, -- Pastikan kolom ini ada
+  categories JSONB DEFAULT '[]'::jsonb,
   mentor_id TEXT DEFAULT 'profile',
   created_at TIMESTAMPTZ DEFAULT NOW(),
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- Pastikan kolom categories ada jika tabel sudah dibuat sebelumnya
 ALTER TABLE courses ADD COLUMN IF NOT EXISTS categories JSONB DEFAULT '[]'::jsonb;
 
 -- 2. Tabel Mentor
@@ -863,13 +866,16 @@ CREATE TABLE IF NOT EXISTS mentor (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- 3. Tabel Branding
+-- 3. Tabel Branding (Sudah mendukung favicon)
 CREATE TABLE IF NOT EXISTS branding (
   id TEXT PRIMARY KEY DEFAULT 'config',
   site_name TEXT,
   logo TEXT,
+  favicon TEXT, -- Kolom untuk favicon
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
+
+ALTER TABLE branding ADD COLUMN IF NOT EXISTS favicon TEXT;
 
 -- 4. Tabel Events (Analitik)
 CREATE TABLE IF NOT EXISTS events (
@@ -885,7 +891,7 @@ CREATE TABLE IF NOT EXISTS events (
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
--- AKTIFKAN REALTIME (OPSIONAL TAPI DISARANKAN)
+-- AKTIFKAN REALTIME
 ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
   `;
 
@@ -904,6 +910,18 @@ ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
     }
   };
 
+  const handleSaveBrandingInternal = async () => {
+    setIsSavingBranding(true);
+    try {
+      await onSaveBranding(branding);
+      alert('Branding berhasil disimpan ke database!');
+    } catch (e: any) {
+      alert('Gagal menyimpan branding: ' + e.message);
+    } finally {
+      setIsSavingBranding(false);
+    }
+  };
+
   const copySql = () => {
     navigator.clipboard.writeText(sqlScript);
     alert('Script SQL berhasil disalin!');
@@ -915,9 +933,18 @@ ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
       
       <section className="space-y-6">
         <h2 className="text-xl font-bold flex items-center gap-2"><Layout size={20}/> Branding</h2>
-        <Card className="grid md:grid-cols-2 gap-8">
-          <Input label="Site Name" value={branding.siteName} onChange={e => { onLocalEdit(); setBranding({...branding, siteName: e.target.value}) }} />
-          <ImageUpload label="Logo" variant="minimal" value={branding.logo} onChange={logo => { onLocalEdit(); setBranding({...branding, logo}) }} />
+        <Card className="space-y-8">
+          <div className="grid md:grid-cols-1 gap-6">
+            <Input label="Site Name" value={branding.siteName} onChange={e => { onLocalEdit(); setBranding({...branding, siteName: e.target.value}) }} />
+          </div>
+          <div className="grid md:grid-cols-2 gap-8">
+            <ImageUpload label="Logo Utama" variant="minimal" value={branding.logo} onChange={logo => { onLocalEdit(); setBranding({...branding, logo}) }} />
+            <ImageUpload label="Favicon (Icon Browser)" variant="minimal" aspectRatio={1} value={branding.favicon} onChange={favicon => { onLocalEdit(); setBranding({...branding, favicon}) }} />
+          </div>
+          <div className="pt-4 border-t-2 border-[#F1F5F9]">
+             <Button variant="primary" className="w-full h-12" onClick={handleSaveBrandingInternal} isLoading={isSavingBranding} icon={Save}>Simpan Branding</Button>
+             <p className="text-[10px] text-center mt-2 font-bold text-[#64748B]">Simpan untuk memperbarui icon di tab browser pengunjung.</p>
+          </div>
         </Card>
       </section>
 
@@ -943,7 +970,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
               <pre>{sqlScript}</pre>
            </div>
            <p className="text-xs font-bold text-[#94A3B8] italic">
-             * Jalankan script di atas pada "SQL Editor" di Dashboard Supabase Anda untuk memastikan tabel `courses` memiliki kolom `categories`.
+             * Jalankan script di atas pada "SQL Editor" di Dashboard Supabase Anda untuk memastikan tabel `branding` memiliki kolom `favicon`.
            </p>
         </Card>
       </section>
@@ -1275,7 +1302,7 @@ const PublicCourseView: React.FC<{
     
     try {
       const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
-      if (b) setBranding({ siteName: b.site_name, logo: b.logo });
+      if (b) setBranding({ siteName: b.site_name, logo: b.logo, favicon: b.favicon || '' });
       
       const { data: m } = await client.from('mentor').select('*').eq('id', 'profile').single();
       if (m) setMentor(m);
@@ -1457,6 +1484,27 @@ const App: React.FC = () => {
   const isSyncingRef = useRef(false);
   const lastLocalUpdateRef = useRef<number>(0);
 
+  // --- Dynamic Favicon Update ---
+  useEffect(() => {
+    const updateFavicon = (url: string) => {
+      let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+      if (!link) {
+        link = document.createElement('link');
+        link.rel = 'icon';
+        document.getElementsByTagName('head')[0].appendChild(link);
+      }
+      link.href = url || '/favicon.ico';
+    };
+    
+    if (branding.favicon) {
+      updateFavicon(branding.favicon);
+    }
+    
+    if (branding.siteName) {
+      document.title = branding.siteName;
+    }
+  }, [branding.favicon, branding.siteName]);
+
   useEffect(() => {
     setStorageItem('isLoggedIn', isLoggedIn);
     setStorageItem('courses', courses);
@@ -1470,7 +1518,7 @@ const App: React.FC = () => {
     if (!client) return;
     try {
       const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
-      if (b) setBranding({ siteName: b.site_name, logo: b.logo });
+      if (b) setBranding({ siteName: b.site_name, logo: b.logo, favicon: b.favicon || '' });
       const { data: m } = await client.from('mentor').select('*').eq('id', 'profile').single();
       if (m) setMentor(m);
       const { data: c } = await client.from('courses').select('*').order('created_at', { ascending: false });
@@ -1516,6 +1564,28 @@ const App: React.FC = () => {
     }
   };
 
+  const handleUpdateBranding = async (updatedBranding: Branding) => {
+    const client = getSupabaseClient(supabase);
+    if (!client) throw new Error("Database belum terhubung.");
+    isSyncingRef.current = true;
+    setSyncing(true);
+    try {
+      const { error } = await client.from('branding').upsert({
+        id: 'config',
+        site_name: updatedBranding.siteName,
+        logo: updatedBranding.logo,
+        favicon: updatedBranding.favicon,
+        updated_at: new Date().toISOString()
+      }, { onConflict: 'id' });
+      if (error) throw error;
+      setBranding(updatedBranding);
+    } catch (err) {
+      throw err;
+    } finally {
+      setTimeout(() => { isSyncingRef.current = false; setSyncing(false); }, 1000);
+    }
+  };
+
   const handleUpdateCourse = async (updatedCourse: Course, updatedMentor?: Mentor) => {
      const client = getSupabaseClient(supabase);
      if (!client) throw new Error("Database belum terhubung.");
@@ -1529,7 +1599,7 @@ const App: React.FC = () => {
            cover_image: updatedCourse.coverImage,
            modules: updatedCourse.modules,
            assets: updatedCourse.assets,
-           categories: updatedCourse.categories || [], // RE-ENABLED Persistence
+           categories: updatedCourse.categories || [],
            mentor_id: updatedCourse.mentorId || "profile",
            updated_at: new Date().toISOString()
         };
@@ -1566,7 +1636,7 @@ const App: React.FC = () => {
         <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} onDeleteCourse={handleDeleteCourse} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} onSaveBranding={handleUpdateBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={supabase} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} />} />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>

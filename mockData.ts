@@ -1,8 +1,10 @@
 
 import { Course, Mentor, Branding } from './types';
 
+// Added missing favicon property to match Branding interface
 export const initialBranding: Branding = {
   logo: 'https://api.dicebear.com/7.x/shapes/svg?seed=arunika',
+  favicon: '',
   siteName: 'Arunika Learning'
 };
 
