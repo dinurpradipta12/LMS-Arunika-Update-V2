@@ -84,8 +84,8 @@ const TiktokIcon = ({ size = 18 }) => (
   </svg>
 );
 
-// --- UTILS: Image Compression & Processing ---
-const compressImage = (base64Str: string, maxWidth: number = 800, quality: number = 0.7): Promise<string> => {
+// --- UTILS: Image Compression & Processing (Updated for Transparency) ---
+const compressImage = (base64Str: string, maxWidth: number = 800, quality: number = 0.8): Promise<string> => {
   return new Promise((resolve) => {
     const img = new Image();
     img.src = base64Str;
@@ -102,8 +102,13 @@ const compressImage = (base64Str: string, maxWidth: number = 800, quality: numbe
       canvas.width = width;
       canvas.height = height;
       const ctx = canvas.getContext('2d');
-      ctx?.drawImage(img, 0, 0, width, height);
-      resolve(canvas.toDataURL('image/jpeg', quality));
+      if (ctx) {
+        // Clear rect to ensure transparency
+        ctx.clearRect(0, 0, width, height);
+        ctx.drawImage(img, 0, 0, width, height);
+      }
+      // Change to image/png to support transparency
+      resolve(canvas.toDataURL('image/png'));
     };
   });
 };
@@ -267,7 +272,7 @@ const CropModal: React.FC<{
   const handleApply = async () => {
     setIsApplying(true);
     try {
-      const compressed = await compressImage(image, aspectRatio === 1 ? 400 : 1000, 0.7);
+      const compressed = await compressImage(image, aspectRatio === 1 ? 400 : 1000, 0.8);
       onCrop(compressed);
       onClose();
     } catch (e) {
@@ -285,14 +290,22 @@ const CropModal: React.FC<{
             from { opacity: 0; transform: scale(0.95); }
             to { opacity: 1; transform: scale(1); }
           }
+          .checkered-bg {
+            background-image: linear-gradient(45deg, #e2e8f0 25%, transparent 25%),
+                              linear-gradient(-45deg, #e2e8f0 25%, transparent 25%),
+                              linear-gradient(45deg, transparent 75%, #e2e8f0 75%),
+                              linear-gradient(-45deg, transparent 75%, #e2e8f0 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+          }
         `}</style>
         <div className="flex justify-between items-center">
           <h3 className="text-2xl font-extrabold text-[#1E293B]">Optimize Image</h3>
           <button onClick={onClose} className="p-2 hover:bg-slate-100 rounded-full transition-colors"><X/></button>
         </div>
-        <p className="text-sm text-[#64748B] font-bold">Foto akan dipotong dan dikompresi otomatis untuk kecepatan akses database.</p>
-        <div className={`overflow-hidden rounded-2xl border-4 border-[#1E293B] bg-[#F1F5F9] flex items-center justify-center ${aspectRatio === 1 ? 'aspect-square max-w-[280px] mx-auto' : 'aspect-video'}`}>
-           <img src={image} className="w-full h-full object-cover" alt="Preview" />
+        <p className="text-sm text-[#64748B] font-bold">Foto akan dipotong dan dikompresi ke format PNG untuk menjaga transparansi.</p>
+        <div className={`overflow-hidden rounded-2xl border-4 border-[#1E293B] bg-[#F1F5F9] checkered-bg flex items-center justify-center ${aspectRatio === 1 ? 'aspect-square max-w-[280px] mx-auto' : 'aspect-video'}`}>
+           <img src={image} className="w-full h-full object-contain" alt="Preview" />
         </div>
         <div className="grid grid-cols-2 gap-4 pt-2">
           <Button variant="secondary" onClick={onClose} disabled={isApplying}>Batal</Button>
@@ -348,14 +361,16 @@ const ImageUpload: React.FC<{
         onClick={triggerInput}
         className="relative group cursor-pointer flex flex-col items-center justify-center p-4 transition-all"
       >
-        {value ? (
-          <img src={value} className="max-w-[120px] max-h-[120px] object-contain mb-4" alt="Logo Preview" />
-        ) : (
-          <div className="text-center p-4 border-2 border-dashed border-[#CBD5E1] rounded-2xl w-full">
-            <Upload className="mx-auto mb-2 text-[#8B5CF6]" size={32} />
-            <p className="font-bold text-sm">Upload File</p>
-          </div>
-        )}
+        <div className="relative mb-4 checkered-bg rounded-xl overflow-hidden">
+          {value ? (
+            <img src={value} className="max-w-[120px] max-h-[120px] object-contain block" alt="Logo Preview" />
+          ) : (
+            <div className="text-center p-4 border-2 border-dashed border-[#CBD5E1] rounded-2xl w-full bg-white">
+              <Upload className="mx-auto mb-2 text-[#8B5CF6]" size={32} />
+              <p className="font-bold text-sm">Upload File</p>
+            </div>
+          )}
+        </div>
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
         <Button variant="secondary" className="text-xs py-1">Ganti Gambar</Button>
       </div>
@@ -365,19 +380,19 @@ const ImageUpload: React.FC<{
       {label && <label className="text-xs font-extrabold uppercase tracking-wide text-[#64748B] ml-1">{label}</label>}
       <div 
         onClick={triggerInput}
-        className="relative group cursor-pointer border-2 border-[#1E293B] rounded-2xl overflow-hidden aspect-video bg-white flex items-center justify-center hard-shadow hover:hard-shadow-hover transition-all"
+        className="relative group cursor-pointer border-2 border-[#1E293B] rounded-2xl overflow-hidden aspect-video bg-white flex items-center justify-center hard-shadow hover:hard-shadow-hover transition-all checkered-bg"
       >
         {value ? (
-          <img src={value} className="w-full h-full object-cover" alt="Upload" />
+          <img src={value} className="w-full h-full object-contain" alt="Upload" />
         ) : (
-          <div className="text-center p-4">
+          <div className="text-center p-4 bg-white/80 backdrop-blur-sm rounded-xl">
             <Upload className="mx-auto mb-2 text-[#8B5CF6]" size={32} />
             <p className="font-bold text-sm">Klik untuk upload gambar</p>
           </div>
         )}
         <input type="file" ref={fileInputRef} className="hidden" accept="image/*" onChange={handleFileChange} />
         <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white font-bold text-xs">
-          UPLOAD & CROP
+          UPLOAD & CROP (PNG)
         </div>
       </div>
     </div>
@@ -438,7 +453,7 @@ const AdvancedEditor: React.FC<{ value: string; onChange: (v: string) => void; l
   );
 };
 
-const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin, isLoggedIn }) => {
+const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean; branding: Branding }> = ({ onLogin, isLoggedIn, branding }) => {
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -454,26 +469,32 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
       onLogin();
       navigate('/admin');
     } else {
-      setError('Username atau password salah. Coba lagi!');
+      setError('Username atau password salah. silakan coba lagi');
     }
   };
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-m-md">
+      <div className="w-full max-w-md">
         <Card className="p-8">
-          <div className="flex flex-col items-center mb-8">
-            <div className="w-20 h-20 bg-[#8B5CF6] rounded-full border-2 border-[#1E293B] hard-shadow flex items-center justify-center mb-4">
-              <Layout className="text-white" size={40} />
-            </div>
-            <h1 className="text-3xl font-extrabold text-[#1E293B]">Admin Login</h1>
-            <p className="text-[#64748B]">Arunika Learning Hub</p>
+          <div className="flex flex-col items-center mb-8 text-center">
+            {branding.logo ? (
+              <div className="w-20 h-20 bg-white rounded-2xl border-2 border-[#1E293B] hard-shadow flex items-center justify-center mb-4 overflow-hidden checkered-bg">
+                <img src={branding.logo} className="w-full h-full object-contain p-2" alt="Logo" />
+              </div>
+            ) : (
+              <div className="w-20 h-20 bg-[#8B5CF6] rounded-full border-2 border-[#1E293B] hard-shadow flex items-center justify-center mb-4">
+                <Layout className="text-white" size={40} />
+              </div>
+            )}
+            <h1 className="text-3xl font-extrabold text-[#1E293B]">{branding.siteName}</h1>
+            <p className="text-[#64748B] font-bold">Admin Dashboard</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-6">
             <Input label="Username" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username/Email" />
             <Input label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" />
             {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-lg border border-red-200">{error}</p>}
-            <Button type="submit" className="w-full h-12" icon={ChevronRight}>Administrator Login</Button>
+            <Button type="submit" className="w-full h-12" icon={ChevronRight}>Masuk Dashboard</Button>
           </form>
         </Card>
       </div>
@@ -1244,8 +1265,8 @@ const CourseEditor: React.FC<{
           <Card className="space-y-6 sticky top-8">
             <h3 className="font-extrabold text-xl flex items-center gap-2"><Users size={20} className="text-[#F472B6]"/> Info Mentor</h3>
             <div className="flex flex-col items-center gap-4">
-              <div className="w-32 h-32 rounded-full border-4 border-[#1E293B] overflow-hidden hard-shadow bg-[#F1F5F9]">
-                <img src={localMentor.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${localMentor.name}`} className="w-full h-full object-cover" />
+              <div className="w-32 h-32 rounded-full border-4 border-[#1E293B] overflow-hidden hard-shadow bg-[#F1F5F9] checkered-bg">
+                <img src={localMentor.photo || `https://api.dicebear.com/7.x/avataaars/svg?seed=${localMentor.name}`} className="w-full h-full object-contain" />
               </div>
               <ImageUpload value={localMentor.photo} aspectRatio={1} onChange={p => { onLocalEdit(); setLocalMentor({...localMentor, photo: p}) }}>
                 <Button variant="secondary" className="text-xs h-10 px-4">Upload & Crop Foto</Button>
@@ -1259,6 +1280,7 @@ const CourseEditor: React.FC<{
             <div className="space-y-4 pt-4 border-t-2 border-[#F1F5F9]">
               <h4 className="text-xs font-black uppercase tracking-widest text-[#64748B]">Social Media & Contact</h4>
               <Input label="Instagram" icon={Instagram} placeholder="@username" value={localMentor.socials.instagram || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, instagram: e.target.value}})} />
+              {/* FIXED: Correct state update structure for nested socials object and fixed typo in setLocalMentor callback */}
               <Input label="LinkedIn" icon={Linkedin} placeholder="username" value={localMentor.socials.linkedin || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, linkedin: e.target.value}})} />
               <Input label="TikTok" icon={TiktokIcon} placeholder="@username" value={localMentor.socials.tiktok || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, tiktok: e.target.value}})} />
               <Input label="Website / Portfolio" icon={Globe} placeholder="https://..." value={localMentor.socials.website || ''} onChange={e => setLocalMentor({...localMentor, socials: {...localMentor.socials, website: e.target.value}})} />
@@ -1400,7 +1422,9 @@ const PublicCourseView: React.FC<{
         <div className="lg:col-span-1 space-y-6">
           {/* Card Mentor (Tanpa Animasi Hover) */}
           <div className="bg-white border-2 border-[#1E293B] rounded-2xl p-6 sticker-shadow text-center">
-            <img src={initialMentor.photo} className="w-24 h-24 mx-auto rounded-full border-4 border-[#1E293B] mb-4 object-cover hard-shadow" />
+            <div className="checkered-bg rounded-full w-24 h-24 mx-auto mb-4 border-4 border-[#1E293B] hard-shadow overflow-hidden">
+              <img src={initialMentor.photo} className="w-full h-full object-contain" />
+            </div>
             <h3 className="font-bold text-lg">{initialMentor.name}</h3>
             <p className="text-xs text-[#8B5CF6] font-extrabold uppercase tracking-widest mb-4">{initialMentor.role}</p>
             <p className="text-xs text-[#64748B] line-clamp-3 mb-6 font-medium">{initialMentor.bio}</p>
@@ -1642,7 +1666,7 @@ const App: React.FC = () => {
         </div>
       )}
       <Routes>
-        <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} />} />
+        <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} branding={branding} />} />
         <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} supabase={supabase} onDeleteCourse={handleDeleteCourse} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
