@@ -460,7 +460,7 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
 
   return (
     <div className="min-h-screen flex items-center justify-center p-4">
-      <div className="w-full max-w-md">
+      <div className="w-full max-m-md">
         <Card className="p-8">
           <div className="flex flex-col items-center mb-8">
             <div className="w-20 h-20 bg-[#8B5CF6] rounded-full border-2 border-[#1E293B] hard-shadow flex items-center justify-center mb-4">
@@ -473,7 +473,7 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean }> = ({ onLogin
             <Input label="Username" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username/Email" />
             <Input label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" />
             {error && <p className="text-red-500 text-sm font-bold bg-red-50 p-3 rounded-lg border border-red-200">{error}</p>}
-            <Button type="submit" className="w-full h-12" icon={ChevronRight}>Masuk Administrator</Button>
+            <Button type="submit" className="w-full h-12" icon={ChevronRight}>Administrator Login</Button>
           </form>
         </Card>
       </div>
@@ -875,7 +875,11 @@ CREATE TABLE IF NOT EXISTS branding (
   updated_at TIMESTAMPTZ DEFAULT NOW()
 );
 
+-- Pastikan kolom favicon ada (SOLUSI EROR SCHEMA CACHE)
 ALTER TABLE branding ADD COLUMN IF NOT EXISTS favicon TEXT;
+
+-- PAKSA SUPABASE UNTUK REFRESH DAFTAR KOLOM
+NOTIFY pgrst, 'reload schema';
 
 -- 4. Tabel Events (Analitik)
 CREATE TABLE IF NOT EXISTS events (
@@ -916,7 +920,13 @@ ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
       await onSaveBranding(branding);
       alert('Branding berhasil disimpan ke database!');
     } catch (e: any) {
-      alert('Gagal menyimpan branding: ' + e.message);
+      console.error("Save Branding Error:", e);
+      // Deteksi eror schema cache / kolom hilang
+      if (e.message?.includes("column \"favicon\"") || e.message?.includes("'favicon' column") || e.message?.includes("column 'favicon'")) {
+         alert('EROR DATABASE: Kolom "favicon" belum ada di tabel "branding" database Anda.\n\nSOLUSI: Silakan jalankan script SQL di bagian bawah halaman ini pada Supabase SQL Editor untuk menambahkannya secara permanen.');
+      } else {
+        alert('Gagal menyimpan branding: ' + e.message);
+      }
     } finally {
       setIsSavingBranding(false);
     }
@@ -943,7 +953,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
           </div>
           <div className="pt-4 border-t-2 border-[#F1F5F9]">
              <Button variant="primary" className="w-full h-12" onClick={handleSaveBrandingInternal} isLoading={isSavingBranding} icon={Save}>Simpan Branding</Button>
-             <p className="text-[10px] text-center mt-2 font-bold text-[#64748B]">Simpan untuk memperbarui icon di tab browser pengunjung.</p>
+             <p className="text-[10px] text-center mt-2 font-bold text-[#64748B]">Simpan untuk memperbarui icon di tab browser pengunjung secara otomatis.</p>
           </div>
         </Card>
       </section>
@@ -962,7 +972,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
         <Card className="bg-[#1E293B] text-white border-none space-y-4">
            <div className="flex justify-between items-center mb-2">
               <p className="text-xs font-bold text-[#94A3B8] uppercase tracking-widest flex items-center gap-2">
-                 <FileCode size={14}/> SQL Init Script
+                 <FileCode size={14}/> SQL Init Script (Updated)
               </p>
               <Button variant="secondary" className="h-8 py-0 px-3 text-[10px] bg-white text-[#1E293B] hard-shadow-none" onClick={copySql}>Salin Script</Button>
            </div>
@@ -970,7 +980,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
               <pre>{sqlScript}</pre>
            </div>
            <p className="text-xs font-bold text-[#94A3B8] italic">
-             * Jalankan script di atas pada "SQL Editor" di Dashboard Supabase Anda untuk memastikan tabel `branding` memiliki kolom `favicon`.
+             * Jalankan script di atas pada "SQL Editor" di Dashboard Supabase Anda. Ini akan menambahkan kolom `favicon` yang hilang dan me-refresh cache database.
            </p>
         </Card>
       </section>
@@ -1519,9 +1529,9 @@ const App: React.FC = () => {
     try {
       const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
       if (b) setBranding({ siteName: b.site_name, logo: b.logo, favicon: b.favicon || '' });
-      const { data: m } = await client.from('mentor').select('*').eq('id', 'profile').single();
+      const { data: m = null } = await client.from('mentor').select('*').eq('id', 'profile').single();
       if (m) setMentor(m);
-      const { data: c } = await client.from('courses').select('*').order('created_at', { ascending: false });
+      const { data: c = [] } = await client.from('courses').select('*').order('created_at', { ascending: false });
       if (c) {
         setCourses(c.map((item: any) => ({ 
           ...item, 
