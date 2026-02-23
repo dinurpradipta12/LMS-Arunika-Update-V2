@@ -361,9 +361,9 @@ const ImageUpload: React.FC<{
         onClick={triggerInput}
         className="relative group cursor-pointer flex flex-col items-center justify-center p-4 transition-all"
       >
-        <div className="relative mb-4 checkered-bg rounded-xl overflow-hidden">
+        <div className="relative mb-4 checkered-bg rounded-xl overflow-hidden w-full flex justify-center">
           {value ? (
-            <img src={value} className="max-w-[120px] max-h-[120px] object-contain block" alt="Logo Preview" />
+            <img src={value} className="max-w-full max-h-[120px] object-contain block" alt="Logo Preview" />
           ) : (
             <div className="text-center p-4 border-2 border-dashed border-[#CBD5E1] rounded-2xl w-full bg-white">
               <Upload className="mx-auto mb-2 text-[#8B5CF6]" size={32} />
@@ -519,12 +519,9 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         md:relative md:translate-x-0 md:flex
       `}>
-        <div className="p-6 border-b-2 border-[#1E293B] flex items-center justify-between gap-3">
-          <div className="flex items-center gap-3">
-            <img src={branding.logo} className="w-10 h-10 object-contain" alt="Logo" />
-            <span className="font-extrabold text-xl truncate">{branding.siteName}</span>
-          </div>
-          <button onClick={onClose} className="md:hidden p-2 text-[#1E293B] hover:bg-[#F1F5F9] rounded-lg">
+        <div className="p-6 border-b-2 border-[#1E293B] relative flex items-center justify-center min-h-[100px]">
+          <img src={branding.logo} className="w-full h-16 object-contain" alt="Logo" />
+          <button onClick={onClose} className="md:hidden absolute right-4 top-1/2 -translate-y-1/2 p-2 text-[#1E293B] hover:bg-[#F1F5F9] rounded-lg bg-white/80 backdrop-blur-sm">
             <X size={20} />
           </button>
         </div>
