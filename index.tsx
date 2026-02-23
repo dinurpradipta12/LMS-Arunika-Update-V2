@@ -1361,10 +1361,9 @@ const PublicCourseView: React.FC<{
   return (
     <div className="min-h-screen bg-[#FFFDF5] flex flex-col">
       <header className="bg-white border-b-2 border-[#1E293B] p-4 sticky top-0 z-50">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <img src={initialBranding.logo} className="w-10 h-10 object-contain" />
-            <span className="font-extrabold text-xl">{initialBranding.siteName}</span>
+        <div className="max-w-7xl mx-auto flex items-center justify-between min-h-[60px]">
+          <div className="flex items-center">
+            <img src={initialBranding.logo} className="w-auto h-12 object-contain" alt="Logo" />
           </div>
           <Badge>{course.modules.length} Materi</Badge>
         </div>
