@@ -845,7 +845,7 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
   );
 };
 
-const MyCourses: React.FC<{ 
+const AdminDashboard: React.FC<{ 
   courses: Course[]; 
   setCourses: React.Dispatch<React.SetStateAction<Course[]>>; 
   onDeleteCourse: (id: string) => Promise<void>;
