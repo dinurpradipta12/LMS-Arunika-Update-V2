@@ -1411,7 +1411,7 @@ const PublicCourseView: React.FC<{
     
     try {
       const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
-      if (b) setBranding({ siteName: b.site_name, logo: b.logo, favicon: b.favicon || '' });
+      if (b) setBranding({ siteName: b.site_name || 'Platform Arunika', logo: logoUtama, favicon: faviconLogo });
       
       const { data: m } = await client.from('mentor').select('*').eq('id', 'profile').single();
       if (m) setMentor(m);
@@ -1443,7 +1443,7 @@ const PublicCourseView: React.FC<{
       <header className="bg-[var(--surface)] border-b border-[var(--border)] px-4 sticky top-0 z-50">
         <div className="max-w-7xl mx-auto flex items-center justify-between min-h-[68px]">
           <div className="flex items-center">
-            <img src={initialBranding.logo} className="w-auto h-10 object-contain" alt="Logo" />
+            <img src={logoUtama} className="w-auto h-10 object-contain" alt="Logo Utama" />
           </div>
           <Badge>{course.modules.length} Materi</Badge>
         </div>
@@ -1603,22 +1603,22 @@ const App: React.FC = () => {
 
   // --- Dynamic Favicon Update ---
   useEffect(() => {
-    const updateFavicon = (url: string) => {
+    const updateFavicon = () => {
       let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
       if (!link) {
         link = document.createElement('link');
         link.rel = 'icon';
         document.getElementsByTagName('head')[0].appendChild(link);
       }
-      link.href = url || faviconLogo;
+      link.href = faviconLogo;
     };
     
-    updateFavicon(branding.favicon || faviconLogo);
+    updateFavicon();
     
     if (branding.siteName) {
       document.title = branding.siteName;
     }
-  }, [branding.favicon, branding.siteName]);
+  }, [branding.siteName]);
 
   useEffect(() => {
     setStorageItem('isLoggedIn', isLoggedIn);
@@ -1633,7 +1633,7 @@ const App: React.FC = () => {
     if (!client) return;
     try {
       const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
-      if (b) setBranding({ siteName: b.site_name, logo: b.logo, favicon: b.favicon || '' });
+      if (b) setBranding({ siteName: b.site_name || 'Platform Arunika', logo: logoUtama, favicon: faviconLogo });
       const { data: m = null } = await client.from('mentor').select('*').eq('id', 'profile').single();
       if (m) setMentor(m);
       const { data: c = [] } = await client.from('courses').select('*').order('created_at', { ascending: false });
