@@ -845,12 +845,20 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
   );
 };
 
-const AdminDashboard: React.FC<{ 
+const MyCourses: React.FC<{ 
   courses: Course[]; 
   setCourses: React.Dispatch<React.SetStateAction<Course[]>>; 
   onDeleteCourse: (id: string) => Promise<void>;
 }> = ({ courses, setCourses, onDeleteCourse }) => {
   const navigate = useNavigate();
+  const [copiedCourseId, setCopiedCourseId] = useState<string | null>(null);
+
+  const handleCopyLink = (courseId: string) => {
+    const url = generateShareLink(courseId);
+    navigator.clipboard.writeText(url);
+    setCopiedCourseId(courseId);
+    setTimeout(() => setCopiedCourseId(null), 2000);
+  };
 
   const handleAddCourse = () => {
     const newCourse: Course = {
@@ -895,15 +903,30 @@ const AdminDashboard: React.FC<{
               </div>
               <h3 className="text-lg font-semibold mb-2 leading-snug">{course.title}</h3>
               <p className="text-sm text-[var(--muted)] line-clamp-2 mb-5 leading-relaxed">{course.description}</p>
-              <div className="grid grid-cols-2 gap-2 mt-auto">
-                <Button onClick={() => navigate(`/admin/course/${course.id}`)} variant="secondary" className="text-xs h-10 px-3">Edit Content</Button>
+              <div className="grid grid-cols-3 gap-1.5 sm:gap-2 mt-auto">
+                <Button 
+                  onClick={() => navigate(`/admin/course/${course.id}`)} 
+                  variant="secondary" 
+                  className="text-xs h-10 px-2 flex-1 min-w-0"
+                >
+                  Edit Content
+                </Button>
+                <Button 
+                  onClick={() => handleCopyLink(course.id)} 
+                  variant={copiedCourseId === course.id ? "green" : "secondary"} 
+                  className="text-xs h-10 px-2 flex-1 min-w-0 transition-all" 
+                  icon={copiedCourseId === course.id ? Check : Copy}
+                >
+                  {copiedCourseId === course.id ? 'Tersalin!' : 'Copy Link'}
+                </Button>
                 <Button
                   onClick={() => {
                     const url = generateShareLink(course.id);
-                    navigator.clipboard.writeText(url);
                     window.open(url, '_blank');
                   }}
-                  variant="primary" className="text-xs h-10 px-3" icon={Share2}
+                  variant="primary" 
+                  className="text-xs h-10 px-2 flex-1 min-w-0" 
+                  icon={Share2}
                 >
                   Share
                 </Button>
