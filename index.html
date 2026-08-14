@@ -4,80 +4,203 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Arunika Learning Hub</title>
+    <script>
+      try {
+        const savedTheme = localStorage.getItem('arunika_theme');
+        const useDarkTheme = savedTheme
+          ? savedTheme === 'dark'
+          : window.matchMedia('(prefers-color-scheme: dark)').matches;
+        document.documentElement.classList.toggle('dark', useDarkTheme);
+      } catch (_) {}
+    </script>
     <script src="https://cdn.tailwindcss.com"></script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@700;800&family=Plus+Jakarta+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <style>
+      :root {
+        color-scheme: light;
+        --app-bg: #f3f6f9;
+        --surface: #ffffff;
+        --surface-soft: #edf2f6;
+        --surface-muted: #e5ebf1;
+        --text: #17283a;
+        --muted: #6d7f90;
+        --border: #d8e0e8;
+        --border-strong: #c5d0db;
+        --accent: #173b5e;
+        --accent-hover: #214e75;
+        --accent-soft: #e2ebf3;
+        --accent-strong: #143552;
+        --success-soft: #deebe6;
+        --success-text: #315f50;
+        --danger-soft: #f6e7e8;
+        --danger-text: #9b4a50;
+        --shadow-sm: 0 1px 2px rgba(15, 35, 55, 0.05);
+        --shadow-md: 0 12px 30px rgba(22, 45, 68, 0.08);
+      }
+
+      html.dark {
+        color-scheme: dark;
+        --app-bg: #0b1420;
+        --surface: #121e2d;
+        --surface-soft: #182638;
+        --surface-muted: #203146;
+        --text: #e5edf5;
+        --muted: #98a9ba;
+        --border: #27394d;
+        --border-strong: #344a61;
+        --accent: #3f6f99;
+        --accent-hover: #507fa8;
+        --accent-soft: #1b3248;
+        --accent-strong: #b5cee2;
+        --success-soft: #1e3b35;
+        --success-text: #a9cfc1;
+        --danger-soft: #3b252b;
+        --danger-text: #efb4b8;
+        --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.25);
+        --shadow-md: 0 14px 32px rgba(0, 0, 0, 0.28);
+      }
+
+      html,
+      body,
+      #root {
+        min-height: 100%;
+      }
+
       body {
-        font-family: 'Plus Jakarta Sans', sans-serif;
-        background-color: #FFFDF5;
-        color: #1E293B;
+        margin: 0;
+        font-family: 'Inter', sans-serif;
+        background-color: var(--app-bg);
+        color: var(--text);
         overflow-x: hidden;
+        transition: background-color 180ms ease, color 180ms ease;
       }
       h1, h2, h3, h4, h5, h6 {
-        font-family: 'Outfit', sans-serif;
+        font-family: 'Inter', sans-serif;
+        letter-spacing: -0.025em;
+      }
+      button, input, textarea, select {
+        font: inherit;
+      }
+      button, a {
+        -webkit-tap-highlight-color: transparent;
+      }
+      :focus-visible {
+        outline: 3px solid color-mix(in srgb, var(--accent) 35%, transparent);
+        outline-offset: 2px;
       }
       .dot-grid {
-        background-image: radial-gradient(#E2E8F0 1.5px, transparent 1.5px);
-        background-size: 24px 24px;
+        background-image: none !important;
+        background-color: var(--app-bg) !important;
       }
-      
-      /* Hard Shadow System */
       .hard-shadow {
-        box-shadow: 4px 4px 0px 0px #1E293B;
+        box-shadow: var(--shadow-sm) !important;
       }
       .hard-shadow-hover:hover {
-        box-shadow: 6px 6px 0px 0px #1E293B;
-        transform: translate(-2px, -2px);
+        box-shadow: var(--shadow-md) !important;
+        transform: translateY(-1px) !important;
       }
       .hard-shadow-active:active {
-        box-shadow: 2px 2px 0px 0px #1E293B;
-        transform: translate(2px, 2px);
+        box-shadow: var(--shadow-sm) !important;
+        transform: translateY(0) !important;
       }
       .sticker-shadow {
-        box-shadow: 8px 8px 0px 0px #E2E8F0;
+        box-shadow: var(--shadow-sm) !important;
       }
-      
-      /* Mobile Optimizations */
-      @media (max-width: 768px) {
-        .hard-shadow {
-          box-shadow: 2px 2px 0px 0px #1E293B !important;
-        }
-        .hard-shadow-hover:hover {
-          box-shadow: 3px 3px 0px 0px #1E293B !important;
-          transform: translate(-1px, -1px) !important;
-        }
-        .sticker-shadow {
-          box-shadow: 4px 4px 0px 0px #E2E8F0 !important;
-        }
-        .dot-grid {
-          background-size: 32px 32px;
-        }
-      }
-
       .transition-bounce {
-        transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+        transition: color 180ms ease, background-color 180ms ease, border-color 180ms ease, box-shadow 180ms ease, transform 180ms ease;
       }
-      
+      .border-2, .border-4 {
+        border-width: 1px !important;
+      }
+      .border-t-2 { border-top-width: 1px !important; }
+      .border-r-2 { border-right-width: 1px !important; }
+      .border-b-2 { border-bottom-width: 1px !important; }
+      .border-l-2 { border-left-width: 1px !important; }
+      [class~="bg-white"], [class~="bg-white/80"] {
+        background-color: var(--surface) !important;
+      }
+      [class~="bg-[#FFFDF5]"] {
+        background-color: var(--app-bg) !important;
+      }
+      [class~="bg-[#F8FAFC]"], [class~="bg-[#F1F5F9]"] {
+        background-color: var(--surface-soft) !important;
+      }
+      [class~="bg-[#E2E8F0]"] {
+        background-color: var(--surface-muted) !important;
+      }
+      [class~="text-[#1E293B]"], [class~="text-[#334155]"] {
+        color: var(--text) !important;
+      }
+      [class~="text-[#64748B]"], [class~="text-[#94A3B8]"], [class~="text-[#CBD5E1]"] {
+        color: var(--muted) !important;
+      }
+      [class~="border-[#1E293B]"], [class~="border-[#CBD5E1]"], [class~="border-[#E2E8F0]"], [class~="border-[#F1F5F9]"] {
+        border-color: var(--border) !important;
+      }
+      [class~="bg-[#8B5CF6]"] { background-color: var(--accent) !important; }
+      [class~="text-[#8B5CF6]"] { color: var(--accent-strong) !important; }
+      [class~="border-[#8B5CF6]"] { border-color: var(--accent) !important; }
+      [class~="bg-[#FBBF24]"], [class~="bg-[#F472B6]"] {
+        background-color: var(--accent-soft) !important;
+      }
+      [class~="text-[#FBBF24]"], [class~="text-[#F472B6]"] {
+        color: var(--accent-strong) !important;
+      }
+      [class~="border-[#FBBF24]"], [class~="border-[#F472B6]"] {
+        border-color: var(--border-strong) !important;
+      }
+      [class~="bg-[#34D399]"] { background-color: var(--success-soft) !important; }
+      [class~="text-[#34D399]"] { color: var(--success-text) !important; }
+      [class~="border-[#34D399]"] { border-color: var(--border-strong) !important; }
+      [class~="hover:bg-[#F8FAFC]"]:hover,
+      [class~="hover:bg-[#F1F5F9]"]:hover,
+      [class~="hover:bg-[#FBBF24]"]:hover {
+        background-color: var(--surface-soft) !important;
+      }
+      .category-chip {
+        background-color: color-mix(in srgb, var(--category-color, var(--accent)) 20%, var(--surface)) !important;
+        border-color: color-mix(in srgb, var(--category-color, var(--accent)) 30%, var(--border)) !important;
+        color: var(--text) !important;
+        box-shadow: none !important;
+      }
+      .checkered-bg {
+        background-color: var(--surface-soft) !important;
+        background-image: linear-gradient(45deg, color-mix(in srgb, var(--border) 55%, transparent) 25%, transparent 25%),
+                          linear-gradient(-45deg, color-mix(in srgb, var(--border) 55%, transparent) 25%, transparent 25%),
+                          linear-gradient(45deg, transparent 75%, color-mix(in srgb, var(--border) 55%, transparent) 75%),
+                          linear-gradient(-45deg, transparent 75%, color-mix(in srgb, var(--border) 55%, transparent) 75%) !important;
+      }
+      input::placeholder, textarea::placeholder {
+        color: var(--muted);
+        opacity: 0.72;
+      }
       ::selection {
-        background: #FBBF24;
-        color: #1E293B;
+        background: var(--accent-soft);
+        color: var(--text);
       }
-
       ::-webkit-scrollbar {
         width: 8px;
       }
       ::-webkit-scrollbar-track {
-        background: #FFFDF5;
+        background: var(--app-bg);
       }
       ::-webkit-scrollbar-thumb {
-        background: #CBD5E1;
+        background: var(--border-strong);
         border-radius: 10px;
-        border: 2px solid #FFFDF5;
+        border: 2px solid var(--app-bg);
       }
       ::-webkit-scrollbar-thumb:hover {
-        background: #94A3B8;
+        background: var(--muted);
+      }
+      @media (prefers-reduced-motion: reduce) {
+        *, *::before, *::after {
+          scroll-behavior: auto !important;
+          transition-duration: 0.01ms !important;
+          animation-duration: 0.01ms !important;
+          animation-iteration-count: 1 !important;
+        }
       }
     </style>
   <script type="importmap">
@@ -96,7 +219,7 @@
 }
 </script>
 </head>
-  <body class="dot-grid min-h-screen">
+  <body class="min-h-screen">
     <div id="root"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
