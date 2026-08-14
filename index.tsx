@@ -69,6 +69,8 @@ import { createClient } from '@supabase/supabase-js';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset, Category } from './types';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
+import logoUtama from './src/logo-utama.png';
+import faviconLogo from './src/favicon.png';
 
 // Custom TikTok SVG Icon
 const TiktokIcon = ({ size = 18 }) => (
@@ -145,8 +147,8 @@ const compressImage = (base64Str: string, maxWidth: number = 800, quality: numbe
 
 // --- DEFAULTS (EMPTY STATES) ---
 const defaultBranding: Branding = {
-  logo: '',
-  favicon: '',
+  logo: logoUtama,
+  favicon: faviconLogo,
   siteName: 'Platform Arunika'
 };
 
@@ -547,18 +549,9 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean; branding: Bran
       <div className="w-full max-w-md">
         <Card className="p-8 md:p-10 shadow-md">
           <div className="flex flex-col items-center mb-8 text-center">
-            {branding.logo ? (
-              <div className="w-16 h-16 bg-[var(--surface-soft)] rounded-2xl border border-[var(--border)] flex items-center justify-center mb-5 overflow-hidden">
-                <img src={branding.logo} className="w-full h-full object-contain p-2" alt="Logo" />
-              </div>
-            ) : (
-              <div className="w-16 h-16 bg-[var(--accent)] rounded-2xl flex items-center justify-center mb-5 shadow-sm">
-                <Layout className="text-white" size={28} />
-              </div>
-            )}
+            <img src={logoUtama} className="h-14 w-auto object-contain mb-5" alt="Logo Utama" />
             <span className="text-[10px] font-semibold uppercase tracking-[0.2em] text-[var(--accent-strong)] mb-2">Arunika LMS</span>
-            <h1 className="text-2xl font-bold text-[var(--text)]">{branding.siteName}</h1>
-            <p className="text-[var(--muted)] text-sm mt-2">Masuk untuk mengelola ruang belajar Anda.</p>
+            <p className="text-[var(--muted)] text-sm mt-1">Masuk untuk mengelola ruang belajar Anda.</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-5">
             <Input label="Username" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username/Email" />
@@ -589,15 +582,11 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
         ${isOpen ? 'translate-x-0' : '-translate-x-full'}
         md:relative md:translate-x-0 md:flex
       `}>
-        <div className="p-5 border-b border-[var(--border)] relative flex items-center gap-3 min-h-[84px]">
-          <div className="w-10 h-10 rounded-xl bg-[var(--surface-soft)] border border-[var(--border)] flex items-center justify-center overflow-hidden flex-shrink-0">
-            {branding.logo ? <img src={branding.logo} className="w-full h-full object-contain p-1.5" alt="Logo" /> : <Layout size={19} className="text-[var(--accent-strong)]" />}
+        <div className="p-5 border-b border-[var(--border)] relative flex items-center justify-between min-h-[84px]">
+          <div className="flex items-center">
+            <img src={logoUtama} className="h-10 w-auto max-w-[180px] object-contain" alt="Logo Utama" />
           </div>
-          <div className="min-w-0 pr-8">
-            <p className="text-[10px] uppercase tracking-[0.16em] font-semibold text-[var(--muted)]">Learning Hub</p>
-            <p className="font-semibold text-sm text-[var(--text)] truncate">{branding.siteName}</p>
-          </div>
-          <button onClick={onClose} aria-label="Tutup navigasi" className="md:hidden absolute right-4 top-1/2 -translate-y-1/2 p-2 text-[var(--muted)] hover:bg-[var(--surface-soft)] rounded-lg">
+          <button onClick={onClose} aria-label="Tutup navigasi" className="md:hidden p-2 text-[var(--muted)] hover:bg-[var(--surface-soft)] rounded-lg">
             <X size={20} />
           </button>
         </div>
@@ -623,7 +612,7 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
             onClick={() => { if(window.innerWidth < 768) onClose(); }}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname === '/settings' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
           >
-            <SettingsIcon size={18} /> Branding & Settings
+            <SettingsIcon size={18} /> Settings
           </Link>
         </nav>
         
@@ -657,8 +646,7 @@ const AdminLayout: React.FC<{
           <Menu size={24} />
         </button>
         <div className="flex items-center gap-2">
-          <img src={branding.logo} className="w-8 h-8 object-contain" alt="Logo" />
-          <span className="font-semibold text-sm truncate max-w-[150px]">{branding.siteName}</span>
+          <img src={logoUtama} className="h-8 w-auto object-contain" alt="Logo Utama" />
         </div>
         <div className="w-10"></div>
       </header>
@@ -1063,25 +1051,8 @@ ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
     <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-10">
       <div>
         <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-sm text-[var(--muted)] mt-1">Atur identitas platform dan koneksi data.</p>
+        <p className="text-sm text-[var(--muted)] mt-1">Atur infrastruktur dan koneksi data.</p>
       </div>
-      
-      <section className="space-y-6">
-        <h2 className="text-lg font-semibold flex items-center gap-2"><Layout size={19} className="text-[var(--accent-strong)]"/> Branding</h2>
-        <Card className="space-y-8">
-          <div className="grid md:grid-cols-1 gap-6">
-            <Input label="Site Name" value={branding.siteName} onChange={e => { onLocalEdit(); setBranding({...branding, siteName: e.target.value}) }} />
-          </div>
-          <div className="grid md:grid-cols-2 gap-8">
-            <ImageUpload label="Logo Utama" variant="minimal" value={branding.logo} onChange={logo => { onLocalEdit(); setBranding({...branding, logo}) }} />
-            <ImageUpload label="Favicon (Icon Browser)" variant="minimal" aspectRatio={1} value={branding.favicon} onChange={favicon => { onLocalEdit(); setBranding({...branding, favicon}) }} />
-          </div>
-          <div className="pt-4 border-t border-[var(--border)]">
-             <Button variant="primary" className="w-full h-12" onClick={handleSaveBrandingInternal} isLoading={isSavingBranding} icon={Save}>Simpan Branding</Button>
-             <p className="text-[10px] text-center mt-2 text-[var(--muted)]">Simpan untuk memperbarui icon di tab browser pengunjung secara otomatis.</p>
-          </div>
-        </Card>
-      </section>
 
       <section className="space-y-6">
         <h2 className="text-lg font-semibold flex items-center gap-2"><Database size={19} className="text-[var(--accent-strong)]"/> Infrastructure</h2>
@@ -1639,12 +1610,10 @@ const App: React.FC = () => {
         link.rel = 'icon';
         document.getElementsByTagName('head')[0].appendChild(link);
       }
-      link.href = url || '/favicon.ico';
+      link.href = url || faviconLogo;
     };
     
-    if (branding.favicon) {
-      updateFavicon(branding.favicon);
-    }
+    updateFavicon(branding.favicon || faviconLogo);
     
     if (branding.siteName) {
       document.title = branding.siteName;
