@@ -255,7 +255,44 @@ const getCourseIdFromPublicCode = (code: string) => {
 
 const generateShareLink = (courseId: string) => {
   const code = getPublicCourseCode(courseId);
-  return `${window.location.origin}${window.location.pathname}#/c/${code}`;
+  const configuredPublicUrl = import.meta.env.VITE_PUBLIC_APP_URL?.trim();
+
+  try {
+    const publicUrl = new URL(configuredPublicUrl || window.location.href);
+    publicUrl.search = '';
+    publicUrl.hash = `/c/${code}`;
+    return publicUrl.toString();
+  } catch (error) {
+    console.warn('Invalid VITE_PUBLIC_APP_URL, falling back to the current host.', error);
+    return `${window.location.origin}${window.location.pathname}#/c/${code}`;
+  }
+};
+
+const copyTextToClipboard = async (text: string) => {
+  if (navigator.clipboard?.writeText) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return;
+    } catch (error) {
+      console.warn('Clipboard API failed, trying the browser fallback.', error);
+    }
+  }
+
+  const textarea = document.createElement('textarea');
+  textarea.value = text;
+  textarea.setAttribute('readonly', '');
+  textarea.style.position = 'fixed';
+  textarea.style.opacity = '0';
+  document.body.appendChild(textarea);
+  textarea.select();
+
+  try {
+    if (!document.execCommand('copy')) {
+      throw new Error('Browser rejected the clipboard operation.');
+    }
+  } finally {
+    textarea.remove();
+  }
 };
 
 const getVisitorId = () => {
@@ -841,11 +878,18 @@ const AdminDashboard: React.FC<{
   const navigate = useNavigate();
   const [copiedCourseId, setCopiedCourseId] = useState<string | null>(null);
 
-  const handleCopyLink = (courseId: string) => {
+  const handleCopyLink = async (courseId: string) => {
     const url = generateShareLink(courseId);
-    navigator.clipboard.writeText(url);
-    setCopiedCourseId(courseId);
-    setTimeout(() => setCopiedCourseId(null), 2000);
+    try {
+      await copyTextToClipboard(url);
+      setCopiedCourseId(courseId);
+      setTimeout(() => {
+        setCopiedCourseId(current => current === courseId ? null : current);
+      }, 2000);
+    } catch (error) {
+      console.error('Copy link failed', error);
+      window.prompt('Copy otomatis gagal. Salin link publik berikut:', url);
+    }
   };
 
   const handleAddCourse = () => {
