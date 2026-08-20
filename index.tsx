@@ -161,6 +161,15 @@ const defaultMentor: Mentor = {
   socials: {}
 };
 
+const EMBEDDED_PUBLIC_SUPABASE_URL = 'https://mhuqqbbqlovdiquaktzd.supabase.co';
+const EMBEDDED_PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1odXFxYmJxbG92ZGlxdWFrdHpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4OTQxNTksImV4cCI6MjA4NjQ3MDE1OX0.pJud95i77m-01lce_Pq6q2FovPxapUy-gKTYne6PZ18';
+
+const configuredPublicSupabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL?.trim();
+const configuredPublicSupabaseAnonKey = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY?.trim();
+const PUBLIC_SUPABASE_CONFIG: SupabaseConfig = configuredPublicSupabaseUrl && configuredPublicSupabaseAnonKey
+  ? { url: configuredPublicSupabaseUrl, anonKey: configuredPublicSupabaseAnonKey }
+  : { url: EMBEDDED_PUBLIC_SUPABASE_URL, anonKey: EMBEDDED_PUBLIC_SUPABASE_ANON_KEY };
+
 // --- Storage & Analytics Helpers ---
 const getStorageItem = <T,>(key: string, defaultValue: T): T => {
   const saved = localStorage.getItem(key);
@@ -1710,8 +1719,7 @@ const PublicCourseView: React.FC<{
 };
 
 const App: React.FC = () => {
-  const EMBEDDED_SUPABASE_URL = "https://mhuqqbbqlovdiquaktzd.supabase.co"; 
-  const EMBEDDED_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1odXFxYmJxbG92ZGlxdWFrdHpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4OTQxNTksImV4cCI6MjA4NjQ3MDE1OX0.pJud95i77m-01lce_Pq6q2FovPxapUy-gKTYne6PZ18"; 
+  const location = useLocation();
 
   const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
@@ -1721,8 +1729,10 @@ const App: React.FC = () => {
   const [supabase, setSupabase] = useState<SupabaseConfig>(() => {
     const saved = localStorage.getItem('supabase');
     if (saved) { try { return JSON.parse(saved); } catch(e) {} }
-    return { url: EMBEDDED_SUPABASE_URL, anonKey: EMBEDDED_ANON_KEY };
+    return PUBLIC_SUPABASE_CONFIG;
   });
+  const isPublicCourseRoute = /^\/(?:c|course)\//.test(location.pathname);
+  const readSupabase = isPublicCourseRoute ? PUBLIC_SUPABASE_CONFIG : supabase;
 
   const [syncing, setSyncing] = useState(false);
   const isSyncingRef = useRef(false);
@@ -1763,7 +1773,7 @@ const App: React.FC = () => {
   }, [isLoggedIn, courses, mentor, branding, supabase]);
 
   const fetchAllData = useCallback(async () => {
-    const client = getSupabaseClient(supabase);
+    const client = getSupabaseClient(readSupabase);
     if (!client) return;
     try {
       const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
@@ -1782,18 +1792,18 @@ const App: React.FC = () => {
         })));
       }
     } catch (e) { console.warn("Fetch error", e); }
-  }, [supabase]);
+  }, [readSupabase]);
 
   useEffect(() => {
     fetchAllData();
-    const client = getSupabaseClient(supabase);
+    const client = getSupabaseClient(readSupabase);
     if (!client) return;
     const sub = client.channel('global_updates').on('postgres_changes', { event: '*', table: '*' }, () => {
        if (isSyncingRef.current || (Date.now() - lastLocalUpdateRef.current < 2000)) return;
        fetchAllData();
     }).subscribe();
     return () => { client.removeChannel(sub); };
-  }, [supabase, fetchAllData]);
+  }, [readSupabase, fetchAllData]);
 
   const handleDeleteCourse = async (id: string) => {
     if (!confirm("Hapus kursus ini secara permanen dari database?")) return;
@@ -1873,7 +1883,7 @@ const App: React.FC = () => {
 
   return (
     <div className="min-h-screen">
-      <RouteTracker supabase={supabase} />
+      <RouteTracker supabase={readSupabase} />
       <ThemeToggle
         theme={theme}
         onToggle={() => setTheme(current => current === 'light' ? 'dark' : 'light')}
@@ -1890,8 +1900,8 @@ const App: React.FC = () => {
         <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} onSaveBranding={handleUpdateBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/c/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={supabase} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} usesShortCode />} />
-        <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={supabase} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} />} />
+        <Route path="/c/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} usesShortCode />} />
+        <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} />} />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>
     </div>

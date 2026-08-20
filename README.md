@@ -15,7 +15,7 @@ View your app in AI Studio: https://ai.studio/apps/290b0712-77c2-461a-a62e-81b78
 
 1. Install dependencies:
    `npm install`
-2. Copy `.env.example` to `.env.local` and set `VITE_PUBLIC_APP_URL` to the public deployment URL. This URL is used by every course card when generating its public share link.
+2. Copy `.env.example` to `.env.local` and set the public app and Supabase variables. These values are used by every public course link and do not depend on an admin browser's saved settings.
 3. Set the `GEMINI_API_KEY` in `.env.local` when the AI Studio integration requires it.
 4. Run the app:
    `npm run dev`
@@ -26,6 +26,8 @@ Set the canonical public base URL in the deployment environment:
 
 ```env
 VITE_PUBLIC_APP_URL=https://lms.example.com/
+VITE_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
+VITE_PUBLIC_SUPABASE_ANON_KEY=your-public-anon-key
 ```
 
-The Copy Link and Share buttons then generate a unique hash route for each course, for example `https://lms.example.com/#/c/2t`. Without this variable, the app falls back to the host currently displaying the dashboard, which is useful locally but should not be used as the production share URL.
+The Copy Link and Share buttons then generate a unique hash route for each course, for example `https://lms.example.com/#/c/2t`. Public course pages always read from the canonical public Supabase configuration, so stale Supabase settings stored in an admin browser cannot redirect visitors to a different project. Without `VITE_PUBLIC_APP_URL`, the app falls back to the host currently displaying the dashboard, which is useful locally but should not be used as the production share URL.
