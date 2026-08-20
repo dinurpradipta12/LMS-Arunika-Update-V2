@@ -295,6 +295,25 @@ const copyTextToClipboard = async (text: string) => {
   }
 };
 
+const withTimeout = <T,>(request: PromiseLike<T>, timeoutMs: number): Promise<T> => {
+  return new Promise((resolve, reject) => {
+    const timeoutId = window.setTimeout(() => {
+      reject(new Error('PUBLIC_COURSE_REQUEST_TIMEOUT'));
+    }, timeoutMs);
+
+    Promise.resolve(request).then(
+      value => {
+        window.clearTimeout(timeoutId);
+        resolve(value);
+      },
+      error => {
+        window.clearTimeout(timeoutId);
+        reject(error);
+      }
+    );
+  });
+};
+
 const getVisitorId = () => {
   let id = localStorage.getItem('arunika_visitor_id');
   if (!id) {
@@ -1448,39 +1467,110 @@ const PublicCourseView: React.FC<{
   const id = routeId && usesShortCode ? getCourseIdFromPublicCode(routeId) : routeId;
   const [course, setLocalCourse] = useState<Course | null>(null);
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const requestIdRef = useRef(0);
 
   const fetchLatest = useCallback(async () => {
+    const requestId = ++requestIdRef.current;
+    setIsLoading(true);
+    setLoadError(null);
+    setLocalCourse(null);
+    setSelectedModule(null);
+
+    if (!id) {
+      setLoadError('Link kursus tidak valid.');
+      setIsLoading(false);
+      return;
+    }
+
     const client = getSupabaseClient(supabase);
-    if (!client) return;
+    if (!client) {
+      setLoadError('Koneksi materi publik belum dikonfigurasi.');
+      setIsLoading(false);
+      return;
+    }
     
     try {
-      const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
-      if (b) setBranding({ siteName: b.site_name || 'Platform Arunika', logo: logoUtama, favicon: faviconLogo });
-      
-      const { data: m } = await client.from('mentor').select('*').eq('id', 'profile').single();
-      if (m) setMentor(m);
-      
-      const { data: c } = await client.from('courses').select('*').eq('id', id).single();
-      if (c) {
-        const full: Course = { 
-          ...c, 
-          coverImage: c.cover_image, 
-          mentorId: c.mentor_id, 
-          assets: c.assets || [], 
-          modules: c.modules || [],
-          categories: c.categories || []
-        };
-        setLocalCourse(full);
-        if (!selectedModule && full.modules.length > 0) setSelectedModule(full.modules[0]);
+      const metadataRequest = Promise.all([
+        client.from('branding').select('*').eq('id', 'config').maybeSingle(),
+        client.from('mentor').select('*').eq('id', 'profile').maybeSingle()
+      ]).catch(error => {
+        console.warn('Public course metadata fetch failed', error);
+        return null;
+      });
+
+      const { data: c, error: courseError } = await withTimeout(
+        client
+          .from('courses')
+          .select('*')
+          .eq('id', id)
+          .maybeSingle(),
+        15000
+      );
+
+      if (requestId !== requestIdRef.current) return;
+
+      if (courseError) throw courseError;
+      if (!c) {
+        setLoadError('Materi kursus tidak ditemukan atau belum tersedia untuk publik.');
+        setIsLoading(false);
+        return;
       }
+
+      const full: Course = {
+        ...c,
+        coverImage: c.cover_image,
+        mentorId: c.mentor_id,
+        assets: c.assets || [],
+        modules: c.modules || [],
+        categories: c.categories || []
+      };
+      setLocalCourse(full);
+      setSelectedModule(full.modules[0] || null);
+      setIsLoading(false);
+
+      void metadataRequest.then(results => {
+        if (!results || requestId !== requestIdRef.current) return;
+
+        const [{ data: b, error: brandingError }, { data: m, error: mentorError }] = results;
+        if (brandingError) console.warn('Public branding fetch failed', brandingError);
+        if (mentorError) console.warn('Public mentor fetch failed', mentorError);
+        if (b) setBranding({ siteName: b.site_name || 'Platform Arunika', logo: logoUtama, favicon: faviconLogo });
+        if (m) setMentor(m);
+      });
     } catch (e) {
-      console.error(e);
+      if (requestId !== requestIdRef.current) return;
+      console.error('Public course fetch failed', e);
+      const timedOut = e instanceof Error && e.message === 'PUBLIC_COURSE_REQUEST_TIMEOUT';
+      setLoadError(timedOut
+        ? 'Server materi terlalu lama merespons. Silakan coba lagi.'
+        : 'Materi kursus gagal dimuat. Periksa koneksi Anda lalu coba lagi.');
+      setIsLoading(false);
     }
-  }, [id, supabase, selectedModule]);
+  }, [id, supabase, setBranding, setMentor]);
 
-  useEffect(() => { fetchLatest(); }, [id]);
+  useEffect(() => {
+    fetchLatest();
+    return () => { requestIdRef.current += 1; };
+  }, [fetchLatest]);
 
-  if (!course) return <div className="h-screen flex items-center justify-center text-sm text-[var(--muted)] bg-[var(--app-bg)]">Mencari materi kursus...</div>;
+  if (isLoading) return <div className="h-screen flex items-center justify-center text-sm text-[var(--muted)] bg-[var(--app-bg)]">Mencari materi kursus...</div>;
+
+  if (loadError || !course) {
+    return (
+      <div className="min-h-screen flex items-center justify-center p-6 bg-[var(--app-bg)]">
+        <div className="w-full max-w-md text-center bg-[var(--surface)] border border-[var(--border)] rounded-2xl p-8 shadow-md">
+          <div className="w-14 h-14 mx-auto mb-5 rounded-2xl bg-[var(--surface-soft)] border border-[var(--border)] flex items-center justify-center text-[var(--muted)]">
+            <BookOpen size={26} />
+          </div>
+          <h1 className="text-xl font-semibold text-[var(--text)] mb-2">Materi tidak dapat dibuka</h1>
+          <p className="text-sm text-[var(--muted)] leading-relaxed mb-6">{loadError || 'Materi kursus tidak ditemukan.'}</p>
+          <Button icon={RefreshCw} onClick={fetchLatest} className="w-full">Coba Lagi</Button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-[var(--app-bg)] flex flex-col">
