@@ -52,6 +52,9 @@ const createDefaultQuiz = (courseId: string): CourseQuiz => ({
   passingScore: 70,
   maxAttempts: 3,
   showAnswers: false,
+  feedbackEnabled: false,
+  feedbackRequired: false,
+  feedbackPrompt: 'Bagaimana pengalaman Anda mengikuti kelas ini?',
   questions: []
 });
 
@@ -59,8 +62,8 @@ const createQuestion = (type: QuizQuestionType = 'multiple_choice'): QuizQuestio
   id: `question-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
   type,
   prompt: '',
-  options: type === 'true_false' ? ['Benar', 'Salah'] : ['Pilihan A', 'Pilihan B', 'Pilihan C', 'Pilihan D'],
-  correctAnswer: type === 'true_false' ? 'Benar' : 'Pilihan A',
+  options: type === 'true_false' ? ['Benar', 'Salah'] : type === 'long_answer' ? [] : ['Pilihan A', 'Pilihan B', 'Pilihan C', 'Pilihan D'],
+  correctAnswer: type === 'true_false' ? 'Benar' : type === 'long_answer' ? '' : 'Pilihan A',
   points: 1
 });
 
@@ -84,6 +87,9 @@ const mapQuizRow = (row: any): CourseQuiz => ({
   passingScore: Number(row.passing_score ?? 70),
   maxAttempts: Number(row.max_attempts ?? 3),
   showAnswers: row.show_answers === true,
+  feedbackEnabled: row.feedback_enabled === true,
+  feedbackRequired: row.feedback_required === true,
+  feedbackPrompt: row.feedback_prompt || 'Bagaimana pengalaman Anda mengikuti kelas ini?',
   questions: Array.isArray(row.questions) ? row.questions : []
 });
 
@@ -96,6 +102,8 @@ const mapAttemptRow = (row: any): QuizAttempt => ({
   answers: row.answers || {},
   score: Number(row.score || 0),
   passed: row.passed === true,
+  needsReview: row.needs_review === true,
+  classFeedback: row.class_feedback || null,
   attemptNumber: Number(row.attempt_number || 1),
   submittedAt: row.submitted_at
 });
@@ -109,9 +117,14 @@ const databaseErrorMessage = (error: any) => {
     || message.includes('published')
     || message.includes('get_public_class_quiz')
     || message.includes('submit_class_post_test')
+    || message.includes('feedback_enabled')
+    || message.includes('class_feedback')
   ) {
-    return 'Database kelas recording belum siap. Jalankan file SQL migration yang disertakan melalui Supabase SQL Editor.';
+    return 'Database kelas recording belum siap. Jalankan migration terbaru untuk fitur post-test dan feedback.';
   }
+  if (message.includes('FEEDBACK_REQUIRED')) return 'Feedback kelas wajib diisi sebelum jawaban dikirim.';
+  if (message.includes('FEEDBACK_TOO_LONG')) return 'Feedback kelas terlalu panjang. Maksimal 5.000 karakter.';
+  if (message.includes('INCOMPLETE_ANSWERS')) return 'Jawab seluruh pertanyaan sebelum mengirim post-test.';
   return message;
 };
 
@@ -516,8 +529,8 @@ export const RecordedClassEditor: React.FC<{
   };
 
   const changeQuestionType = (index: number, type: QuizQuestionType) => {
-    const options = type === 'true_false' ? ['Benar', 'Salah'] : ['Pilihan A', 'Pilihan B', 'Pilihan C', 'Pilihan D'];
-    updateQuestion(index, { type, options, correctAnswer: options[0] });
+    const options = type === 'true_false' ? ['Benar', 'Salah'] : type === 'long_answer' ? [] : ['Pilihan A', 'Pilihan B', 'Pilihan C', 'Pilihan D'];
+    updateQuestion(index, { type, options, correctAnswer: options[0] || '' });
   };
 
   const updateOption = (questionIndex: number, optionIndex: number, value: string) => {
@@ -537,6 +550,7 @@ export const RecordedClassEditor: React.FC<{
     for (let index = 0; index < quiz.questions.length; index += 1) {
       const question = quiz.questions[index];
       if (!question.prompt.trim()) return `Pertanyaan #${index + 1} belum diisi.`;
+      if (question.type === 'long_answer') continue;
       if (question.options.length < 2 || question.options.some(option => !option.trim())) return `Pilihan jawaban pertanyaan #${index + 1} belum lengkap.`;
       if (new Set(question.options.map(option => option.trim().toLowerCase())).size !== question.options.length) return `Pilihan jawaban pertanyaan #${index + 1} tidak boleh sama.`;
       if (!question.options.includes(question.correctAnswer)) return `Jawaban benar pertanyaan #${index + 1} belum dipilih.`;
@@ -562,6 +576,9 @@ export const RecordedClassEditor: React.FC<{
         passing_score: Math.max(0, Math.min(100, Number(quiz.passingScore) || 0)),
         max_attempts: Math.max(1, Number(quiz.maxAttempts) || 1),
         show_answers: quiz.showAnswers,
+        feedback_enabled: quiz.feedbackEnabled,
+        feedback_required: quiz.feedbackEnabled && quiz.feedbackRequired,
+        feedback_prompt: quiz.feedbackPrompt.trim() || 'Bagaimana pengalaman Anda mengikuti kelas ini?',
         questions: quiz.questions,
         updated_at: new Date().toISOString()
       };
@@ -689,7 +706,7 @@ export const RecordedClassEditor: React.FC<{
       <section className="space-y-5">
         <div>
           <h2 className="font-semibold text-xl flex items-center gap-2"><ClipboardCheck size={21} className="text-[var(--accent-strong)]" /> Post-Test</h2>
-          <p className="text-sm text-[var(--muted)] mt-1">Pilihan ganda dan benar/salah dinilai otomatis oleh database.</p>
+          <p className="text-sm text-[var(--muted)] mt-1">Pilihan ganda dan benar/salah dinilai otomatis. Jawaban panjang masuk ke review admin.</p>
         </div>
 
         {isQuizLoading || !quiz ? (
@@ -714,6 +731,15 @@ export const RecordedClassEditor: React.FC<{
               </div>
               <Textarea label="Petunjuk Post-Test" value={quiz.description} onChange={event => updateQuiz({ ...quiz, description: event.target.value })} />
               <ToggleField checked={quiz.showAnswers} onChange={showAnswers => updateQuiz({ ...quiz, showAnswers })} label="Tampilkan pembahasan jawaban setelah submit" description="Jika aktif, peserta dapat melihat jawaban benar. Nonaktifkan bila peserta masih boleh mencoba kembali." />
+              <div className="space-y-4 pt-1">
+                <ToggleField checked={quiz.feedbackEnabled} onChange={feedbackEnabled => updateQuiz({ ...quiz, feedbackEnabled, feedbackRequired: feedbackEnabled ? quiz.feedbackRequired : false })} label="Aktifkan feedback kelas" description="Peserta dapat menuliskan kesan, saran, atau evaluasi setelah mengerjakan post-test." />
+                {quiz.feedbackEnabled && (
+                  <div className="space-y-4 pl-7 border-l-2 border-[var(--border)]">
+                    <Textarea label="Pertanyaan feedback" value={quiz.feedbackPrompt} onChange={event => updateQuiz({ ...quiz, feedbackPrompt: event.target.value })} placeholder="Bagaimana pengalaman Anda mengikuti kelas ini?" />
+                    <ToggleField checked={quiz.feedbackRequired} onChange={feedbackRequired => updateQuiz({ ...quiz, feedbackRequired })} label="Wajib diisi peserta" description="Jika aktif, peserta harus mengisi feedback sebelum pengiriman berhasil." />
+                  </div>
+                )}
+              </div>
             </Card>
 
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
@@ -721,6 +747,7 @@ export const RecordedClassEditor: React.FC<{
               <div className="flex gap-2">
                 <Button variant="secondary" className="text-xs px-3" icon={Plus} onClick={() => updateQuiz({ ...quiz, questions: [...quiz.questions, createQuestion('multiple_choice')] })}>Pilihan Ganda</Button>
                 <Button variant="secondary" className="text-xs px-3" icon={Plus} onClick={() => updateQuiz({ ...quiz, questions: [...quiz.questions, createQuestion('true_false')] })}>Benar / Salah</Button>
+                <Button variant="secondary" className="text-xs px-3" icon={Plus} onClick={() => updateQuiz({ ...quiz, questions: [...quiz.questions, createQuestion('long_answer')] })}>Jawaban Panjang</Button>
               </div>
             </div>
 
@@ -732,27 +759,34 @@ export const RecordedClassEditor: React.FC<{
                   <SelectField label="Tipe Soal" value={question.type} onChange={event => changeQuestionType(questionIndex, event.target.value as QuizQuestionType)}>
                     <option value="multiple_choice">Pilihan Ganda</option>
                     <option value="true_false">Benar / Salah</option>
+                    <option value="long_answer">Jawaban Panjang</option>
                   </SelectField>
                 </div>
                 <Textarea label="Pertanyaan" value={question.prompt} onChange={event => updateQuestion(questionIndex, { prompt: event.target.value })} placeholder="Tuliskan pertanyaan..." />
-                <div className="space-y-3">
-                  <p className="text-xs font-semibold text-[var(--muted)]">Pilihan Jawaban — tandai satu jawaban benar</p>
-                  {question.options.map((option, optionIndex) => (
-                    <div key={`${question.id}-${optionIndex}`} className="flex items-center gap-3">
-                      <input type="radio" name={`correct-${question.id}`} checked={question.correctAnswer === option} onChange={() => updateQuestion(questionIndex, { correctAnswer: option })} aria-label={`Jadikan pilihan ${optionIndex + 1} sebagai jawaban benar`} className="h-4 w-4 flex-shrink-0 accent-[var(--accent)]" />
-                      <Input aria-label={`Pilihan jawaban ${optionIndex + 1}`} value={option} disabled={question.type === 'true_false'} onChange={event => updateOption(questionIndex, optionIndex, event.target.value)} className="flex-1" />
-                      {question.type === 'multiple_choice' && question.options.length > 2 && (
-                        <button type="button" aria-label={`Hapus pilihan ${optionIndex + 1}`} onClick={() => {
-                          const options = question.options.filter((_, index) => index !== optionIndex);
-                          updateQuestion(questionIndex, { options, correctAnswer: option === question.correctAnswer ? options[0] : question.correctAnswer });
-                        }} className="p-2 text-[var(--muted)] hover:text-[var(--danger-text)]"><X size={16} /></button>
-                      )}
-                    </div>
-                  ))}
-                  {question.type === 'multiple_choice' && (
-                    <Button variant="secondary" className="text-xs" icon={Plus} onClick={() => updateQuestion(questionIndex, { options: [...question.options, `Pilihan ${question.options.length + 1}`] })}>Tambah Pilihan</Button>
-                  )}
-                </div>
+                {question.type === 'long_answer' ? (
+                  <div className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] text-sm text-[var(--muted)] leading-relaxed">
+                    Jawaban peserta akan disimpan sebagai teks panjang dan ditandai <strong className="text-[var(--text)]">menunggu review admin</strong>. Soal ini tidak dinilai otomatis.
+                  </div>
+                ) : (
+                  <div className="space-y-3">
+                    <p className="text-xs font-semibold text-[var(--muted)]">Pilihan Jawaban — tandai satu jawaban benar</p>
+                    {question.options.map((option, optionIndex) => (
+                      <div key={`${question.id}-${optionIndex}`} className="flex items-center gap-3">
+                        <input type="radio" name={`correct-${question.id}`} checked={question.correctAnswer === option} onChange={() => updateQuestion(questionIndex, { correctAnswer: option })} aria-label={`Jadikan pilihan ${optionIndex + 1} sebagai jawaban benar`} className="h-4 w-4 flex-shrink-0 accent-[var(--accent)]" />
+                        <Input aria-label={`Pilihan jawaban ${optionIndex + 1}`} value={option} disabled={question.type === 'true_false'} onChange={event => updateOption(questionIndex, optionIndex, event.target.value)} className="flex-1" />
+                        {question.type === 'multiple_choice' && question.options.length > 2 && (
+                          <button type="button" aria-label={`Hapus pilihan ${optionIndex + 1}`} onClick={() => {
+                            const options = question.options.filter((_, index) => index !== optionIndex);
+                            updateQuestion(questionIndex, { options, correctAnswer: option === question.correctAnswer ? options[0] : question.correctAnswer });
+                          }} className="p-2 text-[var(--muted)] hover:text-[var(--danger-text)]"><X size={16} /></button>
+                        )}
+                      </div>
+                    ))}
+                    {question.type === 'multiple_choice' && (
+                      <Button variant="secondary" className="text-xs" icon={Plus} onClick={() => updateQuestion(questionIndex, { options: [...question.options, `Pilihan ${question.options.length + 1}`] })}>Tambah Pilihan</Button>
+                    )}
+                  </div>
+                )}
               </Card>
             ))}
 
@@ -803,14 +837,16 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
   const stats = useMemo(() => {
     const participantCount = new Set(attempts.map(attempt => attempt.participantEmail.toLowerCase())).size;
     const average = attempts.length ? Math.round(attempts.reduce((sum, attempt) => sum + attempt.score, 0) / attempts.length) : 0;
-    const passRate = attempts.length ? Math.round((attempts.filter(attempt => attempt.passed).length / attempts.length) * 100) : 0;
-    return { participantCount, average, passRate };
+    const reviewedAttempts = attempts.filter(attempt => !attempt.needsReview);
+    const passRate = reviewedAttempts.length ? Math.round((reviewedAttempts.filter(attempt => attempt.passed).length / reviewedAttempts.length) * 100) : 0;
+    const pendingReview = attempts.filter(attempt => attempt.needsReview).length;
+    return { participantCount, average, passRate, pendingReview };
   }, [attempts]);
 
   const exportCsv = () => {
     const rows = [
-      ['Nama', 'Email', 'Nilai', 'Status', 'Percobaan', 'Waktu Submit'],
-      ...attempts.map(attempt => [attempt.participantName, attempt.participantEmail, attempt.score, attempt.passed ? 'Lulus' : 'Belum Lulus', attempt.attemptNumber, new Date(attempt.submittedAt).toLocaleString('id-ID')])
+      ['Nama', 'Email', 'Nilai', 'Status', 'Percobaan', 'Feedback Kelas', 'Jawaban', 'Waktu Submit'],
+      ...attempts.map(attempt => [attempt.participantName, attempt.participantEmail, attempt.score, attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus', attempt.attemptNumber, attempt.classFeedback || '', JSON.stringify(attempt.answers), new Date(attempt.submittedAt).toLocaleString('id-ID')])
     ];
     const csv = rows.map(row => row.map(escapeCsv).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
@@ -835,10 +871,11 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-3 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Card><p className="text-xs text-[var(--muted)]">Peserta Unik</p><p className="text-3xl font-bold mt-2">{stats.participantCount}</p></Card>
         <Card><p className="text-xs text-[var(--muted)]">Rata-rata Nilai</p><p className="text-3xl font-bold mt-2">{stats.average}</p></Card>
         <Card><p className="text-xs text-[var(--muted)]">Tingkat Kelulusan</p><p className="text-3xl font-bold mt-2">{stats.passRate}%</p></Card>
+        <Card><p className="text-xs text-[var(--muted)]">Menunggu Review</p><p className="text-3xl font-bold mt-2">{stats.pendingReview}</p></Card>
       </div>
 
       {isLoading ? (
@@ -852,16 +889,25 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
           <div className="hidden md:block overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
             <table className="w-full text-left text-sm">
               <thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]">
-                <tr><th className="p-4">Peserta</th><th className="p-4">Nilai</th><th className="p-4">Status</th><th className="p-4">Percobaan</th><th className="p-4">Dikirim</th></tr>
+                <tr><th className="p-4">Peserta</th><th className="p-4">Nilai</th><th className="p-4">Status</th><th className="p-4">Percobaan</th><th className="p-4">Dikirim</th><th className="p-4">Detail</th></tr>
               </thead>
               <tbody>
                 {attempts.map(attempt => (
                   <tr key={attempt.id} className="border-t border-[var(--border)]">
                     <td className="p-4"><p className="font-semibold">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] mt-1">{attempt.participantEmail}</p></td>
                     <td className="p-4 font-bold">{attempt.score}</td>
-                    <td className="p-4"><span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold ${attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>{attempt.passed ? 'Lulus' : 'Belum Lulus'}</span></td>
+                    <td className="p-4"><span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</span></td>
                     <td className="p-4">#{attempt.attemptNumber}</td>
                     <td className="p-4 text-xs text-[var(--muted)]">{new Date(attempt.submittedAt).toLocaleString('id-ID')}</td>
+                    <td className="p-4">
+                      <details className="max-w-sm">
+                        <summary className="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">Lihat jawaban</summary>
+                        <div className="mt-3 space-y-3 text-xs">
+                          {attempt.classFeedback && <div><p className="font-semibold">Feedback kelas</p><p className="mt-1 whitespace-pre-wrap text-[var(--muted)]">{attempt.classFeedback}</p></div>}
+                          <div><p className="font-semibold">Jawaban</p><pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[var(--muted)]">{JSON.stringify(attempt.answers, null, 2)}</pre></div>
+                        </div>
+                      </details>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -870,8 +916,9 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
           <div className="md:hidden space-y-3">
             {attempts.map(attempt => (
               <Card key={attempt.id} className="space-y-4">
-                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold truncate">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{attempt.participantEmail}</p></div><span className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>{attempt.passed ? 'Lulus' : 'Belum Lulus'}</span></div>
+                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold truncate">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{attempt.participantEmail}</p></div><span className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</span></div>
                 <div className="grid grid-cols-3 gap-3 text-xs"><div><p className="text-[var(--muted)]">Nilai</p><p className="font-bold text-lg mt-1">{attempt.score}</p></div><div><p className="text-[var(--muted)]">Percobaan</p><p className="font-semibold mt-2">#{attempt.attemptNumber}</p></div><div><p className="text-[var(--muted)]">Dikirim</p><p className="font-semibold mt-2">{new Date(attempt.submittedAt).toLocaleDateString('id-ID')}</p></div></div>
+                <details className="border-t border-[var(--border)] pt-3"><summary className="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">Lihat jawaban dan feedback</summary><div className="mt-3 space-y-3 text-xs">{attempt.classFeedback && <div><p className="font-semibold">Feedback kelas</p><p className="mt-1 whitespace-pre-wrap text-[var(--muted)]">{attempt.classFeedback}</p></div>}<div><p className="font-semibold">Jawaban</p><pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words text-[var(--muted)]">{JSON.stringify(attempt.answers, null, 2)}</pre></div></div></details>
               </Card>
             ))}
           </div>
@@ -898,6 +945,7 @@ export const PublicRecordedClassView: React.FC<{
   const [participantName, setParticipantName] = useState('');
   const [participantEmail, setParticipantEmail] = useState('');
   const [answers, setAnswers] = useState<Record<string, string>>({});
+  const [classFeedback, setClassFeedback] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [result, setResult] = useState<QuizSubmissionResult | null>(null);
@@ -967,9 +1015,13 @@ export const PublicRecordedClassView: React.FC<{
       setSubmissionError('Nama dan email peserta wajib diisi.');
       return;
     }
-    const unanswered = quiz.questions.find(question => !answers[question.id]);
+    const unanswered = quiz.questions.find(question => !String(answers[question.id] || '').trim());
     if (unanswered) {
       setSubmissionError('Jawab seluruh pertanyaan sebelum mengirim post-test.');
+      return;
+    }
+    if (quiz.feedbackEnabled && quiz.feedbackRequired && !classFeedback.trim()) {
+      setSubmissionError('Feedback kelas wajib diisi sebelum mengirim post-test.');
       return;
     }
 
@@ -980,7 +1032,8 @@ export const PublicRecordedClassView: React.FC<{
         p_course_id: courseId,
         p_participant_name: participantName.trim(),
         p_participant_email: participantEmail.trim(),
-        p_answers: answers
+        p_answers: answers,
+        p_class_feedback: quiz.feedbackEnabled ? classFeedback.trim() || null : null
       }) as PromiseLike<any>);
       if (error) {
         const message = String(error.message || 'Post-test gagal dikirim.');
@@ -1065,21 +1118,21 @@ export const PublicRecordedClassView: React.FC<{
                 <Card className="py-10 text-center"><ClipboardCheck size={30} className="mx-auto text-[var(--muted)] mb-3" /><p className="text-sm text-[var(--muted)]">Post-test belum diaktifkan untuk kelas ini.</p></Card>
               ) : result ? (
                 <Card className="p-7 md:p-10 text-center">
-                  {result.passed ? <CheckCircle2 size={46} className="mx-auto text-[var(--success-text)]" /> : <XCircle size={46} className="mx-auto text-[var(--danger-text)]" />}
+                  {result.needsReview ? <ClipboardCheck size={46} className="mx-auto text-[var(--accent-strong)]" /> : result.passed ? <CheckCircle2 size={46} className="mx-auto text-[var(--success-text)]" /> : <XCircle size={46} className="mx-auto text-[var(--danger-text)]" />}
                   <p className="text-xs uppercase tracking-[0.14em] text-[var(--muted)] font-semibold mt-5">Hasil Percobaan #{result.attemptNumber}</p>
                   <p className="text-5xl font-bold mt-3">{result.score}</p>
-                  <h3 className="text-xl font-semibold mt-4">{result.passed ? 'Selamat, Anda lulus!' : 'Nilai belum mencapai batas lulus'}</h3>
-                  <p className="text-sm text-[var(--muted)] mt-2">Nilai minimum {result.passingScore}. Maksimal {result.maxAttempts} percobaan.</p>
+                  <h3 className="text-xl font-semibold mt-4">{result.needsReview ? 'Jawaban terkirim, menunggu review admin' : result.passed ? 'Selamat, Anda lulus!' : 'Nilai belum mencapai batas lulus'}</h3>
+                  <p className="text-sm text-[var(--muted)] mt-2">{result.needsReview ? 'Nilai di atas adalah nilai sementara dari soal otomatis.' : `Nilai minimum ${result.passingScore}. Maksimal ${result.maxAttempts} percobaan.`}</p>
                   {result.feedback && result.feedback.length > 0 && (
                     <div className="text-left mt-8 space-y-3">
                       {result.feedback.map((feedback, index) => {
                         const question = quiz.questions.find(item => item.id === feedback.questionId);
-                        return <div key={feedback.questionId} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]"><p className="text-sm font-semibold">{index + 1}. {question?.prompt}</p><p className={`text-xs mt-2 ${feedback.correct ? 'text-[var(--success-text)]' : 'text-[var(--danger-text)]'}`}>{feedback.correct ? 'Jawaban benar' : `Jawaban benar: ${feedback.correctAnswer}`}</p></div>;
+                        return <div key={feedback.questionId} className="p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]"><p className="text-sm font-semibold">{index + 1}. {question?.prompt}</p><p className={`text-xs mt-2 ${feedback.review ? 'text-[var(--accent-strong)]' : feedback.correct ? 'text-[var(--success-text)]' : 'text-[var(--danger-text)]'}`}>{feedback.review ? 'Jawaban panjang menunggu review admin.' : feedback.correct ? 'Jawaban benar' : `Jawaban benar: ${feedback.correctAnswer}`}</p></div>;
                       })}
                     </div>
                   )}
-                  {!result.passed && result.attemptNumber < result.maxAttempts && (
-                    <Button variant="secondary" className="mx-auto mt-7" onClick={() => { setResult(null); setAnswers({}); }}>Coba Lagi</Button>
+                  {!result.passed && !result.needsReview && result.attemptNumber < result.maxAttempts && (
+                    <Button variant="secondary" className="mx-auto mt-7" onClick={() => { setResult(null); setAnswers({}); setClassFeedback(''); }}>Coba Lagi</Button>
                   )}
                 </Card>
               ) : (
@@ -1091,16 +1144,45 @@ export const PublicRecordedClassView: React.FC<{
                       <fieldset key={question.id} className="p-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] min-w-0">
                         <legend className="sr-only">Pertanyaan {questionIndex + 1}</legend>
                         <p className="font-semibold leading-relaxed"><span className="text-[var(--accent-strong)] mr-2">{questionIndex + 1}.</span>{question.prompt}</p>
-                        <div className="space-y-2.5 mt-4">
-                          {question.options.map((option, optionIndex) => (
-                            <label key={`${question.id}-${optionIndex}`} className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-colors ${answers[question.id] === option ? 'bg-[var(--accent-soft)] border-[var(--border-strong)]' : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--border-strong)]'}`}>
-                              <input type="radio" name={question.id} value={option} checked={answers[question.id] === option} onChange={() => setAnswers(current => ({ ...current, [question.id]: option }))} className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--accent)]" />
-                              <span className="text-sm break-words min-w-0">{option}</span>
-                            </label>
-                          ))}
-                        </div>
+                        {question.type === 'long_answer' ? (
+                          <div className="mt-4">
+                            <Textarea
+                              label="Jawaban panjang"
+                              value={answers[question.id] || ''}
+                              onChange={event => setAnswers(current => ({ ...current, [question.id]: event.target.value }))}
+                              placeholder="Tuliskan jawaban Anda secara lengkap..."
+                              className="min-h-[160px]"
+                              maxLength={5000}
+                              required
+                            />
+                            <p className="text-[11px] text-[var(--muted)] text-right mt-1">{(answers[question.id] || '').length}/5.000</p>
+                          </div>
+                        ) : (
+                          <div className="space-y-2.5 mt-4">
+                            {question.options.map((option, optionIndex) => (
+                              <label key={`${question.id}-${optionIndex}`} className={`flex items-start gap-3 p-3.5 rounded-xl border cursor-pointer transition-colors ${answers[question.id] === option ? 'bg-[var(--accent-soft)] border-[var(--border-strong)]' : 'bg-[var(--surface)] border-[var(--border)] hover:border-[var(--border-strong)]'}`}>
+                                <input type="radio" name={question.id} value={option} checked={answers[question.id] === option} onChange={() => setAnswers(current => ({ ...current, [question.id]: option }))} className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--accent)]" />
+                                <span className="text-sm break-words min-w-0">{option}</span>
+                              </label>
+                            ))}
+                          </div>
+                        )}
                       </fieldset>
                     ))}
+                    {quiz.feedbackEnabled && (
+                      <div className="p-5 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)]">
+                        <Textarea
+                          label={`Feedback Kelas${quiz.feedbackRequired ? ' (Wajib)' : ' (Opsional)'}`}
+                          value={classFeedback}
+                          onChange={event => setClassFeedback(event.target.value)}
+                          placeholder={quiz.feedbackPrompt || 'Bagaimana pengalaman Anda mengikuti kelas ini?'}
+                          className="min-h-[140px] bg-[var(--surface)]"
+                          maxLength={5000}
+                          required={quiz.feedbackRequired}
+                        />
+                        <p className="text-[11px] text-[var(--muted)] text-right mt-1">{classFeedback.length}/5.000</p>
+                      </div>
+                    )}
                     {submissionError && <div className="p-4 rounded-xl bg-[var(--danger-soft)] border border-[var(--border)] text-sm text-[var(--danger-text)]">{submissionError}</div>}
                     <Button type="submit" icon={ClipboardCheck} isLoading={isSubmitting} disabled={isSubmitting} className="w-full">Kirim Jawaban</Button>
                   </form>

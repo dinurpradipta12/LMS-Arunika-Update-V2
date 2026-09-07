@@ -2,7 +2,7 @@
 export type ContentType = 'video' | 'text';
 export type AssetType = 'link' | 'file';
 export type SpaceType = 'product_tutorial' | 'recorded_class';
-export type QuizQuestionType = 'multiple_choice' | 'true_false';
+export type QuizQuestionType = 'multiple_choice' | 'true_false' | 'long_answer';
 
 export interface Module {
   id: string;
@@ -65,6 +65,9 @@ export interface CourseQuiz {
   passingScore: number;
   maxAttempts: number;
   showAnswers: boolean;
+  feedbackEnabled: boolean;
+  feedbackRequired: boolean;
+  feedbackPrompt: string;
   questions: QuizQuestion[];
 }
 
@@ -75,6 +78,9 @@ export interface PublicCourseQuiz {
   description: string;
   passingScore: number;
   maxAttempts: number;
+  feedbackEnabled: boolean;
+  feedbackRequired: boolean;
+  feedbackPrompt: string;
   questions: PublicQuizQuestion[];
 }
 
@@ -87,6 +93,8 @@ export interface QuizAttempt {
   answers: Record<string, string>;
   score: number;
   passed: boolean;
+  needsReview: boolean;
+  classFeedback: string | null;
   attemptNumber: number;
   submittedAt: string;
 }
@@ -97,12 +105,14 @@ export interface QuizSubmissionResult {
   maxAttempts: number;
   score: number;
   passed: boolean;
+  needsReview: boolean;
   passingScore: number;
   feedback?: Array<{
     questionId: string;
     answer: string | null;
-    correctAnswer: string;
-    correct: boolean;
+    correctAnswer: string | null;
+    correct: boolean | null;
+    review?: boolean;
   }> | null;
 }
 
