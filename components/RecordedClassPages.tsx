@@ -79,7 +79,8 @@ const mapCourseRow = (row: any): Course => ({
   assets: row.assets || [],
   categories: row.categories || [],
   spaceType: row.space_type || 'product_tutorial',
-  published: row.published !== false
+  published: row.published !== false,
+  overallFeedbackEnabled: row.overall_feedback_enabled !== false
 });
 
 const mapQuizRow = (row: any): CourseQuiz => ({
@@ -134,6 +135,7 @@ const databaseErrorMessage = (error: any) => {
     || message.includes('get_public_class_quiz')
     || message.includes('submit_class_post_test')
     || message.includes('feedback_enabled')
+    || message.includes('overall_feedback_enabled')
     || message.includes('class_feedback')
   ) {
     return 'Database kelas recording belum siap. Jalankan migration terbaru untuk fitur post-test dan feedback.';
@@ -648,6 +650,19 @@ export const RecordedClassEditor: React.FC<{
         </label>
       </Card>
 
+      <Card className="space-y-4">
+        <div>
+          <h2 className="font-semibold">Feedback Akhir Kelas</h2>
+          <p className="text-xs text-[var(--muted)] mt-1 leading-relaxed">Atur apakah tab feedback keseluruhan dan form email sertifikat muncul di halaman publik kelas.</p>
+        </div>
+        <ToggleField
+          checked={course.overallFeedbackEnabled !== false}
+          onChange={overallFeedbackEnabled => updateCourse({ ...course, overallFeedbackEnabled })}
+          label="Tampilkan tab Feedback Kelas"
+          description="Jika dimatikan, peserta hanya melihat tab Materi dan Post-Test. Feedback post-test tetap mengikuti pengaturan di bawah."
+        />
+      </Card>
+
       <div className="grid lg:grid-cols-3 gap-8">
         <div className="lg:col-span-2 space-y-8 min-w-0">
           <Card className="space-y-6">
@@ -1011,6 +1026,7 @@ export const PublicRecordedClassView: React.FC<{
 
   const progressStorageKey = `arunika-class-progress:${courseId}`;
   const allMaterialsCompleted = Boolean(course && course.modules.length > 0 && course.modules.every(module => completedModuleIds.includes(module.id)));
+  const overallFeedbackEnabled = course?.overallFeedbackEnabled !== false;
 
   const fetchClass = useCallback(async () => {
     setIsLoading(true);
@@ -1084,11 +1100,16 @@ export const PublicRecordedClassView: React.FC<{
   }, [course, courseId, progressStorageKey]);
 
   useEffect(() => {
-    if (allMaterialsCompleted && !autoOpenedFeedbackRef.current) {
+    if (!overallFeedbackEnabled) {
+      autoOpenedFeedbackRef.current = false;
+      if (activeTab === 'feedback') setActiveTab('materials');
+      return;
+    }
+    if (overallFeedbackEnabled && allMaterialsCompleted && !autoOpenedFeedbackRef.current) {
       autoOpenedFeedbackRef.current = true;
       setActiveTab('feedback');
     }
-  }, [allMaterialsCompleted]);
+  }, [activeTab, allMaterialsCompleted, overallFeedbackEnabled]);
 
   const markModuleComplete = (moduleId: string) => {
     setCompletedModuleIds(current => {
@@ -1234,16 +1255,18 @@ export const PublicRecordedClassView: React.FC<{
           </div>
         </section>
 
-        <div role="tablist" aria-label="Bagian kelas" className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+        <div role="tablist" aria-label="Bagian kelas" className={`grid grid-cols-1 ${overallFeedbackEnabled ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2 p-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]`}>
           <button type="button" role="tab" aria-selected={activeTab === 'materials'} onClick={() => setActiveTab('materials')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'materials' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>
             Materi <span className="text-xs font-normal ml-1">({completedModuleIds.length}/{course.modules.length})</span>
           </button>
           <button type="button" role="tab" aria-selected={activeTab === 'post_test'} onClick={() => setActiveTab('post_test')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'post_test' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>
             <ClipboardCheck size={15} className="inline-block mr-2 -mt-0.5" />Post-Test
           </button>
-          <button type="button" role="tab" aria-selected={activeTab === 'feedback'} disabled={!allMaterialsCompleted} onClick={() => allMaterialsCompleted && setActiveTab('feedback')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'feedback' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : allMaterialsCompleted ? 'text-[var(--muted)] hover:bg-[var(--surface-soft)]' : 'text-[var(--muted)]/60 cursor-not-allowed'}`} title={!allMaterialsCompleted ? 'Selesaikan semua materi terlebih dahulu' : undefined}>
-            {allMaterialsCompleted ? <CheckCircle2 size={15} className="inline-block mr-2 -mt-0.5" /> : <LockKeyhole size={14} className="inline-block mr-2 -mt-0.5" />}Feedback Kelas
-          </button>
+          {overallFeedbackEnabled && (
+            <button type="button" role="tab" aria-selected={activeTab === 'feedback'} disabled={!allMaterialsCompleted} onClick={() => allMaterialsCompleted && setActiveTab('feedback')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'feedback' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : allMaterialsCompleted ? 'text-[var(--muted)] hover:bg-[var(--surface-soft)]' : 'text-[var(--muted)]/60 cursor-not-allowed'}`} title={!allMaterialsCompleted ? 'Selesaikan semua materi terlebih dahulu' : undefined}>
+              {allMaterialsCompleted ? <CheckCircle2 size={15} className="inline-block mr-2 -mt-0.5" /> : <LockKeyhole size={14} className="inline-block mr-2 -mt-0.5" />}Feedback Kelas
+            </button>
+          )}
         </div>
 
         <div className={activeTab === 'materials' ? 'grid lg:grid-cols-3 gap-6 lg:gap-8 items-start' : PUBLIC_CLASS_CONTENT_CLASS}>
@@ -1356,7 +1379,7 @@ export const PublicRecordedClassView: React.FC<{
               )}
             </section>}
 
-            {activeTab === 'feedback' && (
+            {overallFeedbackEnabled && activeTab === 'feedback' && (
               <section id="class-feedback" className="space-y-5 scroll-mt-24">
                 <div>
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Setelah Materi Selesai</p>

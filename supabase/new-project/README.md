@@ -12,8 +12,9 @@ SQL tidak dapat dijalankan dengan anon key. Buka target project di Supabase Dash
 4. Jalankan `../migrations/20260907010000_secure_admin_auth_and_rls.sql` seluruhnya.
 5. Jalankan `../migrations/20260907030000_long_answer_and_class_feedback.sql` seluruhnya untuk jawaban panjang dan feedback post-test.
 6. Jalankan `../migrations/20260907040000_class_feedback_and_completion.sql` seluruhnya untuk feedback akhir kelas dan email sertifikat.
-7. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
-8. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
+7. Jalankan `../migrations/20260908000000_overall_feedback_visibility.sql` seluruhnya untuk pengaturan tampil/sembunyi tab feedback akhir kelas.
+8. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
+9. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
 
 `01_schema.sql` sekarang fail-closed: semua tabel langsung memakai RLS tanpa policy terbuka. Halaman publik baru aktif setelah migration keamanan pada langkah 4 membuat policy yang hanya membaca konten `published`.
 
@@ -24,7 +25,8 @@ Untuk project `drezwxfgykkdnnwjrnnt` yang tabelnya sudah berisi data, tidak perl
 1. Buat akun admin di **Authentication > Users > Add user**.
 2. Jalankan `../migrations/20260907010000_secure_admin_auth_and_rls.sql` seluruhnya.
 3. Jalankan migration `20260907030000_long_answer_and_class_feedback.sql` dan `20260907040000_class_feedback_and_completion.sql` seluruhnya.
-4. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
+4. Jalankan migration `20260908000000_overall_feedback_visibility.sql` seluruhnya.
+5. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
 
 Migration keamanan idempotent dan tidak menghapus kursus, analytics, quiz, ataupun hasil peserta. Begitu migration selesai, login lokal lama tidak berlaku lagi; gunakan email/password Supabase Auth yang dibuat pada langkah 1.
 

@@ -1556,7 +1556,8 @@ const PublicCourseView: React.FC<{
         modules: c.modules || [],
         categories: c.categories || [],
         spaceType: c.space_type || 'product_tutorial',
-        published: c.published !== false
+        published: c.published !== false,
+        overallFeedbackEnabled: c.overall_feedback_enabled !== false
       };
       setLocalCourse(full);
       setSelectedModule(full.modules[0] || null);
@@ -1878,7 +1879,8 @@ const App: React.FC = () => {
         modules: item.modules || [],
         categories: item.categories || [],
         spaceType: item.space_type || 'product_tutorial',
-        published: item.published !== false
+        published: item.published !== false,
+        overallFeedbackEnabled: item.overall_feedback_enabled !== false
       })));
     } catch (error) {
       console.warn('Fetch error', error);
@@ -2016,6 +2018,7 @@ const App: React.FC = () => {
         mentor_id: updatedCourse.mentorId || 'profile',
         space_type: updatedCourse.spaceType || 'product_tutorial',
         published: updatedCourse.published !== false,
+        overall_feedback_enabled: updatedCourse.overallFeedbackEnabled !== false,
         updated_at: new Date().toISOString()
       };
       const { error: courseError } = await client.from('courses').upsert(courseData, { onConflict: 'id' });

@@ -37,6 +37,7 @@ export interface Course {
   categories?: Category[];
   spaceType?: SpaceType;
   published?: boolean;
+  overallFeedbackEnabled?: boolean;
 }
 
 export interface QuizQuestion {

@@ -19,6 +19,7 @@ create table if not exists public.courses (
   mentor_id text not null default 'profile',
   space_type text not null default 'product_tutorial',
   published boolean not null default true,
+  overall_feedback_enabled boolean not null default true,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now(),
   constraint courses_modules_array_check check (jsonb_typeof(modules) = 'array'),
@@ -31,6 +32,7 @@ create table if not exists public.courses (
 alter table public.courses add column if not exists categories jsonb default '[]'::jsonb;
 alter table public.courses add column if not exists space_type text default 'product_tutorial';
 alter table public.courses add column if not exists published boolean default true;
+alter table public.courses add column if not exists overall_feedback_enabled boolean default true;
 
 update public.courses
 set categories = '[]'::jsonb
@@ -45,13 +47,19 @@ update public.courses
 set published = true
 where published is null;
 
+update public.courses
+set overall_feedback_enabled = true
+where overall_feedback_enabled is null;
+
 alter table public.courses
   alter column categories set default '[]'::jsonb,
   alter column categories set not null,
   alter column space_type set default 'product_tutorial',
   alter column space_type set not null,
   alter column published set default true,
-  alter column published set not null;
+  alter column published set not null,
+  alter column overall_feedback_enabled set default true,
+  alter column overall_feedback_enabled set not null;
 
 do $$
 begin
