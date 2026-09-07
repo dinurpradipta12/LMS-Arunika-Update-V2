@@ -226,6 +226,23 @@ const NoticeModal: React.FC<{
   );
 };
 
+const CopyLinkModal: React.FC<{ url: string | null; onClose: () => void }> = ({ url, onClose }) => {
+  if (!url) return null;
+
+  return (
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-slate-950/45 backdrop-blur-sm" role="presentation">
+      <div role="dialog" aria-modal="true" aria-labelledby="arunika-copy-link-title" className="w-full max-w-lg rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl">
+        <h2 id="arunika-copy-link-title" className="text-lg font-semibold">Salin link publik</h2>
+        <p className="text-sm text-[var(--muted)] leading-relaxed mt-2">Salin link berikut untuk membagikan kelas kepada peserta.</p>
+        <Input label="Link kelas" value={url} readOnly onFocus={event => event.currentTarget.select()} className="mt-5 text-xs" />
+        <div className="flex justify-end mt-6">
+          <Button variant="secondary" onClick={onClose}>Tutup</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ToggleField: React.FC<{
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -372,6 +389,7 @@ export const RecordedClassesPage: React.FC<{
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [notice, setNotice] = useState<{ tone: NoticeTone; title: string; message: string } | null>(null);
+  const [copyFallbackUrl, setCopyFallbackUrl] = useState<string | null>(null);
 
   const handleAdd = async () => {
     const newClass: Course = {
@@ -406,7 +424,7 @@ export const RecordedClassesPage: React.FC<{
       window.setTimeout(() => setCopiedId(current => current === courseId ? null : current), 2000);
     } catch (error) {
       console.error('Class link copy failed', error);
-      window.prompt('Salin link kelas publik berikut:', url);
+      setCopyFallbackUrl(url);
     }
   };
 
@@ -483,6 +501,7 @@ export const RecordedClassesPage: React.FC<{
       )}
 
       <NoticeModal notice={notice} onClose={() => setNotice(null)} />
+      <CopyLinkModal url={copyFallbackUrl} onClose={() => setCopyFallbackUrl(null)} />
     </div>
   );
 };
