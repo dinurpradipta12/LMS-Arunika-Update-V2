@@ -296,31 +296,34 @@ revoke all on function public.submit_class_post_test(text, text, text, jsonb) fr
 grant execute on function public.get_public_class_quiz(text) to anon, authenticated;
 grant execute on function public.submit_class_post_test(text, text, text, jsonb) to anon, authenticated;
 
--- Kompatibilitas dengan arsitektur admin saat ini yang masih memakai anon key.
--- Setelah login dipindah ke Supabase Auth, ganti grant ini dengan RLS berbasis role admin.
-grant select, insert, update, delete on public.course_quizzes to anon, authenticated;
-grant select, insert, update, delete on public.quiz_attempts to anon, authenticated;
+-- Tabel sensitif selalu fail-closed sampai migration keamanan berikutnya membuat
+-- policy admin berbasis Supabase Auth.
+revoke all on public.course_quizzes from public, anon, authenticated;
+revoke all on public.quiz_attempts from public, anon, authenticated;
+alter table public.course_quizzes enable row level security;
+alter table public.quiz_attempts enable row level security;
 
--- Tambahkan tabel baru ke Realtime hanya bila belum terdaftar.
+-- Jangan siarkan quiz atau hasil peserta melalui Realtime. Migration keamanan
+-- berikutnya menggunakan satu sinyal revisi publik tanpa payload sensitif.
 do $$
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    if not exists (
+    if exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime'
         and schemaname = 'public'
         and tablename = 'course_quizzes'
     ) then
-      alter publication supabase_realtime add table public.course_quizzes;
+      alter publication supabase_realtime drop table public.course_quizzes;
     end if;
 
-    if not exists (
+    if exists (
       select 1 from pg_publication_tables
       where pubname = 'supabase_realtime'
         and schemaname = 'public'
         and tablename = 'quiz_attempts'
     ) then
-      alter publication supabase_realtime add table public.quiz_attempts;
+      alter publication supabase_realtime drop table public.quiz_attempts;
     end if;
   end if;
 end

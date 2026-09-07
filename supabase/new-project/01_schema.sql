@@ -1,6 +1,7 @@
 -- Arunika LMS - schema lengkap untuk project Supabase baru.
 -- Target: https://drezwxfgykkdnnwjrnnt.supabase.co
--- Jalankan file ini PERTAMA melalui Supabase Dashboard > SQL Editor.
+-- Jalankan file ini PERTAMA melalui Supabase Dashboard > SQL Editor,
+-- lalu langsung jalankan migration 20260907010000_secure_admin_auth_and_rls.sql.
 -- Script aman dijalankan ulang pada project yang sama.
 
 begin;
@@ -398,25 +399,25 @@ grant execute on function public.get_public_class_quiz(text) to anon, authentica
 grant execute on function public.submit_class_post_test(text, text, text, jsonb) to anon, authenticated;
 
 grant usage on schema public to anon, authenticated;
-grant select, insert, update, delete on public.courses to anon, authenticated;
-grant select, insert, update, delete on public.mentor to anon, authenticated;
-grant select, insert, update, delete on public.branding to anon, authenticated;
-grant select, insert, update, delete on public.events to anon, authenticated;
-grant select, insert, update, delete on public.course_quizzes to anon, authenticated;
-grant select, insert, update, delete on public.quiz_attempts to anon, authenticated;
+revoke create on schema public from public, anon, authenticated;
+revoke all on public.courses from public, anon, authenticated;
+revoke all on public.mentor from public, anon, authenticated;
+revoke all on public.branding from public, anon, authenticated;
+revoke all on public.events from public, anon, authenticated;
+revoke all on public.course_quizzes from public, anon, authenticated;
+revoke all on public.quiz_attempts from public, anon, authenticated;
 
--- KOMPATIBILITAS SEMENTARA:
--- Admin Arunika saat ini masih memakai login lokal dan anon key yang sama dengan halaman publik.
--- Karena itu RLS belum dapat membedakan admin dan pengunjung. Pindahkan admin ke Supabase Auth
--- sebelum menyimpan data sensitif, lalu aktifkan RLS berbasis role.
-alter table public.courses disable row level security;
-alter table public.mentor disable row level security;
-alter table public.branding disable row level security;
-alter table public.events disable row level security;
-alter table public.course_quizzes disable row level security;
-alter table public.quiz_attempts disable row level security;
+-- Bootstrap selalu fail-closed. Policy rinci, role admin, RPC analytics, dan
+-- sinyal Realtime aman dibuat oleh migration keamanan berikutnya.
+alter table public.courses enable row level security;
+alter table public.mentor enable row level security;
+alter table public.branding enable row level security;
+alter table public.events enable row level security;
+alter table public.course_quizzes enable row level security;
+alter table public.quiz_attempts enable row level security;
 
--- Daftarkan semua tabel ke Realtime tanpa error bila script dijalankan ulang.
+-- Bersihkan publication lama bila file ini dijalankan ulang pada project yang
+-- sebelumnya memakai konfigurasi unrestricted.
 do $$
 declare
   table_name text;
@@ -431,14 +432,14 @@ begin
       'quiz_attempts'
     ]
     loop
-      if not exists (
+      if exists (
         select 1
         from pg_publication_tables
         where pubname = 'supabase_realtime'
           and schemaname = 'public'
           and tablename = table_name
       ) then
-        execute format('alter publication supabase_realtime add table public.%I', table_name);
+        execute format('alter publication supabase_realtime drop table public.%I', table_name);
       end if;
     end loop;
   end if;

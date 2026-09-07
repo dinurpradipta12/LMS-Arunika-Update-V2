@@ -4,6 +4,7 @@ import ReactDOM from 'react-dom';
 import { createPortal } from 'react-dom';
 import ReactDOMClient from 'react-dom/client';
 import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
+import './index.css';
 import { 
   Layout, 
   Settings as SettingsIcon, 
@@ -59,8 +60,6 @@ import {
   LayoutGrid,
   Tag,
   Palette,
-  Terminal,
-  FileCode,
   Image as ImageIcon,
   Moon,
   Sun
@@ -78,7 +77,6 @@ import {
 } from './components/RecordedClassPages';
 import logoUtama from './src/logo-utama.png';
 import faviconLogo from './src/favicon.png';
-import databaseBootstrapSql from './supabase/new-project/01_schema.sql?raw';
 
 // Custom TikTok SVG Icon
 const TiktokIcon = ({ size = 18 }) => (
@@ -97,6 +95,7 @@ const TiktokIcon = ({ size = 18 }) => (
 );
 
 type Theme = 'light' | 'dark';
+type AuthStatus = 'loading' | 'signed_out' | 'admin' | 'forbidden';
 
 const getInitialTheme = (): Theme => {
   try {
@@ -169,79 +168,69 @@ const defaultMentor: Mentor = {
   socials: {}
 };
 
-const LEGACY_PUBLIC_SUPABASE_URL = 'https://mhuqqbbqlovdiquaktzd.supabase.co';
 const EMBEDDED_PUBLIC_SUPABASE_URL = 'https://drezwxfgykkdnnwjrnnt.supabase.co';
 const EMBEDDED_PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyZXp3eGZneWtrZG5ud2pybm50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NTUwNTksImV4cCI6MjEwNDMzMTA1OX0.nZ3OGNXEFN82CqA1-KXUQ9IWvhp7Gl0U1xyUVjKcdFY';
 
 const configuredPublicSupabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL?.trim();
 const configuredPublicSupabaseAnonKey = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY?.trim();
-const configuredProjectIsLegacy = configuredPublicSupabaseUrl?.replace(/\/$/, '') === LEGACY_PUBLIC_SUPABASE_URL;
-const PUBLIC_SUPABASE_CONFIG: SupabaseConfig = configuredPublicSupabaseUrl && configuredPublicSupabaseAnonKey && !configuredProjectIsLegacy
+const PUBLIC_SUPABASE_CONFIG: SupabaseConfig = configuredPublicSupabaseUrl && configuredPublicSupabaseAnonKey
   ? { url: configuredPublicSupabaseUrl, anonKey: configuredPublicSupabaseAnonKey }
   : { url: EMBEDDED_PUBLIC_SUPABASE_URL, anonKey: EMBEDDED_PUBLIC_SUPABASE_ANON_KEY };
 
-const getInitialSupabaseConfig = (): SupabaseConfig => {
-  try {
-    const saved = localStorage.getItem('supabase');
-    if (!saved) return PUBLIC_SUPABASE_CONFIG;
+let publicSupabaseInstance: any = null;
+let publicSupabaseConfig: SupabaseConfig | null = null;
+let adminSupabaseInstance: any = null;
+let adminSupabaseConfig: SupabaseConfig | null = null;
 
-    const parsed = JSON.parse(saved) as Partial<SupabaseConfig>;
-    if (!parsed.url || !parsed.anonKey) return PUBLIC_SUPABASE_CONFIG;
-    if (parsed.url.replace(/\/$/, '') === LEGACY_PUBLIC_SUPABASE_URL) return PUBLIC_SUPABASE_CONFIG;
+const isSameSupabaseConfig = (left: SupabaseConfig | null, right: SupabaseConfig) => (
+  left?.url === right.url && left?.anonKey === right.anonKey
+);
 
-    return { url: parsed.url, anonKey: parsed.anonKey };
-  } catch {
-    return PUBLIC_SUPABASE_CONFIG;
-  }
-};
-
-// --- Storage & Analytics Helpers ---
-const getStorageItem = <T,>(key: string, defaultValue: T): T => {
-  const saved = localStorage.getItem(key);
-  try {
-    return saved ? JSON.parse(saved) : defaultValue;
-  } catch (e) {
-    return defaultValue;
-  }
-};
-
-const setStorageItem = (key: string, value: any) => {
-  try {
-    localStorage.setItem(key, JSON.stringify(value));
-  } catch (e: any) {
-    if (e.name === 'QuotaExceededError' || e.name === 'NS_ERROR_DOM_QUOTA_REACHED') {
-      console.warn(`Storage quota exceeded for key "${key}".`);
-    } else {
-      console.error(`Error saving ${key}:`, e);
-    }
-  }
-};
-
-// Singleton Supabase Client
-let supabaseInstance: any = null;
-let lastSupabaseConfig: SupabaseConfig | null = null;
-
-const getSupabaseClient = (config: SupabaseConfig) => {
+// Client publik tidak pernah mengambil sesi admin dari browser.
+const getPublicSupabaseClient = (config: SupabaseConfig = PUBLIC_SUPABASE_CONFIG) => {
   if (!config.url || !config.anonKey) return null;
-  
-  if (supabaseInstance && lastSupabaseConfig && 
-      lastSupabaseConfig.url === config.url && 
-      lastSupabaseConfig.anonKey === config.anonKey) {
-    return supabaseInstance;
+  if (publicSupabaseInstance && isSameSupabaseConfig(publicSupabaseConfig, config)) {
+    return publicSupabaseInstance;
   }
-  
+
   try {
-    supabaseInstance = createClient(config.url, config.anonKey, {
+    publicSupabaseInstance = createClient(config.url, config.anonKey, {
       auth: {
         persistSession: false,
         autoRefreshToken: false,
-        detectSessionInUrl: false
+        detectSessionInUrl: false,
+        storageKey: 'arunika-public-anon'
       }
     });
-    lastSupabaseConfig = config;
-    return supabaseInstance;
+    publicSupabaseConfig = config;
+    return publicSupabaseInstance;
   } catch (e) {
-    console.error("Failed to create Supabase client", e);
+    console.error('Failed to create public Supabase client', e);
+    return null;
+  }
+};
+
+// Client admin menyimpan sesi hanya selama tab/browser session masih hidup.
+const getAdminSupabaseClient = (config: SupabaseConfig = PUBLIC_SUPABASE_CONFIG) => {
+  if (!config.url || !config.anonKey) return null;
+  if (adminSupabaseInstance && isSameSupabaseConfig(adminSupabaseConfig, config)) {
+    return adminSupabaseInstance;
+  }
+
+  try {
+    adminSupabaseInstance = createClient(config.url, config.anonKey, {
+      auth: {
+        persistSession: true,
+        autoRefreshToken: true,
+        detectSessionInUrl: false,
+        storage: window.sessionStorage,
+        storageKey: 'arunika-admin-session-v1'
+      }
+    });
+    adminSupabaseConfig = config;
+    return adminSupabaseInstance;
+  } catch (e) {
+    console.error('Failed to create admin Supabase client', e);
     return null;
   }
 };
@@ -350,11 +339,21 @@ const withTimeout = <T,>(request: PromiseLike<T>, timeoutMs: number): Promise<T>
 };
 
 const getVisitorId = () => {
-  let id = localStorage.getItem('arunika_visitor_id');
-  if (!id) {
-    id = `vis_${Math.random().toString(36).substr(2, 9)}_${Date.now()}`;
-    setStorageItem('arunika_visitor_id', id);
+  const storedValue = localStorage.getItem('arunika_visitor_id');
+  if (storedValue) {
+    try {
+      const parsedValue = JSON.parse(storedValue);
+      if (typeof parsedValue === 'string' && parsedValue.startsWith('vis_')) {
+        localStorage.setItem('arunika_visitor_id', parsedValue);
+        return parsedValue;
+      }
+    } catch {
+      if (storedValue.startsWith('vis_')) return storedValue;
+    }
   }
+
+  const id = `vis_${Math.random().toString(36).slice(2, 11)}_${Date.now()}`;
+  localStorage.setItem('arunika_visitor_id', id);
   return id;
 };
 
@@ -372,37 +371,47 @@ const RouteTracker: React.FC<{ supabase: SupabaseConfig }> = ({ supabase }) => {
 
   useEffect(() => {
     if (lastTrackedPath.current === location.pathname + location.search) return;
+    const legacyCourseMatch = location.pathname.match(/^\/course\/([^/?]+)/);
+    const shortCourseMatch = location.pathname.match(/^\/(?:c|class)\/([^/?]+)/);
+    const courseId = legacyCourseMatch?.[1]
+      || (shortCourseMatch?.[1] ? getCourseIdFromPublicCode(shortCourseMatch[1]) : null);
+
+    // Analytics hanya mencatat halaman materi publik, bukan URL dashboard/login.
+    if (!courseId) return;
     
     const track = async () => {
-      const client = getSupabaseClient(supabase);
+      const client = getPublicSupabaseClient(supabase);
       if (!client) return;
       
       const searchParams = new URLSearchParams(location.search);
       const source = searchParams.get('ref') || searchParams.get('utm_source') || 'direct';
-      const courseId = courseIdMatch || null;
+      const safePath = `${window.location.origin}${window.location.pathname}#${location.pathname}`;
+      let safeReferrer = 'direct';
+      if (document.referrer) {
+        try {
+          safeReferrer = new URL(document.referrer).origin;
+        } catch {
+          safeReferrer = 'external';
+        }
+      }
 
       try {
-        await client.from('events').insert({
-          event_name: 'course_view',
-          course_id: courseId,
-          visitor_id: getVisitorId(),
-          device_type: getDeviceType(),
-          user_agent: navigator.userAgent,
-          referrer: document.referrer || 'direct',
-          source: source,
-          full_path: window.location.href,
-          created_at: new Date().toISOString()
+        const { error } = await client.rpc('track_public_course_view', {
+          p_course_id: courseId,
+          p_visitor_id: getVisitorId(),
+          p_device_type: getDeviceType(),
+          p_user_agent: navigator.userAgent.slice(0, 512),
+          p_referrer: safeReferrer.slice(0, 512),
+          p_source: source.slice(0, 120),
+          p_full_path: safePath.slice(0, 2048)
         });
+        if (error) throw error;
         lastTrackedPath.current = location.pathname + location.search;
       } catch (e) {
-        console.error("Tracking failed", e);
+        if (import.meta.env.DEV) console.warn('Analytics event was not recorded.', e);
       }
     };
-    const legacyCourseMatch = location.pathname.match(/^\/course\/([^/?]+)/);
-    const shortCourseMatch = location.pathname.match(/^\/(?:c|class)\/([^/?]+)/);
-    const courseIdMatch = legacyCourseMatch?.[1]
-      || (shortCourseMatch?.[1] ? getCourseIdFromPublicCode(shortCourseMatch[1]) : null);
-    track();
+    void track();
   }, [location, supabase]);
 
   return null;
@@ -615,23 +624,35 @@ const AdvancedEditor: React.FC<{ value: string; onChange: (v: string) => void; l
   );
 };
 
-const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean; branding: Branding }> = ({ onLogin, isLoggedIn, branding }) => {
-  const [username, setUsername] = useState('');
+const Login: React.FC<{
+  onLogin: (email: string, password: string) => Promise<string | null>;
+  authStatus: AuthStatus;
+}> = ({ onLogin, authStatus }) => {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [isSubmitting, setIsSubmitting] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (isLoggedIn) navigate('/admin');
-  }, [isLoggedIn, navigate]);
+    if (authStatus === 'admin') navigate('/admin');
+  }, [authStatus, navigate]);
 
-  const handleLogin = (e: React.FormEvent) => {
+  const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (username === 'arunika' && password === 'ar4925') {
-      onLogin();
-      navigate('/admin');
-    } else {
-      setError('Username atau password salah. silakan coba lagi');
+    if (!email.trim() || !password) {
+      setError('Email dan password wajib diisi.');
+      return;
+    }
+
+    setError('');
+    setIsSubmitting(true);
+    const loginError = await onLogin(email.trim(), password);
+    setIsSubmitting(false);
+
+    if (loginError) {
+      setPassword('');
+      setError(loginError);
     }
   };
 
@@ -645,11 +666,29 @@ const Login: React.FC<{ onLogin: () => void; isLoggedIn: boolean; branding: Bran
             <p className="text-[var(--muted)] text-sm mt-1">Masuk untuk mengelola ruang belajar Anda.</p>
           </div>
           <form onSubmit={handleLogin} className="space-y-5">
-            <Input label="Username" value={username} onChange={e => setUsername(e.target.value)} placeholder="Username/Email" />
-            <Input label="Password" type="password" value={password} onChange={e => setPassword(e.target.value)} placeholder="Password" />
+            <Input
+              label="Email admin"
+              type="email"
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              placeholder="nama@email.com"
+              autoComplete="username"
+              spellCheck={false}
+            />
+            <Input
+              label="Password"
+              type="password"
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              placeholder="Password akun Supabase Auth"
+              autoComplete="current-password"
+            />
             {error && <p className="text-[var(--danger-text)] text-sm font-medium bg-[var(--danger-soft)] p-3 rounded-xl border border-[var(--border)]">{error}</p>}
-            <Button type="submit" className="w-full h-12" icon={ChevronRight}>Masuk Dashboard</Button>
+            <Button type="submit" className="w-full h-12" icon={ChevronRight} isLoading={isSubmitting} disabled={isSubmitting || authStatus === 'loading'}>Masuk Dashboard</Button>
           </form>
+          <p className="text-[11px] leading-relaxed text-center text-[var(--muted)] mt-5">
+            Akses dashboard diverifikasi oleh Supabase Auth dan role admin di database.
+          </p>
         </Card>
       </div>
     </div>
@@ -791,27 +830,40 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
   }, [events, courses]);
 
   useEffect(() => {
-    const client = getSupabaseClient(supabase);
+    const client = getAdminSupabaseClient(supabase);
     if (!client) return;
+    let isActive = true;
     
     const fetchInitial = async () => {
-      const { data } = await client.from('events').select('*').order('created_at', { ascending: false });
-      if (data) setEvents(data);
+      const { data, error } = await client.from('events').select('*').order('created_at', { ascending: false });
+      if (!isActive) return;
+      if (error) {
+        console.warn('Analytics refresh failed', error);
+        return;
+      }
+      setEvents(data || []);
     };
-    fetchInitial();
+    void fetchInitial();
 
-    const channel = client.channel('analytics_realtime')
-      .on('postgres_changes', { event: 'INSERT', table: 'events', schema: 'public' }, (payload: any) => {
-        setEvents(prev => [payload.new, ...prev]);
-      })
-      .subscribe();
+    // Tabel analytics tidak dimasukkan ke publication Realtime karena payload DELETE
+    // tidak dapat difilter oleh RLS. Polling ini tetap menjaga dashboard terbarui
+    // tanpa menyiarkan data pengunjung ke client publik.
+    const refreshInterval = window.setInterval(() => { void fetchInitial(); }, 10_000);
+    const refreshWhenVisible = () => {
+      if (document.visibilityState === 'visible') void fetchInitial();
+    };
+    document.addEventListener('visibilitychange', refreshWhenVisible);
 
-    return () => { client.removeChannel(channel); };
+    return () => {
+      isActive = false;
+      window.clearInterval(refreshInterval);
+      document.removeEventListener('visibilitychange', refreshWhenVisible);
+    };
   }, [supabase]);
 
   const handleResetData = async () => {
     if (!confirm("Hapus semua data analitik?")) return;
-    const client = getSupabaseClient(supabase);
+    const client = getAdminSupabaseClient(supabase);
     if (!client) return;
     setIsResetting(true);
     try {
@@ -829,7 +881,7 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
           <h1 className="text-3xl font-bold text-[var(--text)]">Analytics</h1>
-          <p className="text-[var(--muted)] mt-1">Data performa dan aktivitas pengunjung real-time.</p>
+          <p className="text-[var(--muted)] mt-1">Data performa dan aktivitas pengunjung diperbarui otomatis.</p>
         </div>
         <Button variant="secondary" onClick={handleResetData} isLoading={isResetting} icon={RotateCcw}>Reset Data</Button>
       </div>
@@ -838,7 +890,7 @@ const AnalyticsPage: React.FC<{ courses: Course[], supabase: SupabaseConfig }> =
         <Card featured>
           <div className="flex justify-between items-start mb-4">
              <div className="p-2.5 bg-[var(--accent-soft)] rounded-xl text-[var(--accent-strong)]"><Eye size={19}/></div>
-             <Badge>Real-time</Badge>
+             <Badge>Setiap 10 dtk</Badge>
           </div>
           <p className="text-xs font-medium text-[var(--muted)]">Total Views</p>
           <h2 className="text-4xl font-bold mt-1">{stats.totalViews}</h2>
@@ -1028,7 +1080,7 @@ const AdminDashboard: React.FC<{
                 <Button
                   onClick={() => {
                     const url = generateShareLink(course.id);
-                    window.open(url, '_blank');
+                    window.open(url, '_blank', 'noopener,noreferrer');
                   }}
                   variant="primary" 
                   className="text-xs h-10 px-2 flex-1 min-w-0" 
@@ -1053,88 +1105,67 @@ const AdminDashboard: React.FC<{
   );
 };
 
-const Settings: React.FC<{ 
-  branding: Branding; 
-  setBranding: React.Dispatch<React.SetStateAction<Branding>>;
-  onSaveBranding: (b: Branding) => Promise<void>;
-  supabase: SupabaseConfig;
-  setSupabase: React.Dispatch<React.SetStateAction<SupabaseConfig>>;
-  onLocalEdit: () => void;
-}> = ({ branding, setBranding, onSaveBranding, supabase, setSupabase, onLocalEdit }) => {
-  const [isConnecting, setIsConnecting] = useState(false);
-  const [isSavingBranding, setIsSavingBranding] = useState(false);
-  
-  const sqlScript = databaseBootstrapSql;
+const Settings: React.FC = () => {
+  const [isChecking, setIsChecking] = useState(false);
+  const [connectionMessage, setConnectionMessage] = useState('');
 
-  const handleConnect = async () => {
-    if (!supabase.url || !supabase.anonKey) return;
-    setIsConnecting(true);
-    const client = createClient(supabase.url, supabase.anonKey);
-    try {
-      const { error } = await client.from('branding').select('id').limit(1);
-      if (error) throw error;
-      alert('Koneksi Supabase Berhasil!');
-    } catch (e: any) {
-      alert('Koneksi Gagal: ' + e.message);
-    } finally {
-      setIsConnecting(false);
+  const handleVerifyAdmin = async () => {
+    const client = getAdminSupabaseClient();
+    if (!client) {
+      setConnectionMessage('Client Supabase tidak tersedia.');
+      return;
     }
-  };
 
-  const handleSaveBrandingInternal = async () => {
-    setIsSavingBranding(true);
-    try {
-      await onSaveBranding(branding);
-      alert('Branding berhasil disimpan ke database!');
-    } catch (e: any) {
-      console.error("Save Branding Error:", e);
-      // Deteksi eror schema cache / kolom hilang
-      if (e.message?.includes("column \"favicon\"") || e.message?.includes("'favicon' column") || e.message?.includes("column 'favicon'")) {
-         alert('EROR DATABASE: Kolom "favicon" belum ada di tabel "branding" database Anda.\n\nSOLUSI: Silakan jalankan script SQL di bagian bawah halaman ini pada Supabase SQL Editor untuk menambahkannya secara permanen.');
-      } else {
-        alert('Gagal menyimpan branding: ' + e.message);
-      }
-    } finally {
-      setIsSavingBranding(false);
+    setIsChecking(true);
+    setConnectionMessage('');
+    const { data, error } = await client.rpc('is_arunika_admin');
+    setIsChecking(false);
+
+    if (error || data !== true) {
+      setConnectionMessage('Sesi tidak memiliki role admin yang valid. Silakan logout lalu login kembali.');
+      return;
     }
-  };
 
-  const copySql = () => {
-    navigator.clipboard.writeText(sqlScript);
-    alert('Script SQL berhasil disalin!');
+    setConnectionMessage('Koneksi aman dan role admin berhasil diverifikasi.');
   };
 
   return (
     <div className="p-4 md:p-8 max-w-4xl mx-auto space-y-10">
       <div>
         <h1 className="text-3xl font-bold">Settings</h1>
-        <p className="text-sm text-[var(--muted)] mt-1">Atur infrastruktur dan koneksi data.</p>
+        <p className="text-sm text-[var(--muted)] mt-1">Status koneksi dan perlindungan data aplikasi.</p>
       </div>
 
       <section className="space-y-6">
-        <h2 className="text-lg font-semibold flex items-center gap-2"><Database size={19} className="text-[var(--accent-strong)]"/> Infrastructure</h2>
-        <Card className="space-y-6">
-          <Input label="Supabase URL" value={supabase.url} onChange={e => setSupabase({...supabase, url: e.target.value})} />
-          <Input label="Anon Key" value={supabase.anonKey} type="password" onChange={e => setSupabase({...supabase, anonKey: e.target.value})} />
-          <Button variant="green" onClick={handleConnect} isLoading={isConnecting}>Verify & Connect</Button>
-        </Card>
-      </section>
-
-      <section className="space-y-6">
-        <h2 className="text-lg font-semibold flex items-center gap-2"><Terminal size={19} className="text-[var(--accent-strong)]"/> Database Setup</h2>
-        <Card className="!bg-[#0f1c2a] text-white !border-[#27394d] space-y-4">
-           <div className="flex justify-between items-center mb-2">
-              <p className="text-xs font-bold text-[#94A3B8] uppercase tracking-widest flex items-center gap-2">
-                 <FileCode size={14}/> SQL Schema Lengkap
-              </p>
-              <Button variant="secondary" className="h-8 min-h-0 py-0 px-3 text-[10px] !bg-white !text-[#17283a]" onClick={copySql}>Salin Script</Button>
-           </div>
-           <div className="p-4 bg-black/30 rounded-xl font-mono text-[10px] leading-relaxed overflow-x-auto max-h-[300px]">
-              <pre>{sqlScript}</pre>
-           </div>
-           <p className="text-xs font-bold text-[#94A3B8] italic">
-             * Jalankan script ini terlebih dahulu di SQL Editor. Script mencakup kursus, branding, analytics, Kelas Recording, post-test, hasil peserta, Realtime, dan RPC publik.
-           </p>
+        <h2 className="text-lg font-semibold flex items-center gap-2"><Database size={19} className="text-[var(--accent-strong)]"/> Keamanan & Infrastruktur</h2>
+        <Card className="space-y-5">
+          <div className="flex items-start gap-3 pb-5 border-b border-[var(--border)]">
+            <div className="mt-0.5 p-2 rounded-lg bg-[var(--success-soft)] text-[var(--success-text)]"><Check size={16} /></div>
+            <div>
+              <p className="font-semibold text-sm">Supabase project terkunci</p>
+              <p className="text-xs text-[var(--muted)] mt-1 break-all">drezwxfgykkdnnwjrnnt.supabase.co</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3 pb-5 border-b border-[var(--border)]">
+            <div className="mt-0.5 p-2 rounded-lg bg-[var(--success-soft)] text-[var(--success-text)]"><Check size={16} /></div>
+            <div>
+              <p className="font-semibold text-sm">Supabase Auth untuk dashboard</p>
+              <p className="text-xs text-[var(--muted)] mt-1">Tidak ada username atau password admin yang ditanam di source maupun localStorage.</p>
+            </div>
+          </div>
+          <div className="flex items-start gap-3">
+            <div className="mt-0.5 p-2 rounded-lg bg-[var(--success-soft)] text-[var(--success-text)]"><Check size={16} /></div>
+            <div>
+              <p className="font-semibold text-sm">RLS dan Realtime tersaring</p>
+              <p className="text-xs text-[var(--muted)] mt-1">Pengunjung hanya membaca materi published. Analytics, jawaban benar, hasil peserta, dan role admin tidak tersedia bagi publik.</p>
+            </div>
+          </div>
+          <Button variant="green" onClick={handleVerifyAdmin} isLoading={isChecking}>Verifikasi Akses Admin</Button>
+          {connectionMessage && (
+            <p className={`text-xs font-medium p-3 rounded-xl border border-[var(--border)] ${connectionMessage.startsWith('Koneksi aman') ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>
+              {connectionMessage}
+            </p>
+          )}
         </Card>
       </section>
     </div>
@@ -1478,7 +1509,7 @@ const PublicCourseView: React.FC<{
       return;
     }
 
-    const client = getSupabaseClient(supabase);
+    const client = getPublicSupabaseClient(supabase);
     if (!client) {
       setLoadError('Koneksi materi publik belum dikonfigurasi.');
       setIsLoading(false);
@@ -1641,7 +1672,7 @@ const PublicCourseView: React.FC<{
             
             <div className="space-y-3">
               {initialMentor.socials?.website && (
-                <a href={initialMentor.socials.website} target="_blank" className="block w-full">
+                <a href={initialMentor.socials.website} target="_blank" rel="noopener noreferrer" className="block w-full">
                   <Button variant="primary" className="w-full text-xs h-11">
                     Template lainnya
                   </Button>
@@ -1693,7 +1724,7 @@ const PublicCourseView: React.FC<{
                </h4>
                <div className="space-y-2">
                  {course.assets.map(asset => (
-                   <a key={asset.id} href={asset.url} target="_blank" className="bg-[var(--surface)] border border-[var(--border)] p-3 rounded-xl shadow-sm hover:border-[var(--border-strong)] flex items-center justify-between group transition-all">
+                   <a key={asset.id} href={asset.url} target="_blank" rel="noopener noreferrer" className="bg-[var(--surface)] border border-[var(--border)] p-3 rounded-xl shadow-sm hover:border-[var(--border-strong)] flex items-center justify-between group transition-all">
                      <div className="flex items-center gap-2 min-w-0">
                        <div className="bg-[var(--success-soft)] text-[var(--success-text)] p-1.5 rounded-lg"><Download size={14} /></div>
                        <span className="font-medium text-[11px] truncate">{asset.name}</span>
@@ -1710,21 +1741,87 @@ const PublicCourseView: React.FC<{
   );
 };
 
+const AuthLoading: React.FC = () => (
+  <div className="min-h-screen flex items-center justify-center bg-[var(--app-bg)]">
+    <div className="flex items-center gap-3 text-sm font-medium text-[var(--muted)]">
+      <Loader2 size={20} className="animate-spin text-[var(--accent-strong)]" />
+      Memverifikasi sesi admin...
+    </div>
+  </div>
+);
+
 const App: React.FC = () => {
   const location = useLocation();
-
-  const [isLoggedIn, setIsLoggedIn] = useState(() => getStorageItem('isLoggedIn', false));
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
   const [theme, setTheme] = useState<Theme>(getInitialTheme);
-  const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', []));
-  const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', defaultMentor));
-  const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', defaultBranding));
-  const [supabase, setSupabase] = useState<SupabaseConfig>(getInitialSupabaseConfig);
-  const isPublicCourseRoute = /^\/(?:c|course|class)\//.test(location.pathname);
-  const readSupabase = isPublicCourseRoute ? PUBLIC_SUPABASE_CONFIG : supabase;
-
+  const [courses, setCourses] = useState<Course[]>([]);
+  const [mentor, setMentor] = useState<Mentor>(defaultMentor);
+  const [branding, setBranding] = useState<Branding>(defaultBranding);
   const [syncing, setSyncing] = useState(false);
+  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
   const isSyncingRef = useRef(false);
   const lastLocalUpdateRef = useRef<number>(0);
+  const isAdmin = authStatus === 'admin';
+  const isPublicCourseRoute = /^\/(?:c|course|class)\//.test(location.pathname);
+
+  useEffect(() => {
+    // Hapus otorisasi dan cache data lama yang sebelumnya dipercaya dari localStorage.
+    ['isLoggedIn', 'courses', 'mentor', 'branding', 'supabase'].forEach(key => {
+      localStorage.removeItem(key);
+    });
+  }, []);
+
+  useEffect(() => {
+    // Link publik sama sekali tidak memuat atau memverifikasi sesi admin.
+    if (isPublicCourseRoute) {
+      setAuthStatus('signed_out');
+      return;
+    }
+
+    const client = getAdminSupabaseClient();
+    if (!client) {
+      setAuthStatus('signed_out');
+      return;
+    }
+
+    let isActive = true;
+
+    const verifyAdminSession = async () => {
+      const { data: userData, error: userError } = await client.auth.getUser();
+      if (!isActive) return;
+
+      if (userError || !userData.user) {
+        setAuthStatus('signed_out');
+        return;
+      }
+
+      const { data: hasAdminRole, error: roleError } = await client.rpc('is_arunika_admin');
+      if (!isActive) return;
+
+      if (roleError || hasAdminRole !== true) {
+        await client.auth.signOut();
+        if (isActive) setAuthStatus('signed_out');
+        return;
+      }
+
+      setAuthStatus('admin');
+    };
+
+    void verifyAdminSession();
+    const { data: authListener } = client.auth.onAuthStateChange((_event: string, session: any) => {
+      if (!isActive) return;
+      if (!session) {
+        setAuthStatus('signed_out');
+        return;
+      }
+      window.setTimeout(() => { void verifyAdminSession(); }, 0);
+    });
+
+    return () => {
+      isActive = false;
+      authListener.subscription.unsubscribe();
+    };
+  }, [isPublicCourseRoute]);
 
   useEffect(() => {
     const isDark = theme === 'dark';
@@ -1733,91 +1830,144 @@ const App: React.FC = () => {
     localStorage.setItem('arunika_theme', theme);
   }, [theme]);
 
-  // --- Dynamic Favicon Update ---
   useEffect(() => {
-    const updateFavicon = () => {
-      let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
-      if (!link) {
-        link = document.createElement('link');
-        link.rel = 'icon';
-        document.getElementsByTagName('head')[0].appendChild(link);
-      }
-      link.href = faviconLogo;
-    };
-    
-    updateFavicon();
-    
-    if (branding.siteName) {
-      document.title = branding.siteName;
+    let link: HTMLLinkElement | null = document.querySelector("link[rel~='icon']");
+    if (!link) {
+      link = document.createElement('link');
+      link.rel = 'icon';
+      document.head.appendChild(link);
     }
+    link.href = faviconLogo;
+    document.title = branding.siteName || 'Platform Arunika';
   }, [branding.siteName]);
 
-  useEffect(() => {
-    setStorageItem('isLoggedIn', isLoggedIn);
-    setStorageItem('courses', courses);
-    setStorageItem('mentor', mentor);
-    setStorageItem('branding', branding);
-    setStorageItem('supabase', supabase);
-  }, [isLoggedIn, courses, mentor, branding, supabase]);
+  const getReadClient = useCallback(() => (
+    isAdmin && !isPublicCourseRoute
+      ? getAdminSupabaseClient()
+      : getPublicSupabaseClient()
+  ), [isAdmin, isPublicCourseRoute]);
 
   const fetchAllData = useCallback(async () => {
-    const client = getSupabaseClient(readSupabase);
+    const client = getReadClient();
     if (!client) return;
+
     try {
-      const { data: b } = await client.from('branding').select('*').eq('id', 'config').single();
-      if (b) setBranding({ siteName: b.site_name || 'Platform Arunika', logo: logoUtama, favicon: faviconLogo });
-      const { data: m = null } = await client.from('mentor').select('*').eq('id', 'profile').single();
-      if (m) setMentor(m);
-      const { data: c = [] } = await client.from('courses').select('*').order('created_at', { ascending: false });
-      if (c) {
-        setCourses(c.map((item: any) => ({ 
-          ...item, 
-          coverImage: item.cover_image, 
-          mentorId: item.mentor_id, 
-          assets: item.assets || [], 
-          modules: item.modules || [],
-          categories: item.categories || [],
-          spaceType: item.space_type || 'product_tutorial',
-          published: item.published !== false
-        })));
+      const [brandingResult, mentorResult, coursesResult] = await Promise.all([
+        client.from('branding').select('*').eq('id', 'config').maybeSingle(),
+        client.from('mentor').select('*').eq('id', 'profile').maybeSingle(),
+        client.from('courses').select('*').order('created_at', { ascending: false })
+      ]);
+
+      if (brandingResult.error) throw brandingResult.error;
+      if (mentorResult.error) throw mentorResult.error;
+      if (coursesResult.error) throw coursesResult.error;
+
+      if (brandingResult.data) {
+        setBranding({
+          siteName: brandingResult.data.site_name || 'Platform Arunika',
+          logo: logoUtama,
+          favicon: faviconLogo
+        });
       }
-    } catch (e) { console.warn("Fetch error", e); }
-  }, [readSupabase]);
+      if (mentorResult.data) setMentor(mentorResult.data);
+      setCourses((coursesResult.data || []).map((item: any) => ({
+        ...item,
+        coverImage: item.cover_image,
+        mentorId: item.mentor_id,
+        assets: item.assets || [],
+        modules: item.modules || [],
+        categories: item.categories || [],
+        spaceType: item.space_type || 'product_tutorial',
+        published: item.published !== false
+      })));
+    } catch (error) {
+      console.warn('Fetch error', error);
+    }
+  }, [getReadClient]);
 
   useEffect(() => {
-    fetchAllData();
-    const client = getSupabaseClient(readSupabase);
+    void fetchAllData();
+    const client = getReadClient();
     if (!client) return;
-    const sub = client.channel('global_updates').on('postgres_changes', { event: '*', table: '*' }, () => {
-       if (isSyncingRef.current || (Date.now() - lastLocalUpdateRef.current < 2000)) return;
-       fetchAllData();
-    }).subscribe();
-    return () => { client.removeChannel(sub); };
-  }, [readSupabase, fetchAllData]);
+
+    const refreshFromRealtime = () => {
+      if (isSyncingRef.current || Date.now() - lastLocalUpdateRef.current < 2000) return;
+      void fetchAllData();
+    };
+    // Realtime memakai satu baris sinyal tanpa isi kursus/admin. Data sebenarnya
+    // selalu diambil ulang lewat REST dan kembali disaring oleh RLS.
+    const channel = client
+      .channel(isAdmin && !isPublicCourseRoute ? 'admin_content_updates' : 'public_content_updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'UPDATE',
+          schema: 'public',
+          table: 'public_content_revisions',
+          filter: 'scope=eq.public'
+        },
+        refreshFromRealtime
+      )
+      .subscribe();
+
+    return () => { void client.removeChannel(channel); };
+  }, [fetchAllData, getReadClient, isAdmin, isPublicCourseRoute]);
+
+  const handleLogin = async (email: string, password: string): Promise<string | null> => {
+    const client = getAdminSupabaseClient();
+    if (!client) return 'Koneksi Supabase Auth tidak tersedia.';
+
+    const { error: signInError } = await client.auth.signInWithPassword({ email, password });
+    if (signInError) return 'Email atau password salah.';
+
+    const { data: userData, error: userError } = await client.auth.getUser();
+    if (userError || !userData.user) {
+      await client.auth.signOut();
+      return 'Sesi login tidak dapat diverifikasi.';
+    }
+
+    const { data: hasAdminRole, error: roleError } = await client.rpc('is_arunika_admin');
+    if (roleError || hasAdminRole !== true) {
+      await client.auth.signOut();
+      setAuthStatus('forbidden');
+      return 'Akun ini tidak memiliki izin admin.';
+    }
+
+    setAuthStatus('admin');
+    return null;
+  };
+
+  const handleLogout = async () => {
+    setAuthStatus('signed_out');
+    setCourses([]);
+    setMentor(defaultMentor);
+    setBranding(defaultBranding);
+    const client = getAdminSupabaseClient();
+    if (client) await client.auth.signOut();
+  };
 
   const handleDeleteCourse = async (id: string) => {
-    if (!confirm("Hapus kursus ini secara permanen dari database?")) return;
-    const client = getSupabaseClient(supabase);
-    if (client) {
-      try {
-        const { error } = await client.from('courses').delete().eq('id', id);
-        if (error) throw error;
-        setCourses(prev => prev.filter(c => c.id !== id));
-        alert("Kursus berhasil dihapus permanen.");
-      } catch (err) {
-        console.error("Delete failed", err);
-        alert("Gagal menghapus kursus.");
-      }
-    } else {
-       setCourses(prev => prev.filter(c => c.id !== id));
+    if (!confirm('Hapus kursus ini secara permanen dari database?')) return;
+    const client = getAdminSupabaseClient();
+    if (!client) return;
+
+    try {
+      const { error } = await client.from('courses').delete().eq('id', id);
+      if (error) throw error;
+      setCourses(previous => previous.filter(course => course.id !== id));
+      alert('Kursus berhasil dihapus permanen.');
+    } catch (error) {
+      console.error('Delete failed', error);
+      alert('Gagal menghapus kursus atau sesi admin sudah berakhir.');
     }
   };
 
   const handleUpdateBranding = async (updatedBranding: Branding) => {
-    const client = getSupabaseClient(supabase);
-    if (!client) throw new Error("Database belum terhubung.");
+    const client = getAdminSupabaseClient();
+    if (!client) throw new Error('Database belum terhubung.');
     isSyncingRef.current = true;
     setSyncing(true);
+
     try {
       const { error } = await client.from('branding').upsert({
         id: 'config',
@@ -1828,80 +1978,102 @@ const App: React.FC = () => {
       }, { onConflict: 'id' });
       if (error) throw error;
       setBranding(updatedBranding);
-    } catch (err) {
-      throw err;
     } finally {
-      setTimeout(() => { isSyncingRef.current = false; setSyncing(false); }, 1000);
+      window.setTimeout(() => {
+        isSyncingRef.current = false;
+        setSyncing(false);
+      }, 1000);
     }
   };
 
   const handleUpdateCourse = async (updatedCourse: Course, updatedMentor?: Mentor) => {
-     const client = getSupabaseClient(supabase);
-     if (!client) throw new Error("Database belum terhubung.");
-     isSyncingRef.current = true;
-     setSyncing(true);
-     try {
-        const courseData = {
-           id: updatedCourse.id,
-           title: updatedCourse.title,
-           description: updatedCourse.description,
-           cover_image: updatedCourse.coverImage,
-           modules: updatedCourse.modules,
-           assets: updatedCourse.assets,
-           categories: updatedCourse.categories || [],
-           mentor_id: updatedCourse.mentorId || "profile",
-           space_type: updatedCourse.spaceType || 'product_tutorial',
-           published: updatedCourse.published !== false,
-           updated_at: new Date().toISOString()
-        };
-        const { error: cErr } = await client.from('courses').upsert(courseData, { onConflict: 'id' });
-        if (cErr) throw cErr;
+    const client = getAdminSupabaseClient();
+    if (!client) throw new Error('Database belum terhubung.');
+    isSyncingRef.current = true;
+    setSyncing(true);
 
-        if (updatedMentor) {
-          const mentorData = { id: 'profile', name: updatedMentor.name, role: updatedMentor.role, bio: updatedMentor.bio, photo: updatedMentor.photo, socials: updatedMentor.socials, updated_at: new Date().toISOString() };
-          const { error: mErr } = await client.from('mentor').upsert(mentorData, { onConflict: 'id' });
-          if (mErr) throw mErr;
-        }
-        setCourses(prev => prev.some(c => c.id === updatedCourse.id)
-          ? prev.map(c => c.id === updatedCourse.id ? updatedCourse : c)
-          : [updatedCourse, ...prev]);
-        if (updatedMentor) setMentor(updatedMentor);
-     } catch (err: any) {
-        throw err;
-     } finally {
-        setTimeout(() => { isSyncingRef.current = false; setSyncing(false); }, 1000);
-     }
+    try {
+      const courseData = {
+        id: updatedCourse.id,
+        title: updatedCourse.title,
+        description: updatedCourse.description,
+        cover_image: updatedCourse.coverImage,
+        modules: updatedCourse.modules,
+        assets: updatedCourse.assets,
+        categories: updatedCourse.categories || [],
+        mentor_id: updatedCourse.mentorId || 'profile',
+        space_type: updatedCourse.spaceType || 'product_tutorial',
+        published: updatedCourse.published !== false,
+        updated_at: new Date().toISOString()
+      };
+      const { error: courseError } = await client.from('courses').upsert(courseData, { onConflict: 'id' });
+      if (courseError) throw courseError;
+
+      if (updatedMentor) {
+        const { error: mentorError } = await client.from('mentor').upsert({
+          id: 'profile',
+          name: updatedMentor.name,
+          role: updatedMentor.role,
+          bio: updatedMentor.bio,
+          photo: updatedMentor.photo,
+          socials: updatedMentor.socials,
+          updated_at: new Date().toISOString()
+        }, { onConflict: 'id' });
+        if (mentorError) throw mentorError;
+      }
+
+      setCourses(previous => previous.some(course => course.id === updatedCourse.id)
+        ? previous.map(course => course.id === updatedCourse.id ? updatedCourse : course)
+        : [updatedCourse, ...previous]);
+      if (updatedMentor) setMentor(updatedMentor);
+    } finally {
+      window.setTimeout(() => {
+        isSyncingRef.current = false;
+        setSyncing(false);
+      }, 1000);
+    }
   };
 
-  const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const renderAdminPage = (content: React.ReactNode) => {
+    if (authStatus === 'loading') return <AuthLoading />;
+    if (!isAdmin) return <Navigate to="/login" replace />;
+
+    return (
+      <AdminLayout
+        branding={branding}
+        onLogout={() => { void handleLogout(); }}
+        isSidebarOpen={isSidebarOpen}
+        setIsSidebarOpen={setIsSidebarOpen}
+      >
+        {content}
+      </AdminLayout>
+    );
+  };
 
   return (
     <div className="min-h-screen">
-      <RouteTracker supabase={readSupabase} />
-      <ThemeToggle
-        theme={theme}
-        onToggle={() => setTheme(current => current === 'light' ? 'dark' : 'light')}
-      />
+      <RouteTracker supabase={PUBLIC_SUPABASE_CONFIG} />
+      <ThemeToggle theme={theme} onToggle={() => setTheme(current => current === 'light' ? 'dark' : 'light')} />
       {syncing && (
         <div className="fixed top-5 left-1/2 -translate-x-1/2 z-[999] bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-2.5 flex items-center gap-3 shadow-md">
-           <RefreshCw size={16} className="animate-spin text-[var(--accent-strong)]" />
-           <span className="text-[11px] font-medium text-[var(--text)]">Menyinkronkan perubahan...</span>
+          <RefreshCw size={16} className="animate-spin text-[var(--accent-strong)]" />
+          <span className="text-[11px] font-medium text-[var(--text)]">Menyinkronkan perubahan...</span>
         </div>
       )}
       <Routes>
-        <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} branding={branding} />} />
-        <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><SpacesDashboard courses={courses} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/admin/products" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} onDeleteCourse={handleDeleteCourse} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/admin/classes" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><RecordedClassesPage courses={courses} onCreateCourse={handleUpdateCourse} onDeleteCourse={handleDeleteCourse} generateShareLink={courseId => generateShareLink(courseId, 'class')} copyText={copyTextToClipboard} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/admin/classes/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><RecordedClassEditor courses={courses} client={getSupabaseClient(supabase)} onSaveCourse={handleUpdateCourse} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/admin/classes/:id/results" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><ClassResultsPage courses={courses} client={getSupabaseClient(supabase)} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
-        <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} onSaveBranding={handleUpdateBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/login" element={<Login authStatus={authStatus} onLogin={handleLogin} />} />
+        <Route path="/admin" element={renderAdminPage(<SpacesDashboard courses={courses} />)} />
+        <Route path="/admin/products" element={renderAdminPage(<AdminDashboard courses={courses} setCourses={setCourses} onDeleteCourse={handleDeleteCourse} />)} />
+        <Route path="/admin/course/:id" element={renderAdminPage(<CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} />)} />
+        <Route path="/admin/classes" element={renderAdminPage(<RecordedClassesPage courses={courses} onCreateCourse={handleUpdateCourse} onDeleteCourse={handleDeleteCourse} generateShareLink={courseId => generateShareLink(courseId, 'class')} copyText={copyTextToClipboard} />)} />
+        <Route path="/admin/classes/:id" element={renderAdminPage(<RecordedClassEditor courses={courses} client={getAdminSupabaseClient()} onSaveCourse={handleUpdateCourse} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} />)} />
+        <Route path="/admin/classes/:id/results" element={renderAdminPage(<ClassResultsPage courses={courses} client={getAdminSupabaseClient()} />)} />
+        <Route path="/analytics" element={renderAdminPage(<AnalyticsPage courses={courses} supabase={PUBLIC_SUPABASE_CONFIG} />)} />
+        <Route path="/settings" element={renderAdminPage(<Settings />)} />
         <Route path="/c/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} usesShortCode />} />
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} />} />
-        <Route path="/class/:id" element={<PublicRecordedClassView client={getSupabaseClient(PUBLIC_SUPABASE_CONFIG)} mentor={mentor} resolveCourseId={getCourseIdFromPublicCode} />} />
-        <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
+        <Route path="/class/:id" element={<PublicRecordedClassView client={getPublicSupabaseClient()} mentor={mentor} resolveCourseId={getCourseIdFromPublicCode} />} />
+        <Route path="/" element={authStatus === 'loading' ? <AuthLoading /> : <Navigate to={isAdmin ? '/admin' : '/login'} replace />} />
       </Routes>
     </div>
   );

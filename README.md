@@ -31,3 +31,9 @@ VITE_PUBLIC_SUPABASE_ANON_KEY=your-public-anon-key
 ```
 
 The Copy Link and Share buttons then generate a unique hash route for each course, for example `https://lms.example.com/#/c/2t`. Public course pages always read from the canonical public Supabase configuration, so stale Supabase settings stored in an admin browser cannot redirect visitors to a different project. Without `VITE_PUBLIC_APP_URL`, the app falls back to the host currently displaying the dashboard, which is useful locally but should not be used as the production share URL.
+
+## Secure database and admin setup
+
+The dashboard uses Supabase Auth plus a database admin allow-list. Public pages can only read published content, while analytics, quiz answer keys, participant attempts, and the admin allow-list remain protected by RLS.
+
+For a fresh project or an existing project that still appears as `UNRESTRICTED`, follow [supabase/new-project/README.md](supabase/new-project/README.md). Never put a Supabase service-role key in this frontend.

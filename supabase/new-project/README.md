@@ -4,11 +4,26 @@ Target project: `https://drezwxfgykkdnnwjrnnt.supabase.co`
 
 SQL tidak dapat dijalankan dengan anon key. Buka target project di Supabase Dashboard sebagai pemilik, lalu gunakan **SQL Editor** dan jalankan file sesuai urutan berikut.
 
-## Urutan eksekusi
+## Project baru dari nol
 
 1. Jalankan `01_schema.sql` seluruhnya.
 2. Jalankan `02_recovered_content.sql` seluruhnya untuk memulihkan 3 kursus, 2 profil mentor, dan 1 konfigurasi branding dari database lama.
 3. Opsional: jalankan `private/03_recovered_analytics.sql` untuk memulihkan snapshot 2.017 event analytics lama.
+4. Jalankan `../migrations/20260907010000_secure_admin_auth_and_rls.sql` seluruhnya.
+5. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
+6. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
+
+`01_schema.sql` sekarang fail-closed: semua tabel langsung memakai RLS tanpa policy terbuka. Halaman publik baru aktif setelah migration keamanan pada langkah 4 membuat policy yang hanya membaca konten `published`.
+
+## Project baru yang sudah terlanjur UNRESTRICTED
+
+Untuk project `drezwxfgykkdnnwjrnnt` yang tabelnya sudah berisi data, tidak perlu menjalankan ulang recovery:
+
+1. Buat akun admin di **Authentication > Users > Add user**.
+2. Jalankan `../migrations/20260907010000_secure_admin_auth_and_rls.sql` seluruhnya.
+3. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
+
+Migration keamanan idempotent dan tidak menghapus kursus, analytics, quiz, ataupun hasil peserta. Begitu migration selesai, login lokal lama tidak berlaku lagi; gunakan email/password Supabase Auth yang dibuat pada langkah 1.
 
 File analytics sengaja tidak disimpan di Git karena memuat visitor ID, user-agent, dan referrer. File tersebut tersedia hanya di workspace lokal tempat proses recovery dilakukan. Parameter `cfg` lama yang pernah membawa konfigurasi database di URL sudah dibuang dari kolom `full_path`.
 
@@ -39,19 +54,50 @@ Hasil minimum setelah langkah 1 dan 2:
 - `course_quizzes`: 0 karena tabel ini belum ada di database lama
 - `quiz_attempts`: 0 karena tabel ini belum ada di database lama
 
-Kelas Recording dan post-test baru dapat dibuat dari dashboard Arunika setelah schema tersedia.
+Kelas Recording dan post-test baru dapat dibuat dari dashboard Arunika setelah schema keamanan dan akun admin tersedia.
 
 ## Konfigurasi aplikasi
 
-Source aplikasi dan `.env.example` sudah diarahkan ke URL dan anon key project baru. Konfigurasi lama yang tersimpan di `localStorage` akan otomatis diganti bila URL-nya masih menunjuk project lama. Setelah deploy, lakukan hard refresh sekali pada browser atau PWA.
+Source aplikasi dan `.env.example` sudah diarahkan ke URL dan anon key project baru. Aplikasi menghapus konfigurasi database, cache materi, dan flag login admin lama dari `localStorage`. Setelah deploy, lakukan hard refresh sekali pada browser atau PWA.
 
 Jika platform deployment memiliki environment variable `VITE_PUBLIC_SUPABASE_URL` dan `VITE_PUBLIC_SUPABASE_ANON_KEY`, perbarui keduanya dengan nilai project baru juga.
 
-## Catatan keamanan
+## Pemeriksaan keamanan
 
-Arsitektur admin saat ini masih memakai login lokal di browser dan mengakses database memakai anon key. Agar fitur lama tetap berjalan, schema bootstrap memberi akses baca/tulis langsung kepada role `anon` dan `authenticated`; ini belum cocok untuk menyimpan data hasil peserta yang sensitif pada penggunaan produksi.
+Jalankan query ini setelah migration keamanan. Semua baris harus menunjukkan `rls_enabled = true`:
 
-Tahap pengamanan berikutnya adalah memindahkan login admin ke Supabase Auth, menambahkan role admin, mencabut akses tulis anon ke tabel admin/hasil, lalu mengaktifkan RLS. Jangan pernah menaruh service-role key di frontend.
+```sql
+select
+  c.relname as table_name,
+  c.relrowsecurity as rls_enabled
+from pg_class as c
+join pg_namespace as n on n.oid = c.relnamespace
+where n.nspname = 'public'
+  and c.relname in (
+    'courses', 'mentor', 'branding', 'events',
+    'course_quizzes', 'quiz_attempts', 'public_content_revisions'
+  )
+order by c.relname;
+```
+
+Realtime hanya memublikasikan `public_content_revisions`, yaitu satu baris sinyal tanpa isi materi atau data pribadi:
+
+```sql
+select schemaname, tablename
+from pg_publication_tables
+where pubname = 'supabase_realtime'
+  and tablename in (
+    'courses', 'mentor', 'branding', 'events', 'course_quizzes',
+    'quiz_attempts', 'public_content_revisions'
+  )
+order by tablename;
+```
+
+Hasil query kedua untuk tabel Arunika harus hanya `public.public_content_revisions`.
+
+Anon key memang berada di bundle dan terlihat di Network; itu adalah publishable credential, bukan password admin. Batas keamanan sebenarnya diterapkan di database: anon hanya dapat membaca kursus `published`, profil publik, branding publik, dan sinyal Realtime. Tabel analytics, konfigurasi quiz lengkap, jawaban benar, hasil peserta, serta allow-list admin tidak memiliki akses baca publik. Jangan pernah menaruh service-role key di frontend.
+
+Konten yang memang tampil pada page publik tetap dapat dilihat pengunjung melalui Network karena browser harus mengunduhnya untuk dirender. Jangan simpan rahasia di `courses.modules` atau `courses.assets` yang dipublikasikan.
 
 ## Membuat ulang snapshot
 
