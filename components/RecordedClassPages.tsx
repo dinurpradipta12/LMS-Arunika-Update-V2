@@ -191,6 +191,41 @@ const SelectField: React.FC<React.SelectHTMLAttributes<HTMLSelectElement> & { la
   </label>
 );
 
+type NoticeTone = 'success' | 'error';
+
+const NoticeModal: React.FC<{
+  notice: { tone: NoticeTone; title: string; message: string } | null;
+  onClose: () => void;
+}> = ({ notice, onClose }) => {
+  if (!notice) return null;
+  const isSuccess = notice.tone === 'success';
+  const Icon = isSuccess ? CheckCircle2 : XCircle;
+
+  return (
+    <div className="fixed inset-0 z-[1100] flex items-center justify-center p-4 bg-slate-950/45 backdrop-blur-sm" role="presentation">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="arunika-notice-title"
+        className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl"
+      >
+        <div className="flex items-start gap-4">
+          <div className={`w-11 h-11 rounded-xl flex items-center justify-center flex-shrink-0 ${isSuccess ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>
+            <Icon size={23} />
+          </div>
+          <div className="min-w-0">
+            <h2 id="arunika-notice-title" className="text-lg font-semibold">{notice.title}</h2>
+            <p className="text-sm text-[var(--muted)] leading-relaxed mt-2">{notice.message}</p>
+          </div>
+        </div>
+        <div className="flex justify-end mt-6">
+          <Button variant={isSuccess ? 'green' : 'secondary'} onClick={onClose}>Tutup</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const ToggleField: React.FC<{
   checked: boolean;
   onChange: (checked: boolean) => void;
@@ -211,7 +246,7 @@ const ToggleField: React.FC<{
   </label>
 );
 
-const CoverUploader: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
+const CoverUploader: React.FC<{ value: string; onChange: (value: string) => void; onError?: (message: string) => void }> = ({ value, onChange, onError }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
 
@@ -245,7 +280,7 @@ const CoverUploader: React.FC<{ value: string; onChange: (value: string) => void
       });
       onChange(dataUrl);
     } catch (error: any) {
-      alert(error?.message || 'Gambar gagal diproses.');
+      onError?.(error?.message || 'Gambar gagal diproses.');
     } finally {
       setIsProcessing(false);
     }
@@ -336,6 +371,7 @@ export const RecordedClassesPage: React.FC<{
   const recordedClasses = courses.filter(course => course.spaceType === 'recorded_class');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [notice, setNotice] = useState<{ tone: NoticeTone; title: string; message: string } | null>(null);
 
   const handleAdd = async () => {
     const newClass: Course = {
@@ -356,7 +392,7 @@ export const RecordedClassesPage: React.FC<{
       navigate(`/admin/classes/${newClass.id}`);
     } catch (error) {
       console.error('Recorded class creation failed', error);
-      alert(`Kelas belum dapat dibuat: ${databaseErrorMessage(error)}`);
+      setNotice({ tone: 'error', title: 'Kelas belum dapat dibuat', message: databaseErrorMessage(error) });
     } finally {
       setIsCreating(false);
     }
@@ -445,6 +481,8 @@ export const RecordedClassesPage: React.FC<{
           <Button icon={Plus} onClick={handleAdd} isLoading={isCreating} disabled={isCreating} className="mx-auto">Buat Kelas Pertama</Button>
         </div>
       )}
+
+      <NoticeModal notice={notice} onClose={() => setNotice(null)} />
     </div>
   );
 };
@@ -462,6 +500,7 @@ export const RecordedClassEditor: React.FC<{
   const [isQuizLoading, setIsQuizLoading] = useState(true);
   const [quizLoadError, setQuizLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [notice, setNotice] = useState<{ tone: NoticeTone; title: string; message: string } | null>(null);
 
   useEffect(() => {
     if (sourceCourse) {
@@ -583,10 +622,19 @@ export const RecordedClassEditor: React.FC<{
 
   const handleSave = async () => {
     if (!quiz) return;
-    if (!course.title.trim()) return alert('Judul kelas wajib diisi.');
+    if (!course.title.trim()) {
+      setNotice({ tone: 'error', title: 'Judul kelas belum diisi', message: 'Isi judul kelas terlebih dahulu sebelum menyimpan perubahan.' });
+      return;
+    }
     const quizValidation = validateQuiz();
-    if (quizValidation) return alert(quizValidation);
-    if (!client) return alert('Koneksi Supabase belum tersedia.');
+    if (quizValidation) {
+      setNotice({ tone: 'error', title: 'Post-test belum siap disimpan', message: quizValidation });
+      return;
+    }
+    if (!client) {
+      setNotice({ tone: 'error', title: 'Koneksi belum tersedia', message: 'Koneksi database belum tersedia. Periksa konfigurasi lalu coba lagi.' });
+      return;
+    }
 
     setIsSaving(true);
     try {
@@ -611,10 +659,14 @@ export const RecordedClassEditor: React.FC<{
       if (error) throw error;
       setQuiz(mapQuizRow(data));
       setQuizLoadError(null);
-      alert(course.published ? 'Kelas dan post-test berhasil disimpan serta dipublikasikan.' : 'Draft kelas dan post-test berhasil disimpan.');
+      setNotice({
+        tone: 'success',
+        title: course.published ? 'Kelas berhasil dipublikasikan' : 'Draft kelas berhasil disimpan',
+        message: course.published ? 'Kelas dan post-test berhasil disimpan serta dipublikasikan.' : 'Perubahan kelas dan post-test berhasil disimpan sebagai draft.'
+      });
     } catch (error: any) {
       console.error('Recorded class save failed', error);
-      alert(`Gagal menyimpan: ${databaseErrorMessage(error)}`);
+      setNotice({ tone: 'error', title: 'Gagal menyimpan kelas', message: databaseErrorMessage(error) });
     } finally {
       setIsSaving(false);
     }
@@ -672,7 +724,7 @@ export const RecordedClassEditor: React.FC<{
             </div>
             <Input label="Judul Kelas / Webinar" value={course.title} onChange={event => updateCourse({ ...course, title: event.target.value })} />
             <Textarea label="Deskripsi Kelas" value={course.description} onChange={event => updateCourse({ ...course, description: event.target.value })} />
-            <CoverUploader value={course.coverImage} onChange={coverImage => updateCourse({ ...course, coverImage })} />
+            <CoverUploader value={course.coverImage} onChange={coverImage => updateCourse({ ...course, coverImage })} onError={message => setNotice({ tone: 'error', title: 'Cover gagal diproses', message })} />
           </Card>
 
           <section className="space-y-4">
@@ -839,6 +891,8 @@ export const RecordedClassEditor: React.FC<{
       <div className="flex justify-end">
         <Button onClick={handleSave} icon={Save} isLoading={isSaving} className="w-full sm:w-auto">Simpan Semua Perubahan</Button>
       </div>
+
+      <NoticeModal notice={notice} onClose={() => setNotice(null)} />
     </div>
   );
 };
