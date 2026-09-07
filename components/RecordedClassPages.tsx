@@ -1090,8 +1090,8 @@ export const PublicRecordedClassView: React.FC<{
           </Card>
         </section>
 
-        <div className="grid lg:grid-cols-4 gap-6 lg:gap-8 items-start">
-          <div className="lg:col-span-3 space-y-8 min-w-0">
+        <div className="grid lg:grid-cols-3 gap-6 lg:gap-8 items-start">
+          <div className="lg:col-span-2 space-y-8 min-w-0">
             <section className="space-y-4">
               <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Materi Kelas</p><h2 className="text-2xl font-bold mt-2">Tonton Recording</h2></div>
               {selectedModule ? (
