@@ -1192,6 +1192,14 @@ export const PublicRecordedClassView: React.FC<{
           </div>
 
           <aside className="space-y-5 lg:sticky lg:top-24 min-w-0">
+            <Card className="text-center">
+              <div className="w-16 h-16 rounded-full overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)] mx-auto">
+                {mentor.photo ? <img src={mentor.photo} alt={mentor.name} className="w-full h-full object-cover" /> : <UserRound size={26} className="m-5 text-[var(--muted)]" />}
+              </div>
+              <p className="font-semibold mt-3">{mentor.name || 'Mentor Kelas'}</p>
+              <p className="text-xs text-[var(--muted)] mt-1">{mentor.role}</p>
+            </Card>
+
             <Card className="space-y-3">
               <h2 className="font-semibold flex items-center gap-2"><BookOpen size={18} className="text-[var(--accent-strong)]" /> Daftar Materi</h2>
               {course.modules.map((module, index) => (
@@ -1212,14 +1220,6 @@ export const PublicRecordedClassView: React.FC<{
                 ))}
               </Card>
             )}
-
-            <Card className="text-center">
-              <div className="w-16 h-16 rounded-full overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)] mx-auto">
-                {mentor.photo ? <img src={mentor.photo} alt={mentor.name} className="w-full h-full object-cover" /> : <UserRound size={26} className="m-5 text-[var(--muted)]" />}
-              </div>
-              <p className="font-semibold mt-3">{mentor.name || 'Mentor Kelas'}</p>
-              <p className="text-xs text-[var(--muted)] mt-1">{mentor.role}</p>
-            </Card>
           </aside>
         </div>
       </main>
