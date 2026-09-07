@@ -625,10 +625,10 @@ const AdvancedEditor: React.FC<{ value: string; onChange: (v: string) => void; l
 };
 
 const Login: React.FC<{
-  onLogin: (email: string, password: string) => Promise<string | null>;
+  onLogin: (username: string, password: string) => Promise<string | null>;
   authStatus: AuthStatus;
 }> = ({ onLogin, authStatus }) => {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -640,14 +640,14 @@ const Login: React.FC<{
 
   const handleLogin = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.trim() || !password) {
-      setError('Email dan password wajib diisi.');
+    if (!username.trim() || !password) {
+      setError('Username dan password wajib diisi.');
       return;
     }
 
     setError('');
     setIsSubmitting(true);
-    const loginError = await onLogin(email.trim(), password);
+    const loginError = await onLogin(username.trim(), password);
     setIsSubmitting(false);
 
     if (loginError) {
@@ -667,11 +667,11 @@ const Login: React.FC<{
           </div>
           <form onSubmit={handleLogin} className="space-y-5">
             <Input
-              label="Email admin"
-              type="email"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              placeholder="nama@email.com"
+              label="Username admin"
+              type="text"
+              value={username}
+              onChange={e => setUsername(e.target.value)}
+              placeholder="arunika"
               autoComplete="username"
               spellCheck={false}
             />
@@ -1913,12 +1913,24 @@ const App: React.FC = () => {
     return () => { void client.removeChannel(channel); };
   }, [fetchAllData, getReadClient, isAdmin, isPublicCourseRoute]);
 
-  const handleLogin = async (email: string, password: string): Promise<string | null> => {
+  const handleLogin = async (username: string, password: string): Promise<string | null> => {
     const client = getAdminSupabaseClient();
     if (!client) return 'Koneksi Supabase Auth tidak tersedia.';
 
-    const { error: signInError } = await client.auth.signInWithPassword({ email, password });
-    if (signInError) return 'Email atau password salah.';
+    const { data: loginData, error: loginError } = await client.functions.invoke('admin-login', {
+      body: { username: username.toLowerCase(), password }
+    });
+
+    if (loginError || !loginData?.access_token || !loginData?.refresh_token) {
+      return 'Username atau password salah, atau login username belum dikonfigurasi.';
+    }
+
+    const { error: sessionError } = await client.auth.setSession({
+      access_token: loginData.access_token,
+      refresh_token: loginData.refresh_token
+    });
+
+    if (sessionError) return 'Sesi login tidak dapat dibuat.';
 
     const { data: userData, error: userError } = await client.auth.getUser();
     if (userError || !userData.user) {
