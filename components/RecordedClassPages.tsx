@@ -1075,19 +1075,22 @@ export const PublicRecordedClassView: React.FC<{
       </header>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
-        <section className="grid lg:grid-cols-[1.25fr_1fr] gap-6 items-start">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden aspect-[16/9] lg:aspect-[2.2/1] min-h-[220px] lg:min-h-0">
-            {course.coverImage ? <img src={course.coverImage} alt={`Cover ${course.title}`} className="w-full h-full object-cover" /> : <div className="h-full flex items-center justify-center bg-[var(--surface-soft)] text-[var(--muted)]"><GraduationCap size={48} /></div>}
-          </div>
-          <Card className="p-6 md:p-7 flex flex-col justify-center">
-            <Badge color="var(--success-soft)" className="self-start">On-demand Class</Badge>
-            <h1 className="text-2xl md:text-3xl font-bold leading-tight mt-4">{course.title}</h1>
-            <p className="text-sm text-[var(--muted)] leading-6 mt-3 whitespace-pre-wrap">{course.description}</p>
-            <div className="grid grid-cols-2 gap-3 mt-5 pt-4 border-t border-[var(--border)] text-sm">
-              <span className="flex items-center gap-2"><Video size={17} className="text-[var(--accent-strong)]" /> {course.modules.length} materi</span>
-              <span className="flex items-center gap-2"><Download size={17} className="text-[var(--accent-strong)]" /> {course.assets.length} asset</span>
+        <section className="relative h-[220px] sm:h-[250px] lg:h-[280px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
+          {course.coverImage ? (
+            <img src={course.coverImage} alt={`Cover ${course.title}`} className="absolute inset-0 w-full h-full object-cover" />
+          ) : (
+            <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-soft)] text-[var(--muted)]"><GraduationCap size={48} /></div>
+          )}
+          <div className={`absolute inset-0 ${course.coverImage ? 'bg-gradient-to-t from-slate-950/80 via-slate-950/25 to-transparent' : 'bg-gradient-to-t from-[var(--surface)] via-[var(--surface)]/45 to-transparent'}`} />
+          <div className={`absolute inset-x-0 bottom-0 p-5 md:p-7 ${course.coverImage ? 'text-white' : 'text-[var(--text)]'}`}>
+            <Badge color="var(--success-soft)">On-demand Class</Badge>
+            <h1 className="text-2xl md:text-3xl font-bold leading-tight mt-3 max-w-4xl">{course.title}</h1>
+            <p className={`text-sm leading-6 mt-2 max-w-3xl line-clamp-2 ${course.coverImage ? 'text-white/85' : 'text-[var(--muted)]'}`}>{course.description}</p>
+            <div className={`flex flex-wrap gap-x-6 gap-y-2 mt-3 text-sm ${course.coverImage ? 'text-white/90' : 'text-[var(--muted)]'}`}>
+              <span className="flex items-center gap-2"><Video size={16} /> {course.modules.length} materi</span>
+              <span className="flex items-center gap-2"><Download size={16} /> {course.assets.length} asset</span>
             </div>
-          </Card>
+          </div>
         </section>
 
         <div className="grid lg:grid-cols-3 gap-6 lg:gap-8 items-start">
@@ -1191,7 +1194,7 @@ export const PublicRecordedClassView: React.FC<{
             </section>
           </div>
 
-          <aside className="space-y-5 lg:sticky lg:top-24 min-w-0">
+          <aside className="space-y-5 lg:sticky lg:top-24 lg:pt-16 min-w-0">
             <Card className="text-center">
               <div className="w-16 h-16 rounded-full overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)] mx-auto">
                 {mentor.photo ? <img src={mentor.photo} alt={mentor.name} className="w-full h-full object-cover" /> : <UserRound size={26} className="m-5 text-[var(--muted)]" />}
