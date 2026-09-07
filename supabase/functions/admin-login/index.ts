@@ -67,7 +67,10 @@ Deno.serve(async request => {
 
   const username = normalizeUsername(body.username);
   const password = typeof body.password === 'string' ? body.password : '';
-  if (!username || password.length < 8 || password.length > 128) {
+  // Let the Auth provider enforce its configured password policy. The login
+  // alias layer should not reject a valid existing account just because this
+  // function guessed a stricter minimum length.
+  if (!username || password.length === 0 || password.length > 128) {
     return invalidCredentials(request);
   }
 
