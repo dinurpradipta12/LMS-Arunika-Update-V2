@@ -680,14 +680,14 @@ const Login: React.FC<{
               type="password"
               value={password}
               onChange={e => setPassword(e.target.value)}
-              placeholder="Password akun Supabase Auth"
+              placeholder="Password admin"
               autoComplete="current-password"
             />
             {error && <p className="text-[var(--danger-text)] text-sm font-medium bg-[var(--danger-soft)] p-3 rounded-xl border border-[var(--border)]">{error}</p>}
             <Button type="submit" className="w-full h-12" icon={ChevronRight} isLoading={isSubmitting} disabled={isSubmitting || authStatus === 'loading'}>Masuk Dashboard</Button>
           </form>
           <p className="text-[11px] leading-relaxed text-center text-[var(--muted)] mt-5">
-            Akses dashboard diverifikasi oleh Supabase Auth dan role admin di database.
+            Akses dashboard diverifikasi oleh autentikasi aman dan role admin di database.
           </p>
         </Card>
       </div>
@@ -1112,7 +1112,7 @@ const Settings: React.FC = () => {
   const handleVerifyAdmin = async () => {
     const client = getAdminSupabaseClient();
     if (!client) {
-      setConnectionMessage('Client Supabase tidak tersedia.');
+      setConnectionMessage('Layanan autentikasi tidak tersedia.');
       return;
     }
 
@@ -1142,14 +1142,14 @@ const Settings: React.FC = () => {
           <div className="flex items-start gap-3 pb-5 border-b border-[var(--border)]">
             <div className="mt-0.5 p-2 rounded-lg bg-[var(--success-soft)] text-[var(--success-text)]"><Check size={16} /></div>
             <div>
-              <p className="font-semibold text-sm">Supabase project terkunci</p>
-              <p className="text-xs text-[var(--muted)] mt-1 break-all">drezwxfgykkdnnwjrnnt.supabase.co</p>
+              <p className="font-semibold text-sm">Data aplikasi terkunci</p>
+              <p className="text-xs text-[var(--muted)] mt-1">Koneksi data dibatasi untuk aplikasi resmi.</p>
             </div>
           </div>
           <div className="flex items-start gap-3 pb-5 border-b border-[var(--border)]">
             <div className="mt-0.5 p-2 rounded-lg bg-[var(--success-soft)] text-[var(--success-text)]"><Check size={16} /></div>
             <div>
-              <p className="font-semibold text-sm">Supabase Auth untuk dashboard</p>
+              <p className="font-semibold text-sm">Autentikasi dashboard aktif</p>
               <p className="text-xs text-[var(--muted)] mt-1">Tidak ada username atau password admin yang ditanam di source maupun localStorage.</p>
             </div>
           </div>
@@ -1915,14 +1915,14 @@ const App: React.FC = () => {
 
   const handleLogin = async (username: string, password: string): Promise<string | null> => {
     const client = getAdminSupabaseClient();
-    if (!client) return 'Koneksi Supabase Auth tidak tersedia.';
+    if (!client) return 'Layanan autentikasi admin tidak tersedia.';
 
     const { data: loginData, error: loginError } = await client.functions.invoke('admin-login', {
       body: { username: username.toLowerCase(), password }
     });
 
     if (loginError || !loginData?.access_token || !loginData?.refresh_token) {
-      return 'Username atau password salah, atau login username belum dikonfigurasi.';
+      return 'Username atau password salah.';
     }
 
     const { error: sessionError } = await client.auth.setSession({
