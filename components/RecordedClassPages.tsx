@@ -1075,15 +1075,15 @@ export const PublicRecordedClassView: React.FC<{
       </header>
 
       <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
-        <section className="grid lg:grid-cols-[1.35fr_1fr] gap-6 items-stretch">
-          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden min-h-[280px]">
-            {course.coverImage ? <img src={course.coverImage} alt={`Cover ${course.title}`} className="w-full h-full min-h-[280px] object-cover" /> : <div className="h-full min-h-[280px] flex items-center justify-center bg-[var(--surface-soft)] text-[var(--muted)]"><GraduationCap size={48} /></div>}
+        <section className="grid lg:grid-cols-[1.25fr_1fr] gap-6 items-start">
+          <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden aspect-[16/9] lg:aspect-[2.2/1] min-h-[220px] lg:min-h-0">
+            {course.coverImage ? <img src={course.coverImage} alt={`Cover ${course.title}`} className="w-full h-full object-cover" /> : <div className="h-full flex items-center justify-center bg-[var(--surface-soft)] text-[var(--muted)]"><GraduationCap size={48} /></div>}
           </div>
-          <Card className="p-7 md:p-9 flex flex-col justify-center">
+          <Card className="p-6 md:p-7 flex flex-col justify-center">
             <Badge color="var(--success-soft)" className="self-start">On-demand Class</Badge>
-            <h1 className="text-2xl md:text-4xl font-bold leading-tight mt-5">{course.title}</h1>
-            <p className="text-sm md:text-base text-[var(--muted)] leading-7 mt-4 whitespace-pre-wrap">{course.description}</p>
-            <div className="grid grid-cols-2 gap-3 mt-7 pt-6 border-t border-[var(--border)] text-sm">
+            <h1 className="text-2xl md:text-3xl font-bold leading-tight mt-4">{course.title}</h1>
+            <p className="text-sm text-[var(--muted)] leading-6 mt-3 whitespace-pre-wrap">{course.description}</p>
+            <div className="grid grid-cols-2 gap-3 mt-5 pt-4 border-t border-[var(--border)] text-sm">
               <span className="flex items-center gap-2"><Video size={17} className="text-[var(--accent-strong)]" /> {course.modules.length} materi</span>
               <span className="flex items-center gap-2"><Download size={17} className="text-[var(--accent-strong)]" /> {course.assets.length} asset</span>
             </div>
