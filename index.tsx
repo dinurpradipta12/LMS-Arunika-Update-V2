@@ -78,6 +78,7 @@ import {
 } from './components/RecordedClassPages';
 import logoUtama from './src/logo-utama.png';
 import faviconLogo from './src/favicon.png';
+import databaseBootstrapSql from './supabase/new-project/01_schema.sql?raw';
 
 // Custom TikTok SVG Icon
 const TiktokIcon = ({ size = 18 }) => (
@@ -168,14 +169,31 @@ const defaultMentor: Mentor = {
   socials: {}
 };
 
-const EMBEDDED_PUBLIC_SUPABASE_URL = 'https://mhuqqbbqlovdiquaktzd.supabase.co';
-const EMBEDDED_PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Im1odXFxYmJxbG92ZGlxdWFrdHpkIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzA4OTQxNTksImV4cCI6MjA4NjQ3MDE1OX0.pJud95i77m-01lce_Pq6q2FovPxapUy-gKTYne6PZ18';
+const LEGACY_PUBLIC_SUPABASE_URL = 'https://mhuqqbbqlovdiquaktzd.supabase.co';
+const EMBEDDED_PUBLIC_SUPABASE_URL = 'https://drezwxfgykkdnnwjrnnt.supabase.co';
+const EMBEDDED_PUBLIC_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyZXp3eGZneWtrZG5ud2pybm50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NTUwNTksImV4cCI6MjEwNDMzMTA1OX0.nZ3OGNXEFN82CqA1-KXUQ9IWvhp7Gl0U1xyUVjKcdFY';
 
 const configuredPublicSupabaseUrl = import.meta.env.VITE_PUBLIC_SUPABASE_URL?.trim();
 const configuredPublicSupabaseAnonKey = import.meta.env.VITE_PUBLIC_SUPABASE_ANON_KEY?.trim();
-const PUBLIC_SUPABASE_CONFIG: SupabaseConfig = configuredPublicSupabaseUrl && configuredPublicSupabaseAnonKey
+const configuredProjectIsLegacy = configuredPublicSupabaseUrl?.replace(/\/$/, '') === LEGACY_PUBLIC_SUPABASE_URL;
+const PUBLIC_SUPABASE_CONFIG: SupabaseConfig = configuredPublicSupabaseUrl && configuredPublicSupabaseAnonKey && !configuredProjectIsLegacy
   ? { url: configuredPublicSupabaseUrl, anonKey: configuredPublicSupabaseAnonKey }
   : { url: EMBEDDED_PUBLIC_SUPABASE_URL, anonKey: EMBEDDED_PUBLIC_SUPABASE_ANON_KEY };
+
+const getInitialSupabaseConfig = (): SupabaseConfig => {
+  try {
+    const saved = localStorage.getItem('supabase');
+    if (!saved) return PUBLIC_SUPABASE_CONFIG;
+
+    const parsed = JSON.parse(saved) as Partial<SupabaseConfig>;
+    if (!parsed.url || !parsed.anonKey) return PUBLIC_SUPABASE_CONFIG;
+    if (parsed.url.replace(/\/$/, '') === LEGACY_PUBLIC_SUPABASE_URL) return PUBLIC_SUPABASE_CONFIG;
+
+    return { url: parsed.url, anonKey: parsed.anonKey };
+  } catch {
+    return PUBLIC_SUPABASE_CONFIG;
+  }
+};
 
 // --- Storage & Analytics Helpers ---
 const getStorageItem = <T,>(key: string, defaultValue: T): T => {
@@ -1046,68 +1064,7 @@ const Settings: React.FC<{
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSavingBranding, setIsSavingBranding] = useState(false);
   
-  const sqlScript = `
--- COPY & PASTE SCRIPT INI KE SQL EDITOR SUPABASE ANDA --
-
--- 1. Tabel Kursus
-CREATE TABLE IF NOT EXISTS courses (
-  id TEXT PRIMARY KEY,
-  title TEXT,
-  description TEXT,
-  cover_image TEXT,
-  modules JSONB DEFAULT '[]'::jsonb,
-  assets JSONB DEFAULT '[]'::jsonb,
-  categories JSONB DEFAULT '[]'::jsonb,
-  mentor_id TEXT DEFAULT 'profile',
-  created_at TIMESTAMPTZ DEFAULT NOW(),
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
-ALTER TABLE courses ADD COLUMN IF NOT EXISTS categories JSONB DEFAULT '[]'::jsonb;
-
--- 2. Tabel Mentor
-CREATE TABLE IF NOT EXISTS mentor (
-  id TEXT PRIMARY KEY DEFAULT 'profile',
-  name TEXT,
-  role TEXT,
-  bio TEXT,
-  photo TEXT,
-  socials JSONB DEFAULT '{}'::jsonb,
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- 3. Tabel Branding (Sudah mendukung favicon)
-CREATE TABLE IF NOT EXISTS branding (
-  id TEXT PRIMARY KEY DEFAULT 'config',
-  site_name TEXT,
-  logo TEXT,
-  favicon TEXT, -- Kolom untuk favicon
-  updated_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- Pastikan kolom favicon ada (SOLUSI EROR SCHEMA CACHE)
-ALTER TABLE branding ADD COLUMN IF NOT EXISTS favicon TEXT;
-
--- PAKSA SUPABASE UNTUK REFRESH DAFTAR KOLOM
-NOTIFY pgrst, 'reload schema';
-
--- 4. Tabel Events (Analitik)
-CREATE TABLE IF NOT EXISTS events (
-  id BIGSERIAL PRIMARY KEY,
-  event_name TEXT,
-  course_id TEXT,
-  visitor_id TEXT,
-  device_type TEXT,
-  user_agent TEXT,
-  referrer TEXT,
-  source TEXT,
-  full_path TEXT,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
--- AKTIFKAN REALTIME
-ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
-  `;
+  const sqlScript = databaseBootstrapSql;
 
   const handleConnect = async () => {
     if (!supabase.url || !supabase.anonKey) return;
@@ -1168,7 +1125,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
         <Card className="!bg-[#0f1c2a] text-white !border-[#27394d] space-y-4">
            <div className="flex justify-between items-center mb-2">
               <p className="text-xs font-bold text-[#94A3B8] uppercase tracking-widest flex items-center gap-2">
-                 <FileCode size={14}/> SQL Init Script (Updated)
+                 <FileCode size={14}/> SQL Schema Lengkap
               </p>
               <Button variant="secondary" className="h-8 min-h-0 py-0 px-3 text-[10px] !bg-white !text-[#17283a]" onClick={copySql}>Salin Script</Button>
            </div>
@@ -1176,7 +1133,7 @@ ALTER PUBLICATION supabase_realtime ADD TABLE courses, mentor, branding, events;
               <pre>{sqlScript}</pre>
            </div>
            <p className="text-xs font-bold text-[#94A3B8] italic">
-             * Jalankan script di atas pada "SQL Editor" di Dashboard Supabase Anda. Ini akan menambahkan kolom `favicon` yang hilang dan me-refresh cache database.
+             * Jalankan script ini terlebih dahulu di SQL Editor. Script mencakup kursus, branding, analytics, Kelas Recording, post-test, hasil peserta, Realtime, dan RPC publik.
            </p>
         </Card>
       </section>
@@ -1761,11 +1718,7 @@ const App: React.FC = () => {
   const [courses, setCourses] = useState<Course[]>(() => getStorageItem('courses', []));
   const [mentor, setMentor] = useState<Mentor>(() => getStorageItem('mentor', defaultMentor));
   const [branding, setBranding] = useState<Branding>(() => getStorageItem('branding', defaultBranding));
-  const [supabase, setSupabase] = useState<SupabaseConfig>(() => {
-    const saved = localStorage.getItem('supabase');
-    if (saved) { try { return JSON.parse(saved); } catch(e) {} }
-    return PUBLIC_SUPABASE_CONFIG;
-  });
+  const [supabase, setSupabase] = useState<SupabaseConfig>(getInitialSupabaseConfig);
   const isPublicCourseRoute = /^\/(?:c|course|class)\//.test(location.pathname);
   const readSupabase = isPublicCourseRoute ? PUBLIC_SUPABASE_CONFIG : supabase;
 
