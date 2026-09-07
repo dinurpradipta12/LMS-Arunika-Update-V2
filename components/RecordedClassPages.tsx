@@ -46,6 +46,7 @@ import { Badge, Button, Card, Input, Textarea } from './UI';
 
 const DEFAULT_QUIZ_TITLE = 'Post-Test Kelas';
 type PublicClassTab = 'materials' | 'post_test' | 'feedback';
+const PUBLIC_CLASS_CONTENT_CLASS = 'w-full max-w-4xl mx-auto';
 
 const createDefaultQuiz = (courseId: string): CourseQuiz => ({
   courseId,
@@ -1206,15 +1207,15 @@ export const PublicRecordedClassView: React.FC<{
   }
 
   return (
-    <div className="min-h-screen bg-[var(--app-bg)]">
+    <div className="min-h-screen bg-[var(--app-bg)] [scrollbar-gutter:stable]">
       <header className="sticky top-0 z-40 bg-[var(--surface)]/95 backdrop-blur border-b border-[var(--border)] px-4">
-        <div className="max-w-7xl mx-auto min-h-[68px] flex items-center justify-between gap-4">
+        <div className="w-full max-w-7xl mx-auto min-h-[68px] flex items-center justify-between gap-4">
           <div className="flex items-center gap-3 min-w-0"><div className="w-9 h-9 rounded-xl bg-[var(--success-soft)] text-[var(--success-text)] flex items-center justify-center flex-shrink-0"><GraduationCap size={19} /></div><div className="min-w-0"><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">Arunika LMS</p><p className="text-sm font-semibold truncate">Kelas Recording</p></div></div>
           <Badge color="var(--success-soft)">{course.modules.length} Materi</Badge>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-4 md:p-8 space-y-8">
+      <main className="w-full max-w-7xl mx-auto p-4 md:p-8 space-y-8">
         <section className="relative h-[220px] sm:h-[250px] lg:h-[280px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
           {course.coverImage ? (
             <img src={course.coverImage} alt={`Cover ${course.title}`} className="absolute inset-0 w-full h-full object-cover" />
@@ -1245,7 +1246,7 @@ export const PublicRecordedClassView: React.FC<{
           </button>
         </div>
 
-        <div className={activeTab === 'materials' ? 'grid lg:grid-cols-3 gap-6 lg:gap-8 items-start' : 'max-w-4xl mx-auto'}>
+        <div className={activeTab === 'materials' ? 'grid lg:grid-cols-3 gap-6 lg:gap-8 items-start' : PUBLIC_CLASS_CONTENT_CLASS}>
           <div className={activeTab === 'materials' ? 'lg:col-span-2 space-y-8 min-w-0' : 'min-w-0'}>
             {activeTab === 'materials' && <section className="space-y-4">
               <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Materi Kelas</p><h2 className="text-2xl font-bold mt-2">Tonton Recording</h2></div>
