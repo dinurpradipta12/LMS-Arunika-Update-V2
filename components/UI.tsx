@@ -43,12 +43,16 @@ export const Card: React.FC<{ children: React.ReactNode; className?: string; fea
 };
 
 // Use React.ComponentType for the icon prop to avoid strict LucideIcon type mismatch errors when using custom components
-export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string; icon?: React.ComponentType<any> }> = ({ label, icon: Icon, className = '', ...props }) => {
+export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { label?: string; icon?: React.ComponentType<any> }> = ({ label, icon: Icon, className = '', id, ...props }) => {
+  const generatedId = React.useId();
+  const inputId = id || generatedId;
+
   return (
     <div className="flex flex-col gap-2">
-      {label && <label className="text-xs font-semibold text-[var(--muted)]">{label}</label>}
+      {label && <label htmlFor={inputId} className="text-xs font-semibold text-[var(--muted)]">{label}</label>}
       <div className="relative">
-        <input 
+        <input
+          id={inputId}
           className={`w-full bg-[var(--surface)] border border-[var(--border)] rounded-xl py-3 text-[var(--text)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[color-mix(in_srgb,var(--accent)_12%,transparent)] transition-all outline-none min-h-[46px] ${Icon ? 'pl-11 pr-4' : 'px-4'} ${className}`}
           {...props}
         />
@@ -62,11 +66,15 @@ export const Input: React.FC<React.InputHTMLAttributes<HTMLInputElement> & { lab
   );
 };
 
-export const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label?: string }> = ({ label, className = '', ...props }) => {
+export const Textarea: React.FC<React.TextareaHTMLAttributes<HTMLTextAreaElement> & { label?: string }> = ({ label, className = '', id, ...props }) => {
+  const generatedId = React.useId();
+  const textareaId = id || generatedId;
+
   return (
     <div className="flex flex-col gap-2">
-      {label && <label className="text-xs font-semibold text-[var(--muted)]">{label}</label>}
-      <textarea 
+      {label && <label htmlFor={textareaId} className="text-xs font-semibold text-[var(--muted)]">{label}</label>}
+      <textarea
+        id={textareaId}
         className={`bg-[var(--surface)] border border-[var(--border)] rounded-xl px-4 py-3 text-[var(--text)] focus:border-[var(--accent)] focus:ring-4 focus:ring-[color-mix(in_srgb,var(--accent)_12%,transparent)] transition-all outline-none min-h-[120px] ${className}`}
         {...props}
       />

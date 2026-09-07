@@ -69,6 +69,13 @@ import { createClient } from '@supabase/supabase-js';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset, Category } from './types';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
+import {
+  ClassResultsPage,
+  PublicRecordedClassView,
+  RecordedClassEditor,
+  RecordedClassesPage,
+  SpacesDashboard
+} from './components/RecordedClassPages';
 import logoUtama from './src/logo-utama.png';
 import faviconLogo from './src/favicon.png';
 
@@ -262,18 +269,19 @@ const getCourseIdFromPublicCode = (code: string) => {
   return numericId ? `course-${numericId}` : `course-${code}`;
 };
 
-const generateShareLink = (courseId: string) => {
+const generateShareLink = (courseId: string, contentType: 'course' | 'class' = 'course') => {
   const code = getPublicCourseCode(courseId);
   const configuredPublicUrl = import.meta.env.VITE_PUBLIC_APP_URL?.trim();
+  const publicRoute = contentType === 'class' ? 'class' : 'c';
 
   try {
     const publicUrl = new URL(configuredPublicUrl || window.location.href);
     publicUrl.search = '';
-    publicUrl.hash = `/c/${code}`;
+    publicUrl.hash = `/${publicRoute}/${code}`;
     return publicUrl.toString();
   } catch (error) {
     console.warn('Invalid VITE_PUBLIC_APP_URL, falling back to the current host.', error);
-    return `${window.location.origin}${window.location.pathname}#/c/${code}`;
+    return `${window.location.origin}${window.location.pathname}#/${publicRoute}/${code}`;
   }
 };
 
@@ -373,7 +381,7 @@ const RouteTracker: React.FC<{ supabase: SupabaseConfig }> = ({ supabase }) => {
       }
     };
     const legacyCourseMatch = location.pathname.match(/^\/course\/([^/?]+)/);
-    const shortCourseMatch = location.pathname.match(/^\/c\/([^/?]+)/);
+    const shortCourseMatch = location.pathname.match(/^\/(?:c|class)\/([^/?]+)/);
     const courseIdMatch = legacyCourseMatch?.[1]
       || (shortCourseMatch?.[1] ? getCourseIdFromPublicCode(shortCourseMatch[1]) : null);
     track();
@@ -663,7 +671,21 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
             onClick={() => { if(window.innerWidth < 768) onClose(); }}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname === '/admin' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
           >
-            <BookOpen size={18} /> Kursus Saya
+            <LayoutGrid size={18} /> Semua Space
+          </Link>
+          <Link
+            to="/admin/products"
+            onClick={() => { if(window.innerWidth < 768) onClose(); }}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname === '/admin/products' || location.pathname.startsWith('/admin/course/') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
+          >
+            <BookOpen size={18} /> Tutorial Produk
+          </Link>
+          <Link
+            to="/admin/classes"
+            onClick={() => { if(window.innerWidth < 768) onClose(); }}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname.startsWith('/admin/classes') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
+          >
+            <Video size={18} /> Kelas Recording
           </Link>
           <Link 
             to="/analytics" 
@@ -905,6 +927,7 @@ const AdminDashboard: React.FC<{
 }> = ({ courses, setCourses, onDeleteCourse }) => {
   const navigate = useNavigate();
   const [copiedCourseId, setCopiedCourseId] = useState<string | null>(null);
+  const productCourses = courses.filter(course => (course.spaceType || 'product_tutorial') === 'product_tutorial');
 
   const handleCopyLink = async (courseId: string) => {
     const url = generateShareLink(courseId);
@@ -929,9 +952,11 @@ const AdminDashboard: React.FC<{
       mentorId: 'profile',
       modules: [],
       assets: [],
-      categories: []
+      categories: [],
+      spaceType: 'product_tutorial',
+      published: true
     };
-    setCourses([...courses, newCourse]);
+    setCourses(current => [...current, newCourse]);
     navigate(`/admin/course/${newCourse.id}`);
   };
 
@@ -939,13 +964,16 @@ const AdminDashboard: React.FC<{
     <div className="p-4 md:p-8 max-w-6xl mx-auto">
       <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 mb-8">
         <div>
-          <h1 className="text-3xl font-bold">Kursus Saya</h1>
-          <p className="text-sm text-[var(--muted)] mt-1">Kelola materi dan bagikan ruang belajar Anda.</p>
+          <Link to="/admin" className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)] mb-3">
+            <ChevronRight size={14} className="rotate-180" /> Semua Space
+          </Link>
+          <h1 className="text-3xl font-bold">Tutorial Produk Digital</h1>
+          <p className="text-sm text-[var(--muted)] mt-1">Kelola panduan produk seperti pada LMS sebelumnya.</p>
         </div>
         <Button icon={Plus} onClick={handleAddCourse}>Tambah Kursus</Button>
       </div>
       <div className="grid grid-cols-1 lg:grid-cols-2 xl:grid-cols-3 gap-6">
-        {courses.map(course => (
+        {productCourses.map(course => (
           <Card key={course.id} className="group relative overflow-hidden !p-0">
             <button onClick={() => onDeleteCourse(course.id)} aria-label={`Hapus ${course.title}`} className="absolute top-3 right-3 z-10 p-2 bg-[var(--surface)] text-[var(--danger-text)] border border-[var(--border)] rounded-lg shadow-sm opacity-100 md:opacity-0 md:group-hover:opacity-100 transition-all">
               <Trash2 size={16} />
@@ -994,7 +1022,7 @@ const AdminDashboard: React.FC<{
             </div>
           </Card>
         ))}
-        {courses.length === 0 && (
+        {productCourses.length === 0 && (
            <div className="col-span-full py-20 text-center space-y-4">
               <div className="bg-[var(--surface-soft)] w-16 h-16 rounded-2xl mx-auto flex items-center justify-center border border-[var(--border)]">
                  <BookOpen size={28} className="text-[var(--muted)]" />
@@ -1286,8 +1314,8 @@ const CourseEditor: React.FC<{
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8 pb-32">
       <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
         <div>
-          <Link to="/admin" className="text-xs font-medium text-[var(--muted)] flex items-center gap-1 mb-2 hover:text-[var(--accent-strong)]">
-            <ChevronRight size={14} className="rotate-180" /> Kembali ke Dashboard
+          <Link to="/admin/products" className="text-xs font-medium text-[var(--muted)] flex items-center gap-1 mb-2 hover:text-[var(--accent-strong)]">
+            <ChevronRight size={14} className="rotate-180" /> Kembali ke Tutorial Produk
           </Link>
           <h1 className="text-3xl font-bold">Course Editor</h1>
         </div>
@@ -1509,12 +1537,12 @@ const PublicCourseView: React.FC<{
         return null;
       });
 
-      const { data: c, error: courseError } = await withTimeout(
+      const { data: c, error: courseError } = await withTimeout<any>(
         client
           .from('courses')
           .select('*')
           .eq('id', id)
-          .maybeSingle(),
+          .maybeSingle() as PromiseLike<any>,
         15000
       );
 
@@ -1526,6 +1554,11 @@ const PublicCourseView: React.FC<{
         setIsLoading(false);
         return;
       }
+      if (c.space_type === 'recorded_class') {
+        setLoadError('Link ini adalah kelas recording. Gunakan link publik kelas yang tersedia di dashboard Kelas Recording.');
+        setIsLoading(false);
+        return;
+      }
 
       const full: Course = {
         ...c,
@@ -1533,7 +1566,9 @@ const PublicCourseView: React.FC<{
         mentorId: c.mentor_id,
         assets: c.assets || [],
         modules: c.modules || [],
-        categories: c.categories || []
+        categories: c.categories || [],
+        spaceType: c.space_type || 'product_tutorial',
+        published: c.published !== false
       };
       setLocalCourse(full);
       setSelectedModule(full.modules[0] || null);
@@ -1731,7 +1766,7 @@ const App: React.FC = () => {
     if (saved) { try { return JSON.parse(saved); } catch(e) {} }
     return PUBLIC_SUPABASE_CONFIG;
   });
-  const isPublicCourseRoute = /^\/(?:c|course)\//.test(location.pathname);
+  const isPublicCourseRoute = /^\/(?:c|course|class)\//.test(location.pathname);
   const readSupabase = isPublicCourseRoute ? PUBLIC_SUPABASE_CONFIG : supabase;
 
   const [syncing, setSyncing] = useState(false);
@@ -1788,7 +1823,9 @@ const App: React.FC = () => {
           mentorId: item.mentor_id, 
           assets: item.assets || [], 
           modules: item.modules || [],
-          categories: item.categories || []
+          categories: item.categories || [],
+          spaceType: item.space_type || 'product_tutorial',
+          published: item.published !== false
         })));
       }
     } catch (e) { console.warn("Fetch error", e); }
@@ -1860,6 +1897,8 @@ const App: React.FC = () => {
            assets: updatedCourse.assets,
            categories: updatedCourse.categories || [],
            mentor_id: updatedCourse.mentorId || "profile",
+           space_type: updatedCourse.spaceType || 'product_tutorial',
+           published: updatedCourse.published !== false,
            updated_at: new Date().toISOString()
         };
         const { error: cErr } = await client.from('courses').upsert(courseData, { onConflict: 'id' });
@@ -1870,7 +1909,9 @@ const App: React.FC = () => {
           const { error: mErr } = await client.from('mentor').upsert(mentorData, { onConflict: 'id' });
           if (mErr) throw mErr;
         }
-        setCourses(prev => prev.map(c => c.id === updatedCourse.id ? updatedCourse : c));
+        setCourses(prev => prev.some(c => c.id === updatedCourse.id)
+          ? prev.map(c => c.id === updatedCourse.id ? updatedCourse : c)
+          : [updatedCourse, ...prev]);
         if (updatedMentor) setMentor(updatedMentor);
      } catch (err: any) {
         throw err;
@@ -1896,12 +1937,17 @@ const App: React.FC = () => {
       )}
       <Routes>
         <Route path="/login" element={<Login isLoggedIn={isLoggedIn} onLogin={() => setIsLoggedIn(true)} branding={branding} />} />
-        <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} onDeleteCourse={handleDeleteCourse} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><SpacesDashboard courses={courses} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin/products" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AdminDashboard courses={courses} setCourses={setCourses} onDeleteCourse={handleDeleteCourse} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/admin/course/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin/classes" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><RecordedClassesPage courses={courses} onCreateCourse={handleUpdateCourse} onDeleteCourse={handleDeleteCourse} generateShareLink={courseId => generateShareLink(courseId, 'class')} copyText={copyTextToClipboard} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin/classes/:id" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><RecordedClassEditor courses={courses} client={getSupabaseClient(supabase)} onSaveCourse={handleUpdateCourse} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
+        <Route path="/admin/classes/:id/results" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><ClassResultsPage courses={courses} client={getSupabaseClient(supabase)} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/analytics" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><AnalyticsPage courses={courses} supabase={supabase} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/settings" element={isLoggedIn ? <AdminLayout branding={branding} onLogout={() => setIsLoggedIn(false)} isSidebarOpen={isSidebarOpen} setIsSidebarOpen={setIsSidebarOpen}><Settings branding={branding} setBranding={setBranding} onSaveBranding={handleUpdateBranding} supabase={supabase} setSupabase={setSupabase} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} /></AdminLayout> : <Navigate to="/login" />} />
         <Route path="/c/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} usesShortCode />} />
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} />} />
+        <Route path="/class/:id" element={<PublicRecordedClassView client={getSupabaseClient(PUBLIC_SUPABASE_CONFIG)} mentor={mentor} resolveCourseId={getCourseIdFromPublicCode} />} />
         <Route path="/" element={<Navigate to={isLoggedIn ? "/admin" : "/login"} />} />
       </Routes>
     </div>
