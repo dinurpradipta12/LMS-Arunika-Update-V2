@@ -99,6 +99,18 @@ export interface QuizAttempt {
   submittedAt: string;
 }
 
+export interface ClassFeedbackSubmission {
+  id: string;
+  courseId: string;
+  participantName: string;
+  participantEmail: string;
+  certificateEmail: string;
+  rating: number;
+  feedback: string;
+  submittedAt: string;
+  updatedAt?: string;
+}
+
 export interface QuizSubmissionResult {
   attemptId: string;
   attemptNumber: number;

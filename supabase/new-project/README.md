@@ -10,8 +10,10 @@ SQL tidak dapat dijalankan dengan anon key. Buka target project di Supabase Dash
 2. Jalankan `02_recovered_content.sql` seluruhnya untuk memulihkan 3 kursus, 2 profil mentor, dan 1 konfigurasi branding dari database lama.
 3. Opsional: jalankan `private/03_recovered_analytics.sql` untuk memulihkan snapshot 2.017 event analytics lama.
 4. Jalankan `../migrations/20260907010000_secure_admin_auth_and_rls.sql` seluruhnya.
-5. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
-6. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
+5. Jalankan `../migrations/20260907030000_long_answer_and_class_feedback.sql` seluruhnya untuk jawaban panjang dan feedback post-test.
+6. Jalankan `../migrations/20260907040000_class_feedback_and_completion.sql` seluruhnya untuk feedback akhir kelas dan email sertifikat.
+7. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
+8. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
 
 `01_schema.sql` sekarang fail-closed: semua tabel langsung memakai RLS tanpa policy terbuka. Halaman publik baru aktif setelah migration keamanan pada langkah 4 membuat policy yang hanya membaca konten `published`.
 
@@ -21,7 +23,8 @@ Untuk project `drezwxfgykkdnnwjrnnt` yang tabelnya sudah berisi data, tidak perl
 
 1. Buat akun admin di **Authentication > Users > Add user**.
 2. Jalankan `../migrations/20260907010000_secure_admin_auth_and_rls.sql` seluruhnya.
-3. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
+3. Jalankan migration `20260907030000_long_answer_and_class_feedback.sql` dan `20260907040000_class_feedback_and_completion.sql` seluruhnya.
+4. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
 
 Migration keamanan idempotent dan tidak menghapus kursus, analytics, quiz, ataupun hasil peserta. Begitu migration selesai, login lokal lama tidak berlaku lagi; gunakan email/password Supabase Auth yang dibuat pada langkah 1.
 
@@ -43,6 +46,8 @@ union all
 select 'course_quizzes', count(*) from public.course_quizzes
 union all
 select 'quiz_attempts', count(*) from public.quiz_attempts;
+-- Tambahkan setelah migration feedback akhir:
+-- select 'class_feedback_submissions', count(*) from public.class_feedback_submissions;
 ```
 
 Hasil minimum setelah langkah 1 dan 2:
@@ -75,7 +80,7 @@ join pg_namespace as n on n.oid = c.relnamespace
 where n.nspname = 'public'
   and c.relname in (
     'courses', 'mentor', 'branding', 'events',
-    'course_quizzes', 'quiz_attempts', 'public_content_revisions'
+    'course_quizzes', 'quiz_attempts', 'class_feedback_submissions', 'public_content_revisions'
   )
 order by c.relname;
 ```

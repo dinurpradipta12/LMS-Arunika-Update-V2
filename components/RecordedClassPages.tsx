@@ -17,6 +17,7 @@ import {
   HelpCircle,
   Link as LinkIcon,
   Loader2,
+  LockKeyhole,
   Mail,
   Plus,
   RefreshCw,
@@ -30,6 +31,7 @@ import {
 } from 'lucide-react';
 
 import {
+  ClassFeedbackSubmission,
   Course,
   CourseQuiz,
   Mentor,
@@ -43,6 +45,7 @@ import {
 import { Badge, Button, Card, Input, Textarea } from './UI';
 
 const DEFAULT_QUIZ_TITLE = 'Post-Test Kelas';
+type PublicClassTab = 'materials' | 'post_test' | 'feedback';
 
 const createDefaultQuiz = (courseId: string): CourseQuiz => ({
   courseId,
@@ -108,6 +111,18 @@ const mapAttemptRow = (row: any): QuizAttempt => ({
   submittedAt: row.submitted_at
 });
 
+const mapClassFeedbackRow = (row: any): ClassFeedbackSubmission => ({
+  id: row.id,
+  courseId: row.course_id,
+  participantName: row.participant_name,
+  participantEmail: row.participant_email,
+  certificateEmail: row.certificate_email,
+  rating: Number(row.rating || 0),
+  feedback: row.feedback || '',
+  submittedAt: row.created_at,
+  updatedAt: row.updated_at
+});
+
 const databaseErrorMessage = (error: any) => {
   const message = String(error?.message || error || 'Terjadi kesalahan yang tidak diketahui.');
   if (
@@ -125,6 +140,11 @@ const databaseErrorMessage = (error: any) => {
   if (message.includes('FEEDBACK_REQUIRED')) return 'Feedback kelas wajib diisi sebelum jawaban dikirim.';
   if (message.includes('FEEDBACK_TOO_LONG')) return 'Feedback kelas terlalu panjang. Maksimal 5.000 karakter.';
   if (message.includes('INCOMPLETE_ANSWERS')) return 'Jawab seluruh pertanyaan sebelum mengirim post-test.';
+  if (message.includes('FEEDBACK_NOT_READY')) return 'Selesaikan dan tandai semua materi kelas sebelum mengirim feedback keseluruhan.';
+  if (message.includes('INVALID_CERTIFICATE_EMAIL')) return 'Email sertifikat belum valid.';
+  if (message.includes('INVALID_FEEDBACK_RATING')) return 'Pilih penilaian kelas dari 1 sampai 5.';
+  if (message.includes('INVALID_FEEDBACK_TEXT')) return 'Feedback keseluruhan wajib diisi maksimal 5.000 karakter.';
+  if (message.includes('submit_class_feedback') || message.includes('class_feedback_submissions')) return 'Database feedback keseluruhan belum siap. Jalankan migration terbaru.';
   return message;
 };
 
@@ -811,6 +831,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
   const { id } = useParams<{ id: string }>();
   const course = courses.find(item => item.id === id);
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
+  const [feedbackSubmissions, setFeedbackSubmissions] = useState<ClassFeedbackSubmission[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -822,12 +843,21 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
     }
     setIsLoading(true);
     setLoadError(null);
-    const { data, error } = await client.from('quiz_attempts').select('*').eq('course_id', id).order('submitted_at', { ascending: false });
-    if (error) {
-      console.error('Quiz result fetch failed', error);
-      setLoadError(databaseErrorMessage(error));
+    const [attemptResult, feedbackResult] = await Promise.all([
+      client.from('quiz_attempts').select('*').eq('course_id', id).order('submitted_at', { ascending: false }),
+      client.from('class_feedback_submissions').select('*').eq('course_id', id).order('created_at', { ascending: false })
+    ]);
+    if (attemptResult.error) {
+      console.error('Quiz result fetch failed', attemptResult.error);
+      setLoadError(databaseErrorMessage(attemptResult.error));
     } else {
-      setAttempts((data || []).map(mapAttemptRow));
+      setAttempts((attemptResult.data || []).map(mapAttemptRow));
+    }
+    if (feedbackResult.error) {
+      console.warn('Class feedback fetch failed', feedbackResult.error);
+      setFeedbackSubmissions([]);
+    } else {
+      setFeedbackSubmissions((feedbackResult.data || []).map(mapClassFeedbackRow));
     }
     setIsLoading(false);
   }, [client, id]);
@@ -840,19 +870,21 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
     const reviewedAttempts = attempts.filter(attempt => !attempt.needsReview);
     const passRate = reviewedAttempts.length ? Math.round((reviewedAttempts.filter(attempt => attempt.passed).length / reviewedAttempts.length) * 100) : 0;
     const pendingReview = attempts.filter(attempt => attempt.needsReview).length;
-    return { participantCount, average, passRate, pendingReview };
-  }, [attempts]);
+    const averageRating = feedbackSubmissions.length ? (feedbackSubmissions.reduce((sum, feedback) => sum + feedback.rating, 0) / feedbackSubmissions.length).toFixed(1) : '—';
+    return { participantCount, average, passRate, pendingReview, feedbackCount: feedbackSubmissions.length, averageRating };
+  }, [attempts, feedbackSubmissions]);
 
   const exportCsv = () => {
     const rows = [
-      ['Nama', 'Email', 'Nilai', 'Status', 'Percobaan', 'Feedback Kelas', 'Jawaban', 'Waktu Submit'],
-      ...attempts.map(attempt => [attempt.participantName, attempt.participantEmail, attempt.score, attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus', attempt.attemptNumber, attempt.classFeedback || '', JSON.stringify(attempt.answers), new Date(attempt.submittedAt).toLocaleString('id-ID')])
+      ['Tipe', 'Nama', 'Email Peserta', 'Email Sertifikat', 'Nilai', 'Status', 'Percobaan', 'Rating', 'Feedback', 'Jawaban', 'Waktu Submit'],
+      ...attempts.map(attempt => ['Post-Test', attempt.participantName, attempt.participantEmail, '', attempt.score, attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus', attempt.attemptNumber, '', attempt.classFeedback || '', JSON.stringify(attempt.answers), new Date(attempt.submittedAt).toLocaleString('id-ID')]),
+      ...feedbackSubmissions.map(feedback => ['Feedback Kelas', feedback.participantName, feedback.participantEmail, feedback.certificateEmail, '', 'Selesai', '', feedback.rating, feedback.feedback, '', new Date(feedback.submittedAt).toLocaleString('id-ID')])
     ];
     const csv = rows.map(row => row.map(escapeCsv).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
     const anchor = document.createElement('a');
     anchor.href = url;
-    anchor.download = `hasil-post-test-${id}.csv`;
+    anchor.download = `hasil-kelas-${id}.csv`;
     anchor.click();
     URL.revokeObjectURL(url);
   };
@@ -862,30 +894,33 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
         <div>
           <Link to="/admin/classes" className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)] mb-3"><ArrowLeft size={14} /> Daftar Kelas</Link>
-          <h1 className="text-3xl font-bold">Hasil Post-Test</h1>
-          <p className="text-sm text-[var(--muted)] mt-1">{course?.title || 'Kelas Recording'}</p>
+          <h1 className="text-3xl font-bold">Hasil Kelas</h1>
+          <p className="text-sm text-[var(--muted)] mt-1">{course?.title || 'Kelas Recording'} · Post-test dan feedback keseluruhan</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" icon={RefreshCw} onClick={fetchAttempts}>Refresh</Button>
-          <Button icon={FileDown} disabled={attempts.length === 0} onClick={exportCsv}>Export CSV</Button>
+          <Button icon={FileDown} disabled={attempts.length === 0 && feedbackSubmissions.length === 0} onClick={exportCsv}>Export CSV</Button>
         </div>
       </div>
 
-      <div className="grid sm:grid-cols-2 lg:grid-cols-4 gap-4">
+      <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-4">
         <Card><p className="text-xs text-[var(--muted)]">Peserta Unik</p><p className="text-3xl font-bold mt-2">{stats.participantCount}</p></Card>
         <Card><p className="text-xs text-[var(--muted)]">Rata-rata Nilai</p><p className="text-3xl font-bold mt-2">{stats.average}</p></Card>
         <Card><p className="text-xs text-[var(--muted)]">Tingkat Kelulusan</p><p className="text-3xl font-bold mt-2">{stats.passRate}%</p></Card>
         <Card><p className="text-xs text-[var(--muted)]">Menunggu Review</p><p className="text-3xl font-bold mt-2">{stats.pendingReview}</p></Card>
+        <Card><p className="text-xs text-[var(--muted)]">Feedback Masuk</p><p className="text-3xl font-bold mt-2">{stats.feedbackCount}</p></Card>
+        <Card><p className="text-xs text-[var(--muted)]">Rating Rata-rata</p><p className="text-3xl font-bold mt-2">{stats.averageRating}</p></Card>
       </div>
 
       {isLoading ? (
         <Card className="py-14 flex items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat hasil peserta...</Card>
       ) : loadError ? (
         <Card className="text-center py-12 space-y-4"><XCircle size={30} className="mx-auto text-[var(--danger-text)]" /><p className="text-sm text-[var(--danger-text)]">{loadError}</p><Button variant="secondary" onClick={fetchAttempts} className="mx-auto">Coba Lagi</Button></Card>
-      ) : attempts.length === 0 ? (
-        <Card className="text-center py-14"><ClipboardCheck size={31} className="mx-auto text-[var(--muted)] mb-3" /><p className="font-semibold">Belum ada hasil post-test</p><p className="text-sm text-[var(--muted)] mt-1">Data akan muncul setelah peserta mengirim jawaban.</p></Card>
+      ) : attempts.length === 0 && feedbackSubmissions.length === 0 ? (
+        <Card className="text-center py-14"><ClipboardCheck size={31} className="mx-auto text-[var(--muted)] mb-3" /><p className="font-semibold">Belum ada hasil kelas</p><p className="text-sm text-[var(--muted)] mt-1">Data akan muncul setelah peserta mengirim post-test atau feedback keseluruhan.</p></Card>
       ) : (
         <>
+          {attempts.length > 0 && <>
           <div className="hidden md:block overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
             <table className="w-full text-left text-sm">
               <thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]">
@@ -922,6 +957,20 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
               </Card>
             ))}
           </div>
+          </>}
+
+          {feedbackSubmissions.length > 0 && (
+            <section className="space-y-4">
+              <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Evaluasi Akhir</p><h2 className="text-xl font-bold mt-2">Feedback Keseluruhan</h2></div>
+              <div className="hidden md:block overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]"><tr><th className="p-4">Peserta</th><th className="p-4">Rating</th><th className="p-4">Email Sertifikat</th><th className="p-4">Feedback</th><th className="p-4">Dikirim</th></tr></thead>
+                  <tbody>{feedbackSubmissions.map(feedback => <tr key={feedback.id} className="border-t border-[var(--border)]"><td className="p-4"><p className="font-semibold">{feedback.participantName}</p><p className="text-xs text-[var(--muted)] mt-1">{feedback.participantEmail}</p></td><td className="p-4 font-bold">{feedback.rating}/5</td><td className="p-4 text-xs break-all">{feedback.certificateEmail}</td><td className="p-4 max-w-md whitespace-pre-wrap text-[var(--muted)]">{feedback.feedback}</td><td className="p-4 text-xs text-[var(--muted)]">{new Date(feedback.submittedAt).toLocaleString('id-ID')}</td></tr>)}</tbody>
+                </table>
+              </div>
+              <div className="md:hidden space-y-3">{feedbackSubmissions.map(feedback => <Card key={feedback.id} className="space-y-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{feedback.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{feedback.participantEmail}</p></div><span className="px-2 py-1 rounded-lg bg-[var(--success-soft)] text-[var(--success-text)] text-xs font-semibold">{feedback.rating}/5</span></div><p className="text-xs text-[var(--muted)] break-all">Sertifikat: {feedback.certificateEmail}</p><p className="text-sm whitespace-pre-wrap">{feedback.feedback}</p></Card>)}</div>
+            </section>
+          )}
         </>
       )}
     </div>
@@ -949,6 +998,18 @@ export const PublicRecordedClassView: React.FC<{
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submissionError, setSubmissionError] = useState<string | null>(null);
   const [result, setResult] = useState<QuizSubmissionResult | null>(null);
+  const [activeTab, setActiveTab] = useState<PublicClassTab>('materials');
+  const [completedModuleIds, setCompletedModuleIds] = useState<string[]>([]);
+  const [certificateEmail, setCertificateEmail] = useState('');
+  const [feedbackRating, setFeedbackRating] = useState('');
+  const [overallFeedback, setOverallFeedback] = useState('');
+  const [isFeedbackSubmitting, setIsFeedbackSubmitting] = useState(false);
+  const [feedbackSubmitted, setFeedbackSubmitted] = useState(false);
+  const [feedbackError, setFeedbackError] = useState<string | null>(null);
+  const autoOpenedFeedbackRef = useRef(false);
+
+  const progressStorageKey = `arunika-class-progress:${courseId}`;
+  const allMaterialsCompleted = Boolean(course && course.modules.length > 0 && course.modules.every(module => completedModuleIds.includes(module.id)));
 
   const fetchClass = useCallback(async () => {
     setIsLoading(true);
@@ -1008,6 +1069,39 @@ export const PublicRecordedClassView: React.FC<{
 
   useEffect(() => { void fetchClass(); }, [fetchClass]);
 
+  useEffect(() => {
+    if (!courseId || typeof window === 'undefined') return;
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(progressStorageKey) || '[]');
+      if (Array.isArray(stored)) {
+        const validModuleIds = new Set((course?.modules || []).map(module => module.id));
+        setCompletedModuleIds(stored.filter((value): value is string => typeof value === 'string' && validModuleIds.has(value)));
+      }
+    } catch {
+      setCompletedModuleIds([]);
+    }
+  }, [course, courseId, progressStorageKey]);
+
+  useEffect(() => {
+    if (allMaterialsCompleted && !autoOpenedFeedbackRef.current) {
+      autoOpenedFeedbackRef.current = true;
+      setActiveTab('feedback');
+    }
+  }, [allMaterialsCompleted]);
+
+  const markModuleComplete = (moduleId: string) => {
+    setCompletedModuleIds(current => {
+      if (current.includes(moduleId)) return current;
+      const next = [...current, moduleId];
+      try {
+        window.localStorage.setItem(progressStorageKey, JSON.stringify(next));
+      } catch {
+        // Progress tetap berjalan selama tab ini terbuka bila storage diblokir.
+      }
+      return next;
+    });
+  };
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     if (!quiz || !client) return;
@@ -1046,6 +1140,52 @@ export const PublicRecordedClassView: React.FC<{
       setSubmissionError(timedOut ? 'Server terlalu lama merespons. Jawaban belum dapat dipastikan tersimpan; tunggu sebentar sebelum mencoba lagi.' : databaseErrorMessage(error));
     } finally {
       setIsSubmitting(false);
+    }
+  };
+
+  const handleOverallFeedbackSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!client || !allMaterialsCompleted) {
+      setFeedbackError('Selesaikan semua materi sebelum mengirim feedback keseluruhan.');
+      return;
+    }
+    if (!participantName.trim() || !participantEmail.trim()) {
+      setFeedbackError('Nama dan email peserta wajib diisi.');
+      return;
+    }
+    if (!certificateEmail.trim()) {
+      setFeedbackError('Email untuk sertifikat wajib diisi.');
+      return;
+    }
+    if (!feedbackRating) {
+      setFeedbackError('Pilih penilaian kelas dari 1 sampai 5.');
+      return;
+    }
+    if (!overallFeedback.trim()) {
+      setFeedbackError('Feedback keseluruhan wajib diisi.');
+      return;
+    }
+
+    setIsFeedbackSubmitting(true);
+    setFeedbackError(null);
+    try {
+      const { data, error } = await withRequestTimeout<any>(client.rpc('submit_class_feedback', {
+        p_course_id: courseId,
+        p_participant_name: participantName.trim(),
+        p_participant_email: participantEmail.trim(),
+        p_certificate_email: certificateEmail.trim(),
+        p_rating: Number(feedbackRating),
+        p_feedback: overallFeedback.trim(),
+        p_completed_module_ids: completedModuleIds
+      }) as PromiseLike<any>);
+      if (error) throw error;
+      if (!data) throw new Error('FEEDBACK_SUBMIT_FAILED');
+      setFeedbackSubmitted(true);
+    } catch (error) {
+      const timedOut = error instanceof Error && error.message === 'REQUEST_TIMEOUT';
+      setFeedbackError(timedOut ? 'Server terlalu lama merespons. Silakan coba lagi.' : databaseErrorMessage(error));
+    } finally {
+      setIsFeedbackSubmitting(false);
     }
   };
 
@@ -1093,9 +1233,21 @@ export const PublicRecordedClassView: React.FC<{
           </div>
         </section>
 
-        <div className="grid lg:grid-cols-3 gap-6 lg:gap-8 items-start">
-          <div className="lg:col-span-2 space-y-8 min-w-0">
-            <section className="space-y-4">
+        <div role="tablist" aria-label="Bagian kelas" className="grid grid-cols-1 sm:grid-cols-3 gap-2 p-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
+          <button type="button" role="tab" aria-selected={activeTab === 'materials'} onClick={() => setActiveTab('materials')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'materials' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>
+            Materi <span className="text-xs font-normal ml-1">({completedModuleIds.length}/{course.modules.length})</span>
+          </button>
+          <button type="button" role="tab" aria-selected={activeTab === 'post_test'} onClick={() => setActiveTab('post_test')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'post_test' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>
+            <ClipboardCheck size={15} className="inline-block mr-2 -mt-0.5" />Post-Test
+          </button>
+          <button type="button" role="tab" aria-selected={activeTab === 'feedback'} disabled={!allMaterialsCompleted} onClick={() => allMaterialsCompleted && setActiveTab('feedback')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'feedback' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : allMaterialsCompleted ? 'text-[var(--muted)] hover:bg-[var(--surface-soft)]' : 'text-[var(--muted)]/60 cursor-not-allowed'}`} title={!allMaterialsCompleted ? 'Selesaikan semua materi terlebih dahulu' : undefined}>
+            {allMaterialsCompleted ? <CheckCircle2 size={15} className="inline-block mr-2 -mt-0.5" /> : <LockKeyhole size={14} className="inline-block mr-2 -mt-0.5" />}Feedback Kelas
+          </button>
+        </div>
+
+        <div className={activeTab === 'materials' ? 'grid lg:grid-cols-3 gap-6 lg:gap-8 items-start' : 'max-w-4xl mx-auto'}>
+          <div className={activeTab === 'materials' ? 'lg:col-span-2 space-y-8 min-w-0' : 'min-w-0'}>
+            {activeTab === 'materials' && <section className="space-y-4">
               <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Materi Kelas</p><h2 className="text-2xl font-bold mt-2">Tonton Recording</h2></div>
               {selectedModule ? (
                 <Card className="!p-0 overflow-hidden">
@@ -1104,14 +1256,24 @@ export const PublicRecordedClassView: React.FC<{
                   ) : (
                     <div className="p-6 md:p-9 min-h-[260px] whitespace-pre-wrap leading-7 text-sm md:text-base">{selectedModule.content}</div>
                   )}
-                  <div className="p-5 md:p-7 border-t border-[var(--border)]"><Badge>{selectedModule.type === 'video' ? 'Recording' : 'Materi Teks'}</Badge><h3 className="text-xl font-semibold mt-3">{selectedModule.title}</h3>{selectedModule.description && <p className="text-sm text-[var(--muted)] leading-7 mt-3 whitespace-pre-wrap">{selectedModule.description}</p>}</div>
+                  <div className="p-5 md:p-7 border-t border-[var(--border)]">
+                    <Badge>{selectedModule.type === 'video' ? 'Recording' : 'Materi Teks'}</Badge>
+                    <h3 className="text-xl font-semibold mt-3">{selectedModule.title}</h3>
+                    {selectedModule.description && <p className="text-sm text-[var(--muted)] leading-7 mt-3 whitespace-pre-wrap">{selectedModule.description}</p>}
+                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6 pt-5 border-t border-[var(--border)]">
+                      <p className="text-xs text-[var(--muted)]">{completedModuleIds.length} dari {course.modules.length} materi selesai</p>
+                      <Button type="button" variant={completedModuleIds.includes(selectedModule.id) ? 'green' : 'secondary'} icon={completedModuleIds.includes(selectedModule.id) ? CheckCircle2 : Check} onClick={() => markModuleComplete(selectedModule.id)} disabled={completedModuleIds.includes(selectedModule.id)} className="text-xs">
+                        {completedModuleIds.includes(selectedModule.id) ? 'Materi selesai' : 'Tandai selesai'}
+                      </Button>
+                    </div>
+                  </div>
                 </Card>
               ) : (
                 <Card className="py-12 text-center text-sm text-[var(--muted)]">Materi kelas belum ditambahkan.</Card>
               )}
-            </section>
+            </section>}
 
-            <section id="post-test" className="space-y-5 scroll-mt-24">
+            {activeTab === 'post_test' && <section id="post-test" className="space-y-5 scroll-mt-24">
               <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Evaluasi</p><h2 className="text-2xl font-bold mt-2">Post-Test Kelas</h2></div>
               {isQuizLoading ? (
                 <Card className="py-10 flex items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat post-test...</Card>
@@ -1191,10 +1353,51 @@ export const PublicRecordedClassView: React.FC<{
                   </form>
                 </Card>
               )}
-            </section>
+            </section>}
+
+            {activeTab === 'feedback' && (
+              <section id="class-feedback" className="space-y-5 scroll-mt-24">
+                <div>
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Setelah Materi Selesai</p>
+                  <h2 className="text-2xl font-bold mt-2">Feedback Keseluruhan Kelas</h2>
+                  <p className="text-sm text-[var(--muted)] leading-relaxed mt-2">Bagikan pengalaman Anda setelah menyelesaikan seluruh materi. Email sertifikat akan dicatat sesuai alamat yang Anda masukkan.</p>
+                </div>
+                {feedbackSubmitted ? (
+                  <Card className="p-8 md:p-10 text-center space-y-4">
+                    <CheckCircle2 size={48} className="mx-auto text-[var(--success-text)]" />
+                    <div><h3 className="text-xl font-semibold">Feedback berhasil dikirim</h3><p className="text-sm text-[var(--muted)] mt-2">Terima kasih. Email sertifikat Anda sudah tercatat.</p></div>
+                    <Button variant="secondary" className="mx-auto" onClick={() => setFeedbackSubmitted(false)}>Ubah Feedback</Button>
+                  </Card>
+                ) : (
+                  <Card className="p-5 md:p-8">
+                    <form onSubmit={handleOverallFeedbackSubmit} className="space-y-6">
+                      <div className="grid md:grid-cols-2 gap-4">
+                        <Input label="Nama Lengkap" icon={UserRound} value={participantName} onChange={event => setParticipantName(event.target.value)} required />
+                        <Input label="Email Peserta" icon={Mail} type="email" value={participantEmail} onChange={event => setParticipantEmail(event.target.value)} required />
+                      </div>
+                      <Input label="Email untuk Sertifikat" icon={Mail} type="email" value={certificateEmail} onChange={event => setCertificateEmail(event.target.value)} placeholder="email penerima sertifikat" required />
+                      <SelectField label="Penilaian Kelas" value={feedbackRating} onChange={event => setFeedbackRating(event.target.value)} required>
+                        <option value="">Pilih penilaian</option>
+                        <option value="5">5 — Sangat puas</option>
+                        <option value="4">4 — Puas</option>
+                        <option value="3">3 — Cukup</option>
+                        <option value="2">2 — Kurang</option>
+                        <option value="1">1 — Sangat kurang</option>
+                      </SelectField>
+                      <div>
+                        <Textarea label="Feedback Keseluruhan" value={overallFeedback} onChange={event => setOverallFeedback(event.target.value)} placeholder="Apa yang paling membantu? Apa yang perlu ditingkatkan?" className="min-h-[180px]" maxLength={5000} required />
+                        <p className="text-[11px] text-[var(--muted)] text-right mt-1">{overallFeedback.length}/5.000</p>
+                      </div>
+                      {feedbackError && <div className="p-4 rounded-xl bg-[var(--danger-soft)] border border-[var(--border)] text-sm text-[var(--danger-text)]">{feedbackError}</div>}
+                      <Button type="submit" icon={CheckCircle2} isLoading={isFeedbackSubmitting} disabled={isFeedbackSubmitting} className="w-full">Kirim Feedback & Simpan Email Sertifikat</Button>
+                    </form>
+                  </Card>
+                )}
+              </section>
+            )}
           </div>
 
-          <aside className="space-y-5 lg:sticky lg:top-24 lg:pt-16 min-w-0">
+          {activeTab === 'materials' && <aside className="space-y-5 lg:sticky lg:top-24 lg:pt-16 min-w-0">
             <Card className="text-center">
               <div className="w-16 h-16 rounded-full overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)] mx-auto">
                 {mentor.photo ? <img src={mentor.photo} alt={mentor.name} className="w-full h-full object-cover" /> : <UserRound size={26} className="m-5 text-[var(--muted)]" />}
@@ -1207,7 +1410,7 @@ export const PublicRecordedClassView: React.FC<{
               <h2 className="font-semibold flex items-center gap-2"><BookOpen size={18} className="text-[var(--accent-strong)]" /> Daftar Materi</h2>
               {course.modules.map((module, index) => (
                 <button key={module.id} type="button" onClick={() => setSelectedModule(module)} className={`w-full text-left p-3 rounded-xl border transition-colors ${selectedModule?.id === module.id ? 'bg-[var(--accent-soft)] border-[var(--border-strong)]' : 'border-transparent hover:bg-[var(--surface-soft)]'}`}>
-                  <div className="flex gap-3"><span className="w-8 h-8 rounded-lg border border-[var(--border)] bg-[var(--surface)] flex items-center justify-center text-xs font-semibold flex-shrink-0">{index + 1}</span><div className="min-w-0"><p className="text-xs font-semibold break-words leading-snug">{module.title}</p><p className="text-[10px] text-[var(--muted)] mt-1">{module.duration || (module.type === 'video' ? 'Video' : 'Teks')}</p></div></div>
+                  <div className="flex gap-3"><span className={`w-8 h-8 rounded-lg border flex items-center justify-center text-xs font-semibold flex-shrink-0 ${completedModuleIds.includes(module.id) ? 'bg-[var(--success-soft)] border-[var(--border)] text-[var(--success-text)]' : 'border-[var(--border)] bg-[var(--surface)]'}`}>{completedModuleIds.includes(module.id) ? <Check size={15} /> : index + 1}</span><div className="min-w-0"><p className="text-xs font-semibold break-words leading-snug">{module.title}</p><p className="text-[10px] text-[var(--muted)] mt-1">{completedModuleIds.includes(module.id) ? 'Selesai' : module.duration || (module.type === 'video' ? 'Video' : 'Teks')}</p></div></div>
                 </button>
               ))}
               {course.modules.length === 0 && <p className="text-xs text-[var(--muted)]">Belum ada materi.</p>}
@@ -1223,7 +1426,7 @@ export const PublicRecordedClassView: React.FC<{
                 ))}
               </Card>
             )}
-          </aside>
+          </aside>}
         </div>
       </main>
     </div>
