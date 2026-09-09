@@ -251,15 +251,24 @@ const normalizeWhatsAppNumber = (value: string) => {
   return digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
 };
 
-const createWhatsAppLink = (phone: string, form: FormDefinition, responderName: string, responderEmail: string, responseId?: string) => {
+const createWhatsAppLink = (phone: string, form: FormDefinition, responderName: string, responderEmail: string, answers: Record<string, string | string[]>, responseId?: string) => {
   const normalizedPhone = normalizeWhatsAppNumber(phone);
   if (!normalizedPhone) return '';
+  const classField = form.fields.find(field => /kelas|class|paket|batch/i.test(field.label) || field.type === 'multiple_choice' || field.type === 'dropdown');
+  const selectedClass = classField ? formatAnswer(answers[classField.id]).trim() : '';
+  const className = selectedClass || form.eventName || 'Sesuai pendaftaran';
+  const transferAmount = form.paymentAmount || 'Sesuai nominal yang ditransfer';
   const message = [
-    `Halo, saya ${responderName}.`,
-    `Saya sudah mengisi form ${form.title} untuk event ${form.eventName}.`,
-    `Email: ${responderEmail}.`,
-    responseId ? `ID pendaftaran: ${responseId}.` : '',
-    'Mohon konfirmasi pendaftaran dan pembayaran saya.'
+    'Halo, saya ingin mengonfirmasi bahwa saya sudah melakukan pembayaran.',
+    '',
+    `Nama: ${responderName}`,
+    `Email: ${responderEmail}`,
+    `Pilihan kelas: ${className}`,
+    `Nominal transfer: ${transferAmount}`,
+    responseId ? `ID pendaftaran: ${responseId}` : '',
+    '',
+    `Saya sudah menyelesaikan pembayaran untuk ${form.title}. Mohon bantu cek dan konfirmasi pendaftaran saya. Jika diperlukan, saya siap mengirimkan bukti transfer melalui chat ini.`,
+    'Terima kasih.'
   ].filter(Boolean).join('\n');
   return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;
 };
@@ -656,7 +665,7 @@ export const PublicFormView: React.FC<{ client: any }> = ({ client }) => {
     const paymentQrCode = submitted.paymentQrCode || form.paymentQrCode;
     const paymentAccountNumber = submitted.paymentAccountNumber || form.paymentAccountNumber;
     const paymentWhatsapp = submitted.paymentWhatsapp || form.paymentWhatsapp;
-    const whatsappLink = createWhatsAppLink(paymentWhatsapp, form, responderName, responderEmail, submitted.responseId);
+    const whatsappLink = createWhatsAppLink(paymentWhatsapp, form, responderName, responderEmail, values, submitted.responseId);
     return (
       <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8">
         <div className="mx-auto max-w-2xl space-y-6">
@@ -678,7 +687,7 @@ export const PublicFormView: React.FC<{ client: any }> = ({ client }) => {
               {paymentAccountNumber && <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-xs font-semibold text-[var(--muted)]">Nomor rekening</p><p className="mt-1 break-words text-sm font-semibold">{paymentAccountNumber}</p></div>}
               {paymentQrCode && <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 text-center"><p className="mb-3 text-xs font-semibold text-[var(--muted)]">QR Code pembayaran</p><img src={paymentQrCode} alt="QR Code pembayaran" className="mx-auto max-h-64 max-w-full object-contain" /></div>}
               {(submitted.paymentLink || form.paymentLink) && <a className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-strong)] hover:underline" href={submitted.paymentLink || form.paymentLink} target="_blank" rel="noreferrer">Buka link pembayaran <ExternalLink size={15} /></a>}
-              {whatsappLink && <a className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-4 py-3 text-sm font-semibold text-white hover:brightness-95" href={whatsappLink} target="_blank" rel="noreferrer"><Phone size={16} /> Konfirmasi via WhatsApp</a>}
+              {whatsappLink && <a className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-4 py-3 text-sm font-semibold text-white hover:brightness-95" href={whatsappLink} target="_blank" rel="noreferrer"><Phone size={16} /> Saya sudah melakukan pembayaran</a>}
             </div>}
             {mode === 'redirect' && (submitted.redirectUrl || form.redirectUrl) && <a className="mx-auto inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 font-semibold text-white" href={submitted.redirectUrl || form.redirectUrl} target="_blank" rel="noreferrer">Lanjutkan <ExternalLink size={16} /></a>}
           </Card>
