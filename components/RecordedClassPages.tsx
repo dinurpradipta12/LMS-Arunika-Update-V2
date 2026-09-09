@@ -171,6 +171,20 @@ const getVideoEmbedUrl = (value: string) => {
 
 const escapeCsv = (value: unknown) => `"${String(value ?? '').replace(/"/g, '""')}"`;
 
+const plainText = (value: unknown) => String(value ?? '')
+  .replace(/&lt;/gi, '<')
+  .replace(/&gt;/gi, '>')
+  .replace(/&quot;/gi, '"')
+  .replace(/&#39;|&apos;/gi, "'")
+  .replace(/&amp;/gi, '&')
+  .replace(/<br\s*\/?>/gi, '\n')
+  .replace(/<\/(p|div|li|h[1-6]|blockquote)>/gi, '\n')
+  .replace(/<[^>]*>/g, '')
+  .replace(/&nbsp;/gi, ' ')
+  .replace(/[ \t]+\n/g, '\n')
+  .replace(/\n{3,}/g, '\n\n')
+  .trim();
+
 const withRequestTimeout = <T,>(request: PromiseLike<T>, timeoutMs = 15000): Promise<T> => new Promise((resolve, reject) => {
   const timeoutId = window.setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), timeoutMs);
   Promise.resolve(request).then(
@@ -236,6 +250,215 @@ const CopyLinkModal: React.FC<{ url: string | null; onClose: () => void }> = ({ 
         <p className="text-sm text-[var(--muted)] leading-relaxed mt-2">Salin link berikut untuk membagikan kelas kepada peserta.</p>
         <Input label="Link kelas" value={url} readOnly onFocus={event => event.currentTarget.select()} className="mt-5 text-xs" />
         <div className="flex justify-end mt-6">
+          <Button variant="secondary" onClick={onClose}>Tutup</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const questionTypeLabel = (type: QuizQuestionType | string | undefined) => {
+  if (type === 'long_answer') return 'Jawaban panjang';
+  if (type === 'true_false') return 'Benar / Salah';
+  return 'Pilihan ganda';
+};
+
+const AnswerReviewModal: React.FC<{
+  attempt: QuizAttempt;
+  quiz: CourseQuiz | null;
+  overallFeedback: ClassFeedbackSubmission | null;
+  onClose: () => void;
+}> = ({ attempt, quiz, overallFeedback, onClose }) => {
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  const answerEntries = useMemo(() => {
+    const answers = attempt.answers || {};
+    const knownQuestionIds = new Set<string>();
+    const entries: Array<{
+      id: string;
+      number: number;
+      prompt: string;
+      answer: string;
+      rawAnswer: string;
+      type: QuizQuestionType | string;
+      correct: boolean | null;
+      correctAnswer: string;
+    }> = [];
+
+    (quiz?.questions || []).forEach((question, index) => {
+      knownQuestionIds.add(question.id);
+      const type = question.type || 'multiple_choice';
+      const rawAnswer = String(answers[question.id] ?? '').trim();
+      const expectedAnswer = String(question.correctAnswer ?? '').trim();
+      entries.push({
+        id: question.id,
+        number: index + 1,
+        prompt: plainText(question.prompt) || `Pertanyaan ${index + 1}`,
+        answer: plainText(rawAnswer) || 'Tidak ada jawaban',
+        rawAnswer,
+        type,
+        correct: type === 'long_answer' || !rawAnswer || !expectedAnswer
+          ? type === 'long_answer' ? null : rawAnswer ? null : false
+          : rawAnswer.toLowerCase() === expectedAnswer.toLowerCase(),
+        correctAnswer: plainText(expectedAnswer)
+      });
+    });
+
+    Object.entries(answers).forEach(([answerId, value], index) => {
+      if (knownQuestionIds.has(answerId)) return;
+      const rawAnswer = String(value ?? '').trim();
+      entries.push({
+        id: answerId,
+        number: entries.length + 1,
+        prompt: `Pertanyaan tambahan ${index + 1}`,
+        answer: plainText(rawAnswer) || 'Tidak ada jawaban',
+        rawAnswer,
+        type: 'long_answer',
+        correct: null,
+        correctAnswer: ''
+      });
+    });
+
+    return entries;
+  }, [attempt.answers, quiz]);
+
+  const statusLabel = attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum lulus';
+  const statusClass = attempt.needsReview
+    ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
+    : attempt.passed
+      ? 'bg-[var(--success-soft)] text-[var(--success-text)]'
+      : 'bg-[var(--danger-soft)] text-[var(--danger-text)]';
+  const submittedAt = attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString('id-ID') : '—';
+  const postTestFeedback = plainText(attempt.classFeedback);
+  const overallFeedbackText = plainText(overallFeedback?.feedback);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="arunika-answer-review-title"
+        className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl"
+        onMouseDown={event => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-5 sm:p-6">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Detail Peserta</p>
+            <h2 id="arunika-answer-review-title" className="mt-2 text-xl font-bold">{attempt.participantName}</h2>
+            <p className="mt-1 break-all text-sm text-[var(--muted)]">{attempt.participantEmail}</p>
+          </div>
+          <button
+            type="button"
+            aria-label="Tutup detail peserta"
+            onClick={onClose}
+            className="rounded-xl p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"
+          >
+            <X size={19} />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5 sm:p-6">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Nilai</p>
+              <p className="mt-1 text-lg font-bold">{attempt.score}</p>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Status</p>
+              <span className={`mt-1 inline-flex rounded-lg px-2 py-1 text-xs font-semibold ${statusClass}`}>{statusLabel}</span>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Percobaan</p>
+              <p className="mt-1 text-lg font-bold">#{attempt.attemptNumber}</p>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Dikirim</p>
+              <p className="mt-1 text-xs font-semibold leading-relaxed">{submittedAt}</p>
+            </div>
+          </div>
+
+          <section className="space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Feedback</p>
+              <h3 className="mt-1 text-lg font-bold">Feedback kelas peserta</h3>
+            </div>
+            {postTestFeedback || overallFeedback ? (
+              <div className="grid gap-3 md:grid-cols-2">
+                {postTestFeedback && (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+                    <p className="text-xs font-semibold text-[var(--muted)]">Feedback saat post-test</p>
+                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{postTestFeedback}</p>
+                  </div>
+                )}
+                {overallFeedback && (
+                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <p className="text-xs font-semibold text-[var(--muted)]">Feedback keseluruhan kelas</p>
+                      <span className="rounded-lg bg-[var(--success-soft)] px-2 py-1 text-xs font-semibold text-[var(--success-text)]">{overallFeedback.rating}/5</span>
+                    </div>
+                    {overallFeedbackText && <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{overallFeedbackText}</p>}
+                    <p className="mt-3 break-all text-xs text-[var(--muted)]">Email sertifikat: {overallFeedback.certificateEmail || '—'}</p>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">Peserta ini belum mengirim feedback kelas.</div>
+            )}
+          </section>
+
+          <section className="space-y-3">
+            <div className="flex flex-wrap items-end justify-between gap-2">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Jawaban</p>
+                <h3 className="mt-1 text-lg font-bold">Jawaban post-test</h3>
+              </div>
+              <p className="text-xs text-[var(--muted)]">{answerEntries.length} pertanyaan</p>
+            </div>
+            {answerEntries.length > 0 ? (
+              <div className="space-y-3">
+                {answerEntries.map(entry => (
+                  <article key={`${attempt.id}-${entry.id}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <p className="min-w-0 flex-1 text-sm font-semibold leading-relaxed">
+                        <span className="mr-2 text-[var(--muted)]">{entry.number}.</span>{entry.prompt}
+                      </p>
+                      <span className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{questionTypeLabel(entry.type)}</span>
+                    </div>
+                    <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Jawaban peserta</p>
+                      <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{entry.answer}</p>
+                    </div>
+                    {entry.type === 'long_answer' ? (
+                      <p className="mt-2 text-xs font-semibold text-[var(--accent-strong)]">Jawaban panjang menunggu review admin.</p>
+                    ) : entry.correct === true ? (
+                      <p className="mt-2 text-xs font-semibold text-[var(--success-text)]">Jawaban benar.</p>
+                    ) : entry.rawAnswer && entry.correctAnswer ? (
+                      <p className="mt-2 text-xs font-semibold text-[var(--danger-text)]">Jawaban benar: {entry.correctAnswer}</p>
+                    ) : (
+                      <p className="mt-2 text-xs font-semibold text-[var(--muted)]">Belum ada jawaban yang dapat dinilai.</p>
+                    )}
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">Tidak ada jawaban yang tersimpan untuk percobaan ini.</div>
+            )}
+          </section>
+        </div>
+
+        <div className="flex justify-end border-t border-[var(--border)] p-4 sm:p-5">
           <Button variant="secondary" onClick={onClose}>Tutup</Button>
         </div>
       </div>
@@ -921,6 +1144,8 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
   const course = courses.find(item => item.id === id);
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
   const [feedbackSubmissions, setFeedbackSubmissions] = useState<ClassFeedbackSubmission[]>([]);
+  const [quiz, setQuiz] = useState<CourseQuiz | null>(null);
+  const [selectedAttempt, setSelectedAttempt] = useState<QuizAttempt | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -932,9 +1157,10 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
     }
     setIsLoading(true);
     setLoadError(null);
-    const [attemptResult, feedbackResult] = await Promise.all([
+    const [attemptResult, feedbackResult, quizResult] = await Promise.all([
       client.from('quiz_attempts').select('*').eq('course_id', id).order('submitted_at', { ascending: false }),
-      client.from('class_feedback_submissions').select('*').eq('course_id', id).order('created_at', { ascending: false })
+      client.from('class_feedback_submissions').select('*').eq('course_id', id).order('created_at', { ascending: false }),
+      client.from('course_quizzes').select('*').eq('course_id', id).maybeSingle()
     ]);
     if (attemptResult.error) {
       console.error('Quiz result fetch failed', attemptResult.error);
@@ -948,6 +1174,13 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
     } else {
       setFeedbackSubmissions((feedbackResult.data || []).map(mapClassFeedbackRow));
     }
+    if (quizResult.error) {
+      console.warn('Quiz result question fetch failed', quizResult.error);
+      setQuiz(null);
+    } else {
+      setQuiz(quizResult.data ? mapQuizRow(quizResult.data) : null);
+    }
+    setSelectedAttempt(null);
     setIsLoading(false);
   }, [client, id]);
 
@@ -1024,13 +1257,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
                     <td className="p-4">#{attempt.attemptNumber}</td>
                     <td className="p-4 text-xs text-[var(--muted)]">{new Date(attempt.submittedAt).toLocaleString('id-ID')}</td>
                     <td className="p-4">
-                      <details className="max-w-sm">
-                        <summary className="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">Lihat jawaban</summary>
-                        <div className="mt-3 space-y-3 text-xs">
-                          {attempt.classFeedback && <div><p className="font-semibold">Feedback kelas</p><p className="mt-1 whitespace-pre-wrap text-[var(--muted)]">{attempt.classFeedback}</p></div>}
-                          <div><p className="font-semibold">Jawaban</p><pre className="mt-1 max-h-40 overflow-auto whitespace-pre-wrap break-words text-[var(--muted)]">{JSON.stringify(attempt.answers, null, 2)}</pre></div>
-                        </div>
-                      </details>
+                      <button type="button" onClick={() => setSelectedAttempt(attempt)} className="text-xs font-semibold text-[var(--accent-strong)] hover:underline">Lihat jawaban</button>
                     </td>
                   </tr>
                 ))}
@@ -1042,7 +1269,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
               <Card key={attempt.id} className="space-y-4">
                 <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold truncate">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{attempt.participantEmail}</p></div><span className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</span></div>
                 <div className="grid grid-cols-3 gap-3 text-xs"><div><p className="text-[var(--muted)]">Nilai</p><p className="font-bold text-lg mt-1">{attempt.score}</p></div><div><p className="text-[var(--muted)]">Percobaan</p><p className="font-semibold mt-2">#{attempt.attemptNumber}</p></div><div><p className="text-[var(--muted)]">Dikirim</p><p className="font-semibold mt-2">{new Date(attempt.submittedAt).toLocaleDateString('id-ID')}</p></div></div>
-                <details className="border-t border-[var(--border)] pt-3"><summary className="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">Lihat jawaban dan feedback</summary><div className="mt-3 space-y-3 text-xs">{attempt.classFeedback && <div><p className="font-semibold">Feedback kelas</p><p className="mt-1 whitespace-pre-wrap text-[var(--muted)]">{attempt.classFeedback}</p></div>}<div><p className="font-semibold">Jawaban</p><pre className="mt-1 max-h-48 overflow-auto whitespace-pre-wrap break-words text-[var(--muted)]">{JSON.stringify(attempt.answers, null, 2)}</pre></div></div></details>
+                <button type="button" onClick={() => setSelectedAttempt(attempt)} className="border-t border-[var(--border)] pt-3 text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline">Lihat jawaban dan feedback</button>
               </Card>
             ))}
           </div>
@@ -1061,6 +1288,14 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
             </section>
           )}
         </>
+      )}
+      {selectedAttempt && (
+        <AnswerReviewModal
+          attempt={selectedAttempt}
+          quiz={quiz}
+          overallFeedback={feedbackSubmissions.find(feedback => feedback.participantEmail.trim().toLowerCase() === selectedAttempt.participantEmail.trim().toLowerCase()) || null}
+          onClose={() => setSelectedAttempt(null)}
+        />
       )}
     </div>
   );
