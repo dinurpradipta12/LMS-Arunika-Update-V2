@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, CheckCircle2, ClipboardList, Copy, Download, ExternalLink, FileDown, Link as LinkIcon, Loader2, Mail, MoveDown, MoveUp, Plus, RefreshCw, Save, Trash2, Users, XCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Check, CheckCircle2, ClipboardList, Copy, Download, ExternalLink, FileDown, ImagePlus, Link as LinkIcon, Loader2, Mail, MoveDown, MoveUp, Phone, Plus, RefreshCw, Save, Trash2, Upload, Users, XCircle } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import {
@@ -71,6 +71,9 @@ const createDefaultForm = (): FormDefinition => ({
   postSubmitMessage: 'Tim kami akan menghubungi Anda untuk langkah berikutnya.',
   paymentInstructions: '',
   paymentLink: '',
+  paymentQrCode: '',
+  paymentAccountNumber: '',
+  paymentWhatsapp: '',
   redirectUrl: '',
   allowMultiple: true
 });
@@ -101,6 +104,9 @@ const mapFormRow = (row: any): FormDefinition => ({
   postSubmitMessage: String(row?.post_submit_message ?? row?.postSubmitMessage ?? 'Tim kami akan menghubungi Anda untuk langkah berikutnya.'),
   paymentInstructions: String(row?.payment_instructions ?? row?.paymentInstructions ?? ''),
   paymentLink: String(row?.payment_link ?? row?.paymentLink ?? ''),
+  paymentQrCode: String(row?.payment_qr_code ?? row?.paymentQrCode ?? ''),
+  paymentAccountNumber: String(row?.payment_account_number ?? row?.paymentAccountNumber ?? ''),
+  paymentWhatsapp: String(row?.payment_whatsapp ?? row?.paymentWhatsapp ?? ''),
   redirectUrl: String(row?.redirect_url ?? row?.redirectUrl ?? ''),
   allowMultiple: row?.allow_multiple ?? row?.allowMultiple !== false,
   createdAt: row?.created_at ?? row?.createdAt,
@@ -135,6 +141,9 @@ const formWriteRow = (form: FormDefinition) => ({
   post_submit_message: form.postSubmitMessage,
   payment_instructions: form.paymentInstructions,
   payment_link: form.paymentLink,
+  payment_qr_code: form.paymentQrCode,
+  payment_account_number: form.paymentAccountNumber,
+  payment_whatsapp: form.paymentWhatsapp,
   redirect_url: form.redirectUrl,
   allow_multiple: form.allowMultiple,
   updated_at: new Date().toISOString()
@@ -230,6 +239,97 @@ const FormFieldEditor: React.FC<{
         Wajib diisi
       </label>
     </Card>
+  );
+};
+
+const normalizeWhatsAppNumber = (value: string) => {
+  const digits = value.replace(/[^\d]/g, '');
+  if (!digits) return '';
+  return digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
+};
+
+const createWhatsAppLink = (phone: string, form: FormDefinition, responderName: string, responderEmail: string, responseId?: string) => {
+  const normalizedPhone = normalizeWhatsAppNumber(phone);
+  if (!normalizedPhone) return '';
+  const message = [
+    `Halo, saya ${responderName}.`,
+    `Saya sudah mengisi form ${form.title} untuk event ${form.eventName}.`,
+    `Email: ${responderEmail}.`,
+    responseId ? `ID pendaftaran: ${responseId}.` : '',
+    'Mohon konfirmasi pendaftaran dan pembayaran saya.'
+  ].filter(Boolean).join('\n');
+  return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;
+};
+
+const PaymentQrUploader: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Pilih file gambar QR Code.');
+      return;
+    }
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('QR Code gagal dibaca.'));
+        reader.onload = () => {
+          const image = new Image();
+          image.onerror = () => reject(new Error('Format QR Code tidak didukung.'));
+          image.onload = () => {
+            const maxSize = 1000;
+            const scale = Math.min(1, maxSize / Math.max(image.width, image.height));
+            const canvas = document.createElement('canvas');
+            canvas.width = Math.max(1, Math.round(image.width * scale));
+            canvas.height = Math.max(1, Math.round(image.height * scale));
+            const context = canvas.getContext('2d');
+            if (!context) return reject(new Error('QR Code gagal diproses.'));
+            context.imageSmoothingEnabled = false;
+            context.drawImage(image, 0, 0, canvas.width, canvas.height);
+            resolve(canvas.toDataURL('image/png'));
+          };
+          image.src = String(reader.result);
+        };
+        reader.readAsDataURL(file);
+      });
+      if (dataUrl.length > 1_500_000) {
+        setError('Ukuran QR Code terlalu besar. Gunakan gambar yang lebih kecil.');
+        return;
+      }
+      onChange(dataUrl);
+    } catch (uploadError: any) {
+      setError(uploadError?.message || 'QR Code gagal diproses.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted)]">QR Code pembayaran</p>
+          <p className="mt-1 text-xs text-[var(--muted)]">Upload gambar QR atau gunakan URL gambar.</p>
+        </div>
+        {value && <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus QR</button>}
+      </div>
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+        {value ? <img src={value} alt="QR Code pembayaran" className="mx-auto max-h-48 max-w-full object-contain" /> : <div className="flex min-h-32 flex-col items-center justify-center gap-2 text-center text-sm text-[var(--muted)]"><ImagePlus size={28} /><span>Belum ada QR Code</span></div>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        <Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing}>Upload QR Code</Button>
+      </div>
+      <Input label="URL QR Code (opsional)" value={value.startsWith('data:') ? '' : value} onChange={event => onChange(event.target.value)} placeholder="https://.../qr-code.png" />
+      {error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}
+    </div>
   );
 };
 
@@ -389,7 +489,7 @@ export const FormEditorPage: React.FC<{ client: any }> = ({ client }) => {
 
       <section className="space-y-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Builder</p><h2 className="mt-2 text-2xl font-bold">Pertanyaan form</h2><p className="mt-1 text-sm text-[var(--muted)]">Nama dan email responder selalu dicatat otomatis. Tambahkan pertanyaan lain sesuai kebutuhan event.</p></div><div className="flex flex-wrap gap-2">{(['short_text', 'long_text', 'multiple_choice', 'checkbox'] as FormFieldType[]).map(type => <Button key={type} variant="secondary" className="text-xs px-3" icon={Plus} onClick={() => setForm({ ...form, fields: [...form.fields, createField(type, form.fields.length)] })}>{FIELD_TYPES.find(item => item.value === type)?.label}</Button>)}</div></div>{form.fields.map((field, index) => <FormFieldEditor key={field.id} field={field} index={index} total={form.fields.length} onChange={patch => updateField(index, patch)} onRemove={() => setForm({ ...form, fields: form.fields.filter((_, fieldIndex) => fieldIndex !== index) })} onMove={direction => moveField(index, direction)} />)}{form.fields.length === 0 && <Card className="border-dashed py-12 text-center text-sm text-[var(--muted)]">Belum ada pertanyaan tambahan. Nama dan email responder tetap tersedia di form publik.</Card>}</section>
 
-      <Card className="space-y-5"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Setelah submit</p><h2 className="mt-2 text-xl font-bold">Halaman lanjutan responder</h2><p className="mt-1 text-sm text-[var(--muted)]">Atur informasi yang dilihat peserta sebelum status mereka diubah menjadi terkonfirmasi atau paid oleh admin.</p></div><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Jenis halaman setelah dikirim</span><select value={form.postSubmitMode} onChange={event => setForm({ ...form, postSubmitMode: event.target.value as FormPostSubmitMode })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">{POST_SUBMIT_MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select></label><p className="-mt-2 text-xs text-[var(--muted)]">{POST_SUBMIT_MODES.find(mode => mode.value === form.postSubmitMode)?.description}</p><div className="grid gap-4 md:grid-cols-2"><Input label="Judul halaman" value={form.postSubmitTitle} onChange={event => setForm({ ...form, postSubmitTitle: event.target.value })} /><Textarea label="Pesan konfirmasi" value={form.postSubmitMessage} onChange={event => setForm({ ...form, postSubmitMessage: event.target.value })} className="min-h-[100px]" /></div>{form.postSubmitMode === 'payment' && <div className="grid gap-4 md:grid-cols-2"><Textarea label="Instruksi pembayaran" value={form.paymentInstructions} onChange={event => setForm({ ...form, paymentInstructions: event.target.value })} placeholder="Transfer ke rekening..., kirim bukti ke..." /><Input label="Link pembayaran (opsional)" value={form.paymentLink} onChange={event => setForm({ ...form, paymentLink: event.target.value })} placeholder="https://..." /></div>}{form.postSubmitMode === 'redirect' && <Input label="URL halaman lanjutan" value={form.redirectUrl} onChange={event => setForm({ ...form, redirectUrl: event.target.value })} placeholder="https://..." />}</Card>
+      <Card className="space-y-5"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Setelah submit</p><h2 className="mt-2 text-xl font-bold">Halaman lanjutan responder</h2><p className="mt-1 text-sm text-[var(--muted)]">Atur informasi yang dilihat peserta sebelum status mereka diubah menjadi terkonfirmasi atau paid oleh admin.</p></div><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Jenis halaman setelah dikirim</span><select value={form.postSubmitMode} onChange={event => setForm({ ...form, postSubmitMode: event.target.value as FormPostSubmitMode })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">{POST_SUBMIT_MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select></label><p className="-mt-2 text-xs text-[var(--muted)]">{POST_SUBMIT_MODES.find(mode => mode.value === form.postSubmitMode)?.description}</p><div className="grid gap-4 md:grid-cols-2"><Input label="Judul halaman" value={form.postSubmitTitle} onChange={event => setForm({ ...form, postSubmitTitle: event.target.value })} /><Textarea label="Pesan konfirmasi" value={form.postSubmitMessage} onChange={event => setForm({ ...form, postSubmitMessage: event.target.value })} className="min-h-[100px]" /></div>{form.postSubmitMode === 'payment' && <div className="space-y-5"><div className="grid gap-4 md:grid-cols-2"><Textarea label="Instruksi pembayaran" value={form.paymentInstructions} onChange={event => setForm({ ...form, paymentInstructions: event.target.value })} placeholder="Transfer ke rekening..., kirim bukti ke..." /><Input label="Link pembayaran (opsional)" value={form.paymentLink} onChange={event => setForm({ ...form, paymentLink: event.target.value })} placeholder="https://..." /></div><div className="grid gap-4 md:grid-cols-2"><Input label="Nomor rekening pembayaran (opsional)" value={form.paymentAccountNumber} onChange={event => setForm({ ...form, paymentAccountNumber: event.target.value })} icon={Phone} placeholder="Contoh: 1234567890 a.n. Arunika" /><Input label="Nomor WhatsApp konfirmasi" value={form.paymentWhatsapp} onChange={event => setForm({ ...form, paymentWhatsapp: event.target.value })} icon={Phone} placeholder="Contoh: 62812xxxxxxx" /></div><PaymentQrUploader value={form.paymentQrCode} onChange={paymentQrCode => setForm({ ...form, paymentQrCode })} /><p className="text-xs text-[var(--muted)]">Nomor WhatsApp dipakai untuk membuat tombol konfirmasi otomatis di halaman responder.</p></div>}{form.postSubmitMode === 'redirect' && <Input label="URL halaman lanjutan" value={form.redirectUrl} onChange={event => setForm({ ...form, redirectUrl: event.target.value })} placeholder="https://..." />}</Card>
     </div>
   );
 };
@@ -549,7 +649,37 @@ export const PublicFormView: React.FC<{ client: any }> = ({ client }) => {
 
   if (submitted) {
     const mode = submitted.postSubmitMode || form.postSubmitMode;
-    return <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8"><div className="mx-auto max-w-2xl space-y-6"><header className="flex items-center gap-3"><img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" /><div><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{FORM_MAKER_SPACE_LABEL}</p><p className="font-semibold">{form.eventName}</p></div></header><Card className="space-y-5 py-10 text-center"><CheckCircle2 size={48} className="mx-auto text-[var(--success-text)]" /><div><h1 className="text-2xl font-bold">{submitted.postSubmitTitle || form.postSubmitTitle}</h1><p className="mx-auto mt-3 max-w-xl whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{submitted.postSubmitMessage || form.postSubmitMessage}</p></div><Badge color="var(--accent-soft)">Status: Menunggu konfirmasi</Badge>{mode === 'payment' && <div className="mx-auto max-w-xl rounded-xl bg-[var(--surface-soft)] p-5 text-left"><p className="text-sm font-semibold">Informasi pembayaran</p><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{submitted.paymentInstructions || form.paymentInstructions || 'Informasi pembayaran akan diberikan oleh penyelenggara.'}</p>{(submitted.paymentLink || form.paymentLink) && <a className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-strong)] hover:underline" href={submitted.paymentLink || form.paymentLink} target="_blank" rel="noreferrer">Buka link pembayaran <ExternalLink size={15} /></a>}</div>}{mode === 'redirect' && (submitted.redirectUrl || form.redirectUrl) && <a className="mx-auto inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 font-semibold text-white" href={submitted.redirectUrl || form.redirectUrl} target="_blank" rel="noreferrer">Lanjutkan <ExternalLink size={16} /></a>}</Card></div></div>;
+    const paymentQrCode = submitted.paymentQrCode || form.paymentQrCode;
+    const paymentAccountNumber = submitted.paymentAccountNumber || form.paymentAccountNumber;
+    const paymentWhatsapp = submitted.paymentWhatsapp || form.paymentWhatsapp;
+    const whatsappLink = createWhatsAppLink(paymentWhatsapp, form, responderName, responderEmail, submitted.responseId);
+    return (
+      <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8">
+        <div className="mx-auto max-w-2xl space-y-6">
+          <header className="flex items-center gap-3">
+            <img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" />
+            <div><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{FORM_MAKER_SPACE_LABEL}</p><p className="font-semibold">{form.eventName}</p></div>
+          </header>
+          <Card className="space-y-5 py-10 text-center">
+            <CheckCircle2 size={48} className="mx-auto text-[var(--success-text)]" />
+            <div>
+              <h1 className="text-2xl font-bold">{submitted.postSubmitTitle || form.postSubmitTitle}</h1>
+              <p className="mx-auto mt-3 max-w-xl whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{submitted.postSubmitMessage || form.postSubmitMessage}</p>
+            </div>
+            <Badge color="var(--accent-soft)">Status: Menunggu konfirmasi</Badge>
+            {mode === 'payment' && <div className="mx-auto w-full max-w-xl space-y-4 rounded-xl bg-[var(--surface-soft)] p-5 text-left">
+              <p className="text-sm font-semibold">Informasi pembayaran</p>
+              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{submitted.paymentInstructions || form.paymentInstructions || 'Informasi pembayaran akan diberikan oleh penyelenggara.'}</p>
+              {paymentAccountNumber && <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-xs font-semibold text-[var(--muted)]">Nomor rekening</p><p className="mt-1 break-words text-sm font-semibold">{paymentAccountNumber}</p></div>}
+              {paymentQrCode && <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 text-center"><p className="mb-3 text-xs font-semibold text-[var(--muted)]">QR Code pembayaran</p><img src={paymentQrCode} alt="QR Code pembayaran" className="mx-auto max-h-64 max-w-full object-contain" /></div>}
+              {(submitted.paymentLink || form.paymentLink) && <a className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-strong)] hover:underline" href={submitted.paymentLink || form.paymentLink} target="_blank" rel="noreferrer">Buka link pembayaran <ExternalLink size={15} /></a>}
+              {whatsappLink && <a className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-4 py-3 text-sm font-semibold text-white hover:brightness-95" href={whatsappLink} target="_blank" rel="noreferrer"><Phone size={16} /> Konfirmasi via WhatsApp</a>}
+            </div>}
+            {mode === 'redirect' && (submitted.redirectUrl || form.redirectUrl) && <a className="mx-auto inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 font-semibold text-white" href={submitted.redirectUrl || form.redirectUrl} target="_blank" rel="noreferrer">Lanjutkan <ExternalLink size={16} /></a>}
+          </Card>
+        </div>
+      </div>
+    );
   }
 
   return (

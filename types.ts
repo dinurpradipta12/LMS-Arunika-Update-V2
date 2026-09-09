@@ -183,6 +183,9 @@ export interface FormDefinition {
   postSubmitMessage: string;
   paymentInstructions: string;
   paymentLink: string;
+  paymentQrCode: string;
+  paymentAccountNumber: string;
+  paymentWhatsapp: string;
   redirectUrl: string;
   allowMultiple: boolean;
   createdAt?: string;

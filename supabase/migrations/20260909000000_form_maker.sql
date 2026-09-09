@@ -20,6 +20,9 @@ create table if not exists public.form_forms (
   post_submit_message text not null default 'Tim kami akan menghubungi Anda untuk langkah berikutnya.',
   payment_instructions text not null default '',
   payment_link text not null default '',
+  payment_qr_code text not null default '',
+  payment_account_number text not null default '',
+  payment_whatsapp text not null default '',
   redirect_url text not null default '',
   allow_multiple boolean not null default true,
   created_by uuid references auth.users(id) on delete set null,
@@ -187,6 +190,9 @@ as $$
     'postSubmitMessage', form.post_submit_message,
     'paymentInstructions', form.payment_instructions,
     'paymentLink', form.payment_link,
+    'paymentQrCode', form.payment_qr_code,
+    'paymentAccountNumber', form.payment_account_number,
+    'paymentWhatsapp', form.payment_whatsapp,
     'redirectUrl', form.redirect_url
   )
   from public.form_forms as form
@@ -345,6 +351,9 @@ begin
     'postSubmitMessage', v_form.post_submit_message,
     'paymentInstructions', v_form.payment_instructions,
     'paymentLink', v_form.payment_link,
+    'paymentQrCode', v_form.payment_qr_code,
+    'paymentAccountNumber', v_form.payment_account_number,
+    'paymentWhatsapp', v_form.payment_whatsapp,
     'redirectUrl', v_form.redirect_url
   );
 end;
