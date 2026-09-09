@@ -680,14 +680,19 @@ export const PublicFormView: React.FC<{ client: any }> = ({ client }) => {
               <p className="mx-auto mt-3 max-w-xl whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{submitted.postSubmitMessage || form.postSubmitMessage}</p>
             </div>
             <Badge color="var(--accent-soft)">Status: Menunggu konfirmasi</Badge>
-            {mode === 'payment' && <div className="mx-auto w-full max-w-xl space-y-4 rounded-xl bg-[var(--surface-soft)] p-5 text-left">
-              <p className="text-sm font-semibold">Informasi pembayaran</p>
-              <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{submitted.paymentInstructions || form.paymentInstructions || 'Informasi pembayaran akan diberikan oleh penyelenggara.'}</p>
-              {paymentAmount && <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-xs font-semibold text-[var(--muted)]">Nominal pembayaran</p><p className="mt-1 break-words text-lg font-bold text-[var(--accent-strong)]">{paymentAmount}</p></div>}
-              {paymentAccountNumber && <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-xs font-semibold text-[var(--muted)]">Nomor rekening</p><p className="mt-1 break-words text-sm font-semibold">{paymentAccountNumber}</p></div>}
-              {paymentQrCode && <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-4 text-center"><p className="mb-3 text-xs font-semibold text-[var(--muted)]">QR Code pembayaran</p><img src={paymentQrCode} alt="QR Code pembayaran" className="mx-auto max-h-64 max-w-full object-contain" /></div>}
-              {(submitted.paymentLink || form.paymentLink) && <a className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-strong)] hover:underline" href={submitted.paymentLink || form.paymentLink} target="_blank" rel="noreferrer">Buka link pembayaran <ExternalLink size={15} /></a>}
-              {whatsappLink && <a className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-4 py-3 text-sm font-semibold text-white hover:brightness-95" href={whatsappLink} target="_blank" rel="noreferrer"><Phone size={16} /> Saya sudah melakukan pembayaran</a>}
+            {mode === 'payment' && <div className="mx-auto grid w-full max-w-xl items-start gap-4 rounded-xl bg-[var(--surface-soft)] p-4 text-left sm:p-5 lg:grid-cols-[minmax(0,1fr)_220px]">
+              <div className="space-y-4">
+                <p className="text-sm font-semibold">Informasi pembayaran</p>
+                <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{submitted.paymentInstructions || form.paymentInstructions || 'Informasi pembayaran akan diberikan oleh penyelenggara.'}</p>
+                {paymentAmount && <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-xs font-semibold text-[var(--muted)]">Nominal pembayaran</p><p className="mt-1 break-words text-lg font-bold text-[var(--accent-strong)]">{paymentAmount}</p></div>}
+                {paymentAccountNumber && <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-xs font-semibold text-[var(--muted)]">Nomor rekening</p><p className="mt-1 break-words text-sm font-semibold">{paymentAccountNumber}</p></div>}
+                {(submitted.paymentLink || form.paymentLink) && <a className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-strong)] hover:underline" href={submitted.paymentLink || form.paymentLink} target="_blank" rel="noreferrer">Buka link pembayaran <ExternalLink size={15} /></a>}
+                {whatsappLink ? <a className="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-4 py-3 text-sm font-semibold text-white hover:brightness-95" href={whatsappLink} target="_blank" rel="noreferrer"><Phone size={16} /> Saya sudah melakukan pembayaran</a> : <div className="space-y-2"><button type="button" disabled className="inline-flex w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-[#128c7e]/50 px-4 py-3 text-sm font-semibold text-white"><Phone size={16} /> Saya sudah melakukan pembayaran</button><p className="text-xs leading-relaxed text-[var(--muted)]">Tombol akan aktif setelah nomor WhatsApp konfirmasi diatur oleh penyelenggara.</p></div>}
+              </div>
+              <div className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3 text-center">
+                <p className="mb-3 text-xs font-semibold text-[var(--muted)]">QR Code pembayaran</p>
+                {paymentQrCode ? <img src={paymentQrCode} alt="QR Code pembayaran" className="mx-auto max-h-52 w-full object-contain" /> : <p className="py-12 text-xs leading-relaxed text-[var(--muted)]">QR Code belum tersedia.</p>}
+              </div>
             </div>}
             {mode === 'redirect' && (submitted.redirectUrl || form.redirectUrl) && <a className="mx-auto inline-flex items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 font-semibold text-white" href={submitted.redirectUrl || form.redirectUrl} target="_blank" rel="noreferrer">Lanjutkan <ExternalLink size={16} /></a>}
           </Card>
