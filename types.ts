@@ -154,3 +154,54 @@ export interface SupabaseConfig {
   url: string;
   anonKey: string;
 }
+
+export type FormFieldType = 'short_text' | 'long_text' | 'email' | 'link' | 'number' | 'multiple_choice' | 'dropdown' | 'checkbox' | 'date';
+
+export interface FormField {
+  id: string;
+  type: FormFieldType;
+  label: string;
+  description: string;
+  placeholder: string;
+  required: boolean;
+  options: string[];
+}
+
+export type FormStatus = 'draft' | 'published' | 'archived';
+export type FormPostSubmitMode = 'confirmation' | 'payment' | 'redirect';
+
+export interface FormDefinition {
+  id: string;
+  slug: string;
+  title: string;
+  eventName: string;
+  description: string;
+  status: FormStatus;
+  fields: FormField[];
+  postSubmitMode: FormPostSubmitMode;
+  postSubmitTitle: string;
+  postSubmitMessage: string;
+  paymentInstructions: string;
+  paymentLink: string;
+  redirectUrl: string;
+  allowMultiple: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export type FormResponseStatus = 'pending' | 'confirmed' | 'paid' | 'cancelled';
+
+export interface FormResponse {
+  id: string;
+  formId: string;
+  responderName: string;
+  responderEmail: string;
+  answers: Record<string, string | string[]>;
+  status: FormResponseStatus;
+  paymentReference: string;
+  adminNote: string;
+  submittedAt: string;
+  confirmedAt?: string | null;
+  paidAt?: string | null;
+  updatedAt?: string;
+}

@@ -36,6 +36,7 @@ import {
   RefreshCw,
   Check,
   BarChart2,
+  ClipboardList,
   TrendingUp,
   Users,
   Eye,
@@ -76,6 +77,13 @@ import {
   SpacesDashboard,
   RECORDED_CLASS_SPACE_LABEL
 } from './components/RecordedClassPages';
+import {
+  FormEditorPage,
+  FormMakerPage,
+  FormResponsesPage,
+  PublicFormView,
+  FORM_MAKER_SPACE_LABEL
+} from './components/FormMakerPages';
 import logoUtama from './src/logo-utama.png';
 import faviconLogo from './src/favicon.png';
 
@@ -744,6 +752,13 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname.startsWith('/admin/classes') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
           >
             <Video size={18} /> {RECORDED_CLASS_SPACE_LABEL}
+          </Link>
+          <Link
+            to="/admin/forms"
+            onClick={() => { if(window.innerWidth < 768) onClose(); }}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname.startsWith('/admin/forms') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
+          >
+            <ClipboardList size={18} /> {FORM_MAKER_SPACE_LABEL}
           </Link>
           <Link 
             to="/analytics" 
@@ -1764,7 +1779,7 @@ const App: React.FC = () => {
   const isSyncingRef = useRef(false);
   const lastLocalUpdateRef = useRef<number>(0);
   const isAdmin = authStatus === 'admin';
-  const isPublicCourseRoute = /^\/(?:c|course|class)\//.test(location.pathname);
+  const isPublicCourseRoute = /^\/(?:c|course|class|form)\//.test(location.pathname);
 
   useEffect(() => {
     // Hapus otorisasi dan cache data lama yang sebelumnya dipercaya dari localStorage.
@@ -2084,11 +2099,15 @@ const App: React.FC = () => {
         <Route path="/admin/classes" element={renderAdminPage(<RecordedClassesPage courses={courses} onCreateCourse={handleUpdateCourse} onDeleteCourse={handleDeleteCourse} generateShareLink={courseId => generateShareLink(courseId, 'class')} copyText={copyTextToClipboard} />)} />
         <Route path="/admin/classes/:id" element={renderAdminPage(<RecordedClassEditor courses={courses} client={getAdminSupabaseClient()} onSaveCourse={handleUpdateCourse} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} />)} />
         <Route path="/admin/classes/:id/results" element={renderAdminPage(<ClassResultsPage courses={courses} client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/forms" element={renderAdminPage(<FormMakerPage client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/forms/:id/responses" element={renderAdminPage(<FormResponsesPage client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/forms/:id" element={renderAdminPage(<FormEditorPage client={getAdminSupabaseClient()} />)} />
         <Route path="/analytics" element={renderAdminPage(<AnalyticsPage courses={courses} supabase={PUBLIC_SUPABASE_CONFIG} />)} />
         <Route path="/settings" element={renderAdminPage(<Settings />)} />
         <Route path="/c/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} usesShortCode />} />
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} />} />
         <Route path="/class/:id" element={<PublicRecordedClassView client={getPublicSupabaseClient()} mentor={mentor} resolveCourseId={getCourseIdFromPublicCode} />} />
+        <Route path="/form/:slug" element={<PublicFormView client={getPublicSupabaseClient()} />} />
         <Route path="/" element={authStatus === 'loading' ? <AuthLoading /> : <Navigate to={isAdmin ? '/admin' : '/login'} replace />} />
       </Routes>
     </div>

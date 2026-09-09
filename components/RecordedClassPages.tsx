@@ -597,6 +597,23 @@ export const SpacesDashboard: React.FC<{ courses: Course[] }> = ({ courses }) =>
             <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--success-text)] mt-7">Buka ruang <ChevronRight size={16} /></span>
           </Card>
         </Link>
+
+        <Link to="/admin/forms" className="group block">
+          <Card className="h-full p-7 md:p-8 group-hover:border-[var(--border-strong)]">
+            <div className="w-12 h-12 rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)] flex items-center justify-center mb-6">
+              <ClipboardCheck size={23} />
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 03</p>
+                <h2 className="text-xl font-bold mt-2">Form Maker</h2>
+              </div>
+              <Badge>Event</Badge>
+            </div>
+            <p className="text-sm text-[var(--muted)] mt-4 leading-relaxed">Bangun form pendaftaran, kumpulkan responder, dan kelola status konfirmasi atau pembayaran.</p>
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-strong)] mt-7">Buka ruang <ChevronRight size={16} /></span>
+          </Card>
+        </Link>
       </div>
     </div>
   );

@@ -13,8 +13,9 @@ SQL tidak dapat dijalankan dengan anon key. Buka target project di Supabase Dash
 5. Jalankan `../migrations/20260907030000_long_answer_and_class_feedback.sql` seluruhnya untuk jawaban panjang dan feedback post-test.
 6. Jalankan `../migrations/20260907040000_class_feedback_and_completion.sql` seluruhnya untuk feedback akhir kelas dan email sertifikat.
 7. Jalankan `../migrations/20260908000000_overall_feedback_visibility.sql` seluruhnya untuk pengaturan tampil/sembunyi tab feedback akhir kelas.
-8. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
-9. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
+8. Jalankan `../migrations/20260909000000_form_maker.sql` seluruhnya untuk ruang Form Maker, form publik, responder, dan status pembayaran/konfirmasi.
+9. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
+10. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
 
 `01_schema.sql` sekarang fail-closed: semua tabel langsung memakai RLS tanpa policy terbuka. Halaman publik baru aktif setelah migration keamanan pada langkah 4 membuat policy yang hanya membaca konten `published`.
 
@@ -26,7 +27,8 @@ Untuk project `drezwxfgykkdnnwjrnnt` yang tabelnya sudah berisi data, tidak perl
 2. Jalankan `../migrations/20260907010000_secure_admin_auth_and_rls.sql` seluruhnya.
 3. Jalankan migration `20260907030000_long_answer_and_class_feedback.sql` dan `20260907040000_class_feedback_and_completion.sql` seluruhnya.
 4. Jalankan migration `20260908000000_overall_feedback_visibility.sql` seluruhnya.
-5. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
+5. Jalankan migration `20260909000000_form_maker.sql` seluruhnya.
+6. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
 
 Migration keamanan idempotent dan tidak menghapus kursus, analytics, quiz, ataupun hasil peserta. Begitu migration selesai, login lokal lama tidak berlaku lagi; gunakan email/password Supabase Auth yang dibuat pada langkah 1.
 
@@ -47,9 +49,13 @@ select 'events', count(*) from public.events
 union all
 select 'course_quizzes', count(*) from public.course_quizzes
 union all
-select 'quiz_attempts', count(*) from public.quiz_attempts;
--- Tambahkan setelah migration feedback akhir:
--- select 'class_feedback_submissions', count(*) from public.class_feedback_submissions;
+select 'quiz_attempts', count(*) from public.quiz_attempts
+union all
+select 'class_feedback_submissions', count(*) from public.class_feedback_submissions
+union all
+select 'form_forms', count(*) from public.form_forms
+union all
+select 'form_responses', count(*) from public.form_responses;
 ```
 
 Hasil minimum setelah langkah 1 dan 2:
@@ -60,6 +66,8 @@ Hasil minimum setelah langkah 1 dan 2:
 - `events`: 0 bila analytics dilewati, atau 2.017 bila langkah 3 dijalankan
 - `course_quizzes`: 0 karena tabel ini belum ada di database lama
 - `quiz_attempts`: 0 karena tabel ini belum ada di database lama
+- `form_forms`: 0 sebelum form pertama dibuat dari dashboard
+- `form_responses`: 0 sebelum form publik menerima responder
 
 Kelas Recording dan post-test baru dapat dibuat dari dashboard Arunika setelah schema keamanan dan akun admin tersedia.
 
@@ -82,7 +90,8 @@ join pg_namespace as n on n.oid = c.relnamespace
 where n.nspname = 'public'
   and c.relname in (
     'courses', 'mentor', 'branding', 'events',
-    'course_quizzes', 'quiz_attempts', 'class_feedback_submissions', 'public_content_revisions'
+    'course_quizzes', 'quiz_attempts', 'class_feedback_submissions',
+    'form_forms', 'form_responses', 'public_content_revisions'
   )
 order by c.relname;
 ```
@@ -95,7 +104,7 @@ from pg_publication_tables
 where pubname = 'supabase_realtime'
   and tablename in (
     'courses', 'mentor', 'branding', 'events', 'course_quizzes',
-    'quiz_attempts', 'public_content_revisions'
+    'quiz_attempts', 'form_forms', 'form_responses', 'public_content_revisions'
   )
 order by tablename;
 ```
