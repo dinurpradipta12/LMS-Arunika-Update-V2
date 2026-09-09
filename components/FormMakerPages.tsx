@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, CheckCircle2, ClipboardList, Copy, Download, ExternalLink, FileDown, ImagePlus, Link as LinkIcon, Loader2, Mail, MoveDown, MoveUp, Phone, Plus, RefreshCw, Save, Trash2, Upload, Users, XCircle } from 'lucide-react';
+import { ArrowLeft, Check, CheckCircle2, ClipboardList, Copy, Download, ExternalLink, FileDown, ImagePlus, Link as LinkIcon, Loader2, Mail, MoveDown, MoveUp, Phone, Plus, RefreshCw, Save, Trash2, Upload, Users, X, XCircle } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import {
@@ -649,6 +649,98 @@ export const FormEditorPage: React.FC<{ client: any }> = ({ client }) => {
   );
 };
 
+const FormResponseAnswerSheet: React.FC<{
+  response: FormResponse;
+  form: FormDefinition;
+  isClosing: boolean;
+  onClose: () => void;
+}> = ({ response, form, isClosing, onClose }) => {
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
+
+  useEffect(() => {
+    const previousActiveElement = document.activeElement as HTMLElement | null;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    window.requestAnimationFrame(() => closeButtonRef.current?.focus());
+    return () => {
+      document.removeEventListener('keydown', handleKeyDown);
+      document.body.style.overflow = previousOverflow;
+      previousActiveElement?.focus({ preventScroll: true });
+    };
+  }, [onClose]);
+
+  return (
+    <>
+      <div
+        className={`fixed inset-0 z-[1100] bg-slate-950/45 backdrop-blur-sm ${isClosing ? 'form-response-backdrop-exit' : 'form-response-backdrop-enter'}`}
+        role="presentation"
+        onMouseDown={event => {
+          if (event.target === event.currentTarget) onClose();
+        }}
+      />
+      <section
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="arunika-form-response-title"
+        className={`fixed inset-x-0 bottom-0 z-[1110] mx-auto flex max-h-[88vh] w-full max-w-4xl flex-col overflow-hidden rounded-t-3xl border border-b-0 border-[var(--border)] bg-[var(--surface)] shadow-2xl ${isClosing ? 'form-response-sheet-exit' : 'form-response-sheet-enter'}`}
+        onMouseDown={event => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-5 sm:p-6">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Detail responder</p>
+            <h2 id="arunika-form-response-title" className="mt-2 text-xl font-bold">{response.responderName}</h2>
+            <p className="mt-1 break-all text-sm text-[var(--muted)]">{response.responderEmail}</p>
+          </div>
+          <button
+            ref={closeButtonRef}
+            type="button"
+            aria-label="Tutup jawaban responder"
+            onClick={onClose}
+            className="rounded-xl p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"
+          >
+            <X size={20} />
+          </button>
+        </div>
+
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 sm:p-6">
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Status</p>
+              <p className="mt-1 text-sm font-semibold">{statusLabel(response.status)}</p>
+            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Dikirim</p>
+              <p className="mt-1 text-sm font-semibold">{formatDate(response.submittedAt)}</p>
+            </div>
+          </div>
+          <div className="space-y-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Jawaban form</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">Semua jawaban untuk {form.title}.</p>
+            </div>
+            {form.fields.length === 0 ? (
+              <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-4 text-sm text-[var(--muted)]">Tidak ada pertanyaan tambahan.</div>
+            ) : form.fields.map(field => (
+              <div key={field.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+                <p className="text-xs font-semibold text-[var(--muted)]">{field.label}</p>
+                <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{formatAnswer(response.answers[field.id]) || '—'}</p>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        <div className="flex justify-end border-t border-[var(--border)] p-4 sm:p-5">
+          <Button variant="secondary" onClick={onClose}>Tutup</Button>
+        </div>
+      </section>
+    </>
+  );
+};
+
 export const FormResponsesPage: React.FC<{ client: any }> = ({ client }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
@@ -656,6 +748,9 @@ export const FormResponsesPage: React.FC<{ client: any }> = ({ client }) => {
   const [responses, setResponses] = useState<FormResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [selectedResponse, setSelectedResponse] = useState<FormResponse | null>(null);
+  const [isAnswerSheetClosing, setIsAnswerSheetClosing] = useState(false);
+  const closeAnswerSheetTimer = useRef<number | null>(null);
 
   const fetchData = useCallback(async () => {
     if (!id || !client) return;
@@ -679,6 +774,26 @@ export const FormResponsesPage: React.FC<{ client: any }> = ({ client }) => {
     }, () => { void fetchData(); }).subscribe();
     return () => { void client.removeChannel(channel); };
   }, [client, fetchData, id]);
+
+  useEffect(() => () => {
+    if (closeAnswerSheetTimer.current) window.clearTimeout(closeAnswerSheetTimer.current);
+  }, []);
+
+  const openAnswerSheet = (response: FormResponse) => {
+    if (closeAnswerSheetTimer.current) window.clearTimeout(closeAnswerSheetTimer.current);
+    setIsAnswerSheetClosing(false);
+    setSelectedResponse(response);
+  };
+
+  const closeAnswerSheet = useCallback(() => {
+    if (!selectedResponse || isAnswerSheetClosing) return;
+    setIsAnswerSheetClosing(true);
+    closeAnswerSheetTimer.current = window.setTimeout(() => {
+      setSelectedResponse(null);
+      setIsAnswerSheetClosing(false);
+      closeAnswerSheetTimer.current = null;
+    }, 240);
+  }, [isAnswerSheetClosing, selectedResponse]);
 
   const stats = useMemo(() => ({
     total: responses.length,
@@ -723,7 +838,8 @@ export const FormResponsesPage: React.FC<{ client: any }> = ({ client }) => {
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><Link to="/admin/forms" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {FORM_MAKER_SPACE_LABEL}</Link><h1 className="text-3xl font-bold">Responder Form</h1><p className="mt-1 text-sm text-[var(--muted)]">{form.title} · {form.eventName}</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => navigate(`/admin/forms/${form.id}`)}>Edit Form</Button><Button icon={FileDown} disabled={!responses.length} onClick={exportCsv}>Export CSV</Button></div></div>
       <NoticeBanner notice={notice} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Card><p className="text-xs text-[var(--muted)]">Total Responder</p><p className="mt-2 text-3xl font-bold">{stats.total}</p></Card><Card><p className="text-xs text-[var(--muted)]">Menunggu</p><p className="mt-2 text-3xl font-bold">{stats.pending}</p></Card><Card><p className="text-xs text-[var(--muted)]">Terkonfirmasi</p><p className="mt-2 text-3xl font-bold">{stats.confirmed}</p></Card><Card><p className="text-xs text-[var(--muted)]">Paid</p><p className="mt-2 text-3xl font-bold">{stats.paid}</p></Card></div>
-      {responses.length === 0 ? <Card className="py-14 text-center"><Users size={32} className="mx-auto mb-3 text-[var(--muted)]" /><p className="font-semibold">Belum ada responder</p><p className="mt-1 text-sm text-[var(--muted)]">Data akan muncul setelah form publik dikirim.</p></Card> : <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]"><tr><th className="p-4">Responder</th><th className="p-4">Status</th><th className="p-4">Jawaban</th><th className="p-4">Dikirim</th><th className="p-4">Ubah Status</th></tr></thead><tbody>{responses.map(response => <tr key={response.id} className="border-t border-[var(--border)] align-top"><td className="p-4"><p className="font-semibold">{response.responderName}</p><p className="mt-1 text-xs text-[var(--muted)]">{response.responderEmail}</p></td><td className="p-4"><span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${statusClass(response.status)}`}>{statusLabel(response.status)}</span></td><td className="max-w-md p-4"><details><summary className="cursor-pointer text-xs font-semibold text-[var(--accent-strong)]">Lihat jawaban</summary><div className="mt-3 space-y-3">{form.fields.map(field => <div key={field.id}><p className="text-xs font-semibold text-[var(--muted)]">{field.label}</p><p className="mt-1 whitespace-pre-wrap break-words text-sm">{formatAnswer(response.answers[field.id]) || '—'}</p></div>)}</div></details></td><td className="p-4 text-xs text-[var(--muted)]">{formatDate(response.submittedAt)}</td><td className="p-4"><select value={response.status} onChange={event => void updateResponse(response, event.target.value as FormResponseStatus)} className="min-h-[40px] rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none focus:border-[var(--accent)]">{RESPONSE_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}</select></td></tr>)}</tbody></table></div>}
+      {responses.length === 0 ? <Card className="py-14 text-center"><Users size={32} className="mx-auto mb-3 text-[var(--muted)]" /><p className="font-semibold">Belum ada responder</p><p className="mt-1 text-sm text-[var(--muted)]">Data akan muncul setelah form publik dikirim.</p></Card> : <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]"><tr><th className="p-4">Responder</th><th className="p-4">Status</th><th className="p-4">Jawaban</th><th className="p-4">Dikirim</th><th className="p-4">Ubah Status</th></tr></thead><tbody>{responses.map(response => <tr key={response.id} className="border-t border-[var(--border)] align-top"><td className="p-4"><p className="font-semibold">{response.responderName}</p><p className="mt-1 text-xs text-[var(--muted)]">{response.responderEmail}</p></td><td className="p-4"><span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${statusClass(response.status)}`}>{statusLabel(response.status)}</span></td><td className="max-w-md p-4"><button type="button" onClick={() => openAnswerSheet(response)} className="inline-flex items-center gap-2 text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline" aria-label={`Lihat jawaban ${response.responderName}`}><span aria-hidden="true">▸</span>Lihat jawaban</button></td><td className="p-4 text-xs text-[var(--muted)]">{formatDate(response.submittedAt)}</td><td className="p-4"><select value={response.status} onChange={event => void updateResponse(response, event.target.value as FormResponseStatus)} className="min-h-[40px] rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none focus:border-[var(--accent)]">{RESPONSE_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}</select></td></tr>)}</tbody></table></div>}
+      {selectedResponse && <FormResponseAnswerSheet response={selectedResponse} form={form} isClosing={isAnswerSheetClosing} onClose={closeAnswerSheet} />}
     </div>
   );
 };
