@@ -6,6 +6,7 @@ begin;
 create schema if not exists private;
 
 alter table public.form_forms
+  add column if not exists payment_amount text not null default '',
   add column if not exists payment_qr_code text not null default '',
   add column if not exists payment_account_number text not null default '',
   add column if not exists payment_whatsapp text not null default '';
@@ -30,6 +31,7 @@ as $$
     'postSubmitMessage', form.post_submit_message,
     'paymentInstructions', form.payment_instructions,
     'paymentLink', form.payment_link,
+    'paymentAmount', form.payment_amount,
     'paymentQrCode', form.payment_qr_code,
     'paymentAccountNumber', form.payment_account_number,
     'paymentWhatsapp', form.payment_whatsapp,
@@ -57,6 +59,7 @@ where table_schema = 'public'
   and column_name in (
     'payment_qr_code',
     'payment_account_number',
-    'payment_whatsapp'
+    'payment_whatsapp',
+    'payment_amount'
   )
 order by column_name;

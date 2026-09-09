@@ -183,6 +183,7 @@ export interface FormDefinition {
   postSubmitMessage: string;
   paymentInstructions: string;
   paymentLink: string;
+  paymentAmount: string;
   paymentQrCode: string;
   paymentAccountNumber: string;
   paymentWhatsapp: string;

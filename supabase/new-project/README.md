@@ -14,7 +14,7 @@ SQL tidak dapat dijalankan dengan anon key. Buka target project di Supabase Dash
 6. Jalankan `../migrations/20260907040000_class_feedback_and_completion.sql` seluruhnya untuk feedback akhir kelas dan email sertifikat.
 7. Jalankan `../migrations/20260908000000_overall_feedback_visibility.sql` seluruhnya untuk pengaturan tampil/sembunyi tab feedback akhir kelas.
 8. Jalankan `../migrations/20260909000000_form_maker.sql` seluruhnya untuk ruang Form Maker, form publik, responder, dan status pembayaran/konfirmasi.
-9. Jalankan `../migrations/20260909010000_form_payment_contact.sql` seluruhnya untuk QR Code, nomor rekening, dan konfirmasi WhatsApp.
+9. Jalankan `../migrations/20260909010000_form_payment_contact.sql` seluruhnya untuk nominal pembayaran, QR Code, nomor rekening, dan konfirmasi WhatsApp.
 10. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
 11. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
 
