@@ -73,7 +73,8 @@ import {
   PublicRecordedClassView,
   RecordedClassEditor,
   RecordedClassesPage,
-  SpacesDashboard
+  SpacesDashboard,
+  RECORDED_CLASS_SPACE_LABEL
 } from './components/RecordedClassPages';
 import logoUtama from './src/logo-utama.png';
 import faviconLogo from './src/favicon.png';
@@ -742,7 +743,7 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
             onClick={() => { if(window.innerWidth < 768) onClose(); }}
             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname.startsWith('/admin/classes') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
           >
-            <Video size={18} /> Kelas Recording
+            <Video size={18} /> {RECORDED_CLASS_SPACE_LABEL}
           </Link>
           <Link 
             to="/analytics" 
@@ -1543,7 +1544,7 @@ const PublicCourseView: React.FC<{
         return;
       }
       if (c.space_type === 'recorded_class') {
-        setLoadError('Link ini adalah kelas recording. Gunakan link publik kelas yang tersedia di dashboard Kelas Recording.');
+        setLoadError(`Link ini adalah ${RECORDED_CLASS_SPACE_LABEL.toLowerCase()}. Gunakan link publik kelas yang tersedia di dashboard ${RECORDED_CLASS_SPACE_LABEL}.`);
         setIsLoading(false);
         return;
       }

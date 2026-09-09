@@ -43,8 +43,10 @@ import {
   QuizSubmissionResult
 } from '../types';
 import { Badge, Button, Card, Input, Textarea } from './UI';
+import logoUtama from '../src/logo-utama.png';
 
 const DEFAULT_QUIZ_TITLE = 'Post-Test Kelas';
+export const RECORDED_CLASS_SPACE_LABEL = 'Intensive & Mini Class Series';
 type PublicClassTab = 'materials' | 'post_test' | 'feedback';
 const PUBLIC_CLASS_CONTENT_CLASS = 'w-full max-w-4xl mx-auto';
 
@@ -535,7 +537,7 @@ const CoverUploader: React.FC<{ value: string; onChange: (value: string) => void
         ) : (
           <div className="text-center text-[var(--muted)] px-4">
             <Video size={28} className="mx-auto mb-2" />
-            <p className="text-xs">Cover kelas recording 16:9</p>
+            <p className="text-xs">Cover {RECORDED_CLASS_SPACE_LABEL} 16:9</p>
           </div>
         )}
       </div>
@@ -557,7 +559,7 @@ export const SpacesDashboard: React.FC<{ courses: Course[] }> = ({ courses }) =>
         <Badge>Learning Spaces</Badge>
         <h1 className="text-3xl font-bold mt-4">Pilih ruang yang ingin dikelola</h1>
         <p className="text-sm text-[var(--muted)] mt-2 max-w-2xl leading-relaxed">
-          Tutorial produk dan kelas recording memakai alur publik yang berbeda, sehingga materi produk tetap rapi sementara webinar dapat memiliki post-test dan hasil peserta.
+          Tutorial produk dan {RECORDED_CLASS_SPACE_LABEL} memakai alur publik yang berbeda, sehingga materi produk tetap rapi sementara webinar dapat memiliki post-test dan hasil peserta.
         </p>
       </div>
 
@@ -587,7 +589,7 @@ export const SpacesDashboard: React.FC<{ courses: Course[] }> = ({ courses }) =>
             <div className="flex items-start justify-between gap-4">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 02</p>
-                <h2 className="text-xl font-bold mt-2">Kelas Recording</h2>
+                <h2 className="text-xl font-bold mt-2">{RECORDED_CLASS_SPACE_LABEL}</h2>
               </div>
               <Badge color="var(--success-soft)">{classCount} Kelas</Badge>
             </div>
@@ -617,7 +619,7 @@ export const RecordedClassesPage: React.FC<{
   const handleAdd = async () => {
     const newClass: Course = {
       id: `course-${Date.now()}`,
-      title: 'Kelas Recording Baru',
+      title: `${RECORDED_CLASS_SPACE_LABEL} Baru`,
       description: 'Tuliskan ringkasan kelas atau webinar di sini.',
       coverImage: '',
       mentorId: 'profile',
@@ -658,7 +660,7 @@ export const RecordedClassesPage: React.FC<{
           <Link to="/admin" className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)] mb-3">
             <ArrowLeft size={14} /> Semua Space
           </Link>
-          <h1 className="text-3xl font-bold">Kelas Recording</h1>
+          <h1 className="text-3xl font-bold">{RECORDED_CLASS_SPACE_LABEL}</h1>
           <p className="text-sm text-[var(--muted)] mt-1">Kelola recording, asset, post-test, dan hasil peserta.</p>
         </div>
         <Button icon={Plus} onClick={handleAdd} isLoading={isCreating} disabled={isCreating}>Tambah Kelas</Button>
@@ -684,7 +686,7 @@ export const RecordedClassesPage: React.FC<{
             </div>
             <div className="p-5 min-h-[310px] flex flex-col">
               <div className="flex items-center justify-between gap-3 mb-3">
-                <Badge color="var(--success-soft)">Kelas Recording</Badge>
+                <Badge color="var(--success-soft)">{RECORDED_CLASS_SPACE_LABEL}</Badge>
                 <span className={`text-[10px] font-semibold px-2 py-1 rounded-lg border ${course.published ? 'bg-[var(--success-soft)] text-[var(--success-text)] border-[var(--border)]' : 'bg-[var(--surface-soft)] text-[var(--muted)] border-[var(--border)]'}`}>
                   {course.published ? 'Publik' : 'Draft'}
                 </span>
@@ -716,7 +718,7 @@ export const RecordedClassesPage: React.FC<{
             <GraduationCap size={29} className="text-[var(--muted)]" />
           </div>
           <div>
-            <p className="font-semibold">Belum ada kelas recording</p>
+            <p className="font-semibold">Belum ada {RECORDED_CLASS_SPACE_LABEL}</p>
             <p className="text-[var(--muted)] text-sm mt-1">Buat kelas pertama untuk webinar atau kelas rekaman Anda.</p>
           </div>
           <Button icon={Plus} onClick={handleAdd} isLoading={isCreating} disabled={isCreating} className="mx-auto">Buat Kelas Pertama</Button>
@@ -919,10 +921,10 @@ export const RecordedClassEditor: React.FC<{
       <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <Link to="/admin/classes" className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)] mb-3">
-            <ArrowLeft size={14} /> Daftar Kelas Recording
+            <ArrowLeft size={14} /> Daftar {RECORDED_CLASS_SPACE_LABEL}
           </Link>
           <div className="flex flex-wrap items-center gap-3">
-            <h1 className="text-3xl font-bold">Editor Kelas Recording</h1>
+            <h1 className="text-3xl font-bold">Editor {RECORDED_CLASS_SPACE_LABEL}</h1>
             <Badge color="var(--success-soft)">Space Terpisah</Badge>
           </div>
           <p className="text-sm text-[var(--muted)] mt-2">Atur recording, asset peserta, dan post-test dalam satu halaman.</p>
@@ -1217,7 +1219,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
         <div>
           <Link to="/admin/classes" className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)] mb-3"><ArrowLeft size={14} /> Daftar Kelas</Link>
           <h1 className="text-3xl font-bold">Hasil Kelas</h1>
-          <p className="text-sm text-[var(--muted)] mt-1">{course?.title || 'Kelas Recording'} · Post-test dan feedback keseluruhan</p>
+          <p className="text-sm text-[var(--muted)] mt-1">{course?.title || RECORDED_CLASS_SPACE_LABEL} · Post-test dan feedback keseluruhan</p>
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" icon={RefreshCw} onClick={fetchAttempts}>Refresh</Button>
@@ -1520,7 +1522,7 @@ export const PublicRecordedClassView: React.FC<{
   };
 
   if (isLoading) {
-    return <div className="min-h-screen bg-[var(--app-bg)] flex items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Mencari kelas recording...</div>;
+    return <div className="min-h-screen bg-[var(--app-bg)] flex items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Mencari {RECORDED_CLASS_SPACE_LABEL}...</div>;
   }
 
   if (loadError || !course) {
@@ -1539,7 +1541,7 @@ export const PublicRecordedClassView: React.FC<{
     <div className="min-h-screen bg-[var(--app-bg)] [scrollbar-gutter:stable]">
       <header className="sticky top-0 z-40 bg-[var(--surface)]/95 backdrop-blur border-b border-[var(--border)] px-4">
         <div className="w-full max-w-7xl mx-auto min-h-[68px] flex items-center justify-between gap-4">
-          <div className="flex items-center gap-3 min-w-0"><div className="w-9 h-9 rounded-xl bg-[var(--success-soft)] text-[var(--success-text)] flex items-center justify-center flex-shrink-0"><GraduationCap size={19} /></div><div className="min-w-0"><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">Arunika LMS</p><p className="text-sm font-semibold truncate">Kelas Recording</p></div></div>
+          <div className="flex items-center gap-3 min-w-0"><div className="w-9 h-9 rounded-xl bg-[var(--surface-soft)] border border-[var(--border)] flex items-center justify-center flex-shrink-0 overflow-hidden"><img src={logoUtama} alt="Arunika LMS" className="h-7 w-8 object-contain" /></div><div className="min-w-0"><p className="text-[10px] uppercase tracking-[0.14em] text-[var(--muted)] font-semibold">Arunika LMS</p><p className="text-sm font-semibold truncate">{RECORDED_CLASS_SPACE_LABEL}</p></div></div>
           <Badge color="var(--success-soft)">{course.modules.length} Materi</Badge>
         </div>
       </header>
