@@ -15,8 +15,9 @@ SQL tidak dapat dijalankan dengan anon key. Buka target project di Supabase Dash
 7. Jalankan `../migrations/20260908000000_overall_feedback_visibility.sql` seluruhnya untuk pengaturan tampil/sembunyi tab feedback akhir kelas.
 8. Jalankan `../migrations/20260909000000_form_maker.sql` seluruhnya untuk ruang Form Maker, form publik, responder, dan status pembayaran/konfirmasi.
 9. Jalankan `../migrations/20260909010000_form_payment_contact.sql` seluruhnya untuk nominal pembayaran, QR Code, nomor rekening, dan konfirmasi WhatsApp.
-10. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
-11. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
+10. Jalankan `../migrations/20260909020000_form_branding.sql` seluruhnya untuk header banner publik dan pilihan tema warna form.
+11. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
+12. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
 
 `01_schema.sql` sekarang fail-closed: semua tabel langsung memakai RLS tanpa policy terbuka. Halaman publik baru aktif setelah migration keamanan pada langkah 4 membuat policy yang hanya membaca konten `published`.
 
@@ -30,7 +31,8 @@ Untuk project `drezwxfgykkdnnwjrnnt` yang tabelnya sudah berisi data, tidak perl
 4. Jalankan migration `20260908000000_overall_feedback_visibility.sql` seluruhnya.
 5. Jalankan migration `20260909000000_form_maker.sql` seluruhnya.
 6. Jalankan migration `20260909010000_form_payment_contact.sql` seluruhnya.
-7. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
+7. Jalankan migration `20260909020000_form_branding.sql` seluruhnya.
+8. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
 
 Migration keamanan idempotent dan tidak menghapus kursus, analytics, quiz, ataupun hasil peserta. Begitu migration selesai, login lokal lama tidak berlaku lagi; gunakan email/password Supabase Auth yang dibuat pada langkah 1.
 

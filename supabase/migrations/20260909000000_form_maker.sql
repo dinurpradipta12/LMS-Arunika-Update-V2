@@ -10,6 +10,9 @@ create table if not exists public.form_forms (
   title text not null default 'Form Baru',
   event_name text not null default '',
   description text not null default '',
+  header_image text not null default '',
+  theme text not null default 'navy'
+    check (theme in ('navy', 'emerald', 'coral', 'violet', 'amber')),
   status text not null default 'draft'
     check (status in ('draft', 'published', 'archived')),
   fields jsonb not null default '[]'::jsonb
@@ -184,6 +187,8 @@ as $$
     'title', form.title,
     'eventName', form.event_name,
     'description', form.description,
+    'headerImage', form.header_image,
+    'theme', form.theme,
     'fields', form.fields,
     'allowMultiple', form.allow_multiple,
     'postSubmitMode', form.post_submit_mode,
@@ -351,6 +356,8 @@ begin
     'postSubmitMode', v_form.post_submit_mode,
     'postSubmitTitle', v_form.post_submit_title,
     'postSubmitMessage', v_form.post_submit_message,
+    'headerImage', v_form.header_image,
+    'theme', v_form.theme,
     'paymentInstructions', v_form.payment_instructions,
     'paymentLink', v_form.payment_link,
     'paymentAmount', v_form.payment_amount,

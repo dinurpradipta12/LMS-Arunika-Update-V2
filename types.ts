@@ -169,6 +169,7 @@ export interface FormField {
 
 export type FormStatus = 'draft' | 'published' | 'archived';
 export type FormPostSubmitMode = 'confirmation' | 'payment' | 'redirect';
+export type FormThemeKey = 'navy' | 'emerald' | 'coral' | 'violet' | 'amber';
 
 export interface FormDefinition {
   id: string;
@@ -176,6 +177,8 @@ export interface FormDefinition {
   title: string;
   eventName: string;
   description: string;
+  headerImage: string;
+  theme: FormThemeKey;
   status: FormStatus;
   fields: FormField[];
   postSubmitMode: FormPostSubmitMode;

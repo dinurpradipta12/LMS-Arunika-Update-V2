@@ -9,13 +9,41 @@ import {
   FormPostSubmitMode,
   FormResponse,
   FormResponseStatus,
-  FormStatus
+  FormStatus,
+  FormThemeKey
 } from '../types';
 import { Badge, Button, Card, Input, Textarea } from './UI';
 import logoUtama from '../src/logo-utama.png';
 
 export const FORM_MAKER_SPACE_LABEL = 'Form Maker';
 export const FORM_MAKER_PUBLIC_LABEL = 'Arunika Form Development';
+
+const FORM_THEME_OPTIONS: Array<{ value: FormThemeKey; label: string; description: string; swatch: string }> = [
+  { value: 'navy', label: 'Navy', description: 'Profesional dan tegas', swatch: '#173b5e' },
+  { value: 'emerald', label: 'Emerald', description: 'Segar dan edukatif', swatch: '#0f766e' },
+  { value: 'coral', label: 'Coral', description: 'Hangat dan energik', swatch: '#c2413a' },
+  { value: 'violet', label: 'Violet', description: 'Kreatif dan modern', swatch: '#6d4bc3' },
+  { value: 'amber', label: 'Amber', description: 'Cerah dan optimistis', swatch: '#b45309' }
+];
+
+const isFormThemeKey = (value: unknown): value is FormThemeKey => FORM_THEME_OPTIONS.some(theme => theme.value === value);
+
+const formThemeStyle = (theme?: FormThemeKey): React.CSSProperties => {
+  const colors: Record<FormThemeKey, { accent: string; hover: string; soft: string; strong: string }> = {
+    navy: { accent: '#173b5e', hover: '#214e75', soft: '#e2ebf3', strong: '#143552' },
+    emerald: { accent: '#0f766e', hover: '#0d9488', soft: '#d9f2ed', strong: '#0b5e58' },
+    coral: { accent: '#c2413a', hover: '#dd5d50', soft: '#fae6e3', strong: '#a3312c' },
+    violet: { accent: '#6d4bc3', hover: '#7c5ce0', soft: '#eee9fb', strong: '#56379f' },
+    amber: { accent: '#b45309', hover: '#d97706', soft: '#fdf0d4', strong: '#92400e' }
+  };
+  const selected = colors[theme && isFormThemeKey(theme) ? theme : 'navy'];
+  return {
+    '--accent': selected.accent,
+    '--accent-hover': selected.hover,
+    '--accent-soft': selected.soft,
+    '--accent-strong': selected.strong
+  } as React.CSSProperties;
+};
 
 type Notice = { tone: 'success' | 'error'; message: string };
 
@@ -62,6 +90,8 @@ const createDefaultForm = (): FormDefinition => ({
   title: 'Pendaftaran Kelas Baru',
   eventName: 'Event baru',
   description: 'Isi form berikut untuk mendaftarkan diri.',
+  headerImage: '',
+  theme: 'navy',
   status: 'draft',
   fields: [
     { ...createField('short_text', 0), label: 'Asal instansi / pekerjaan', required: false },
@@ -99,6 +129,8 @@ const mapFormRow = (row: any): FormDefinition => ({
   title: String(row?.title || 'Form Baru'),
   eventName: String(row?.event_name ?? row?.eventName ?? ''),
   description: String(row?.description || ''),
+  headerImage: String(row?.header_image ?? row?.headerImage ?? ''),
+  theme: (isFormThemeKey(row?.theme) ? row.theme : 'navy') as FormThemeKey,
   status: (row?.status === 'published' || row?.status === 'archived' ? row.status : 'draft') as FormStatus,
   fields: Array.isArray(row?.fields) ? row.fields.map(normalizeField) : [],
   postSubmitMode: (row?.post_submit_mode ?? row?.postSubmitMode ?? 'confirmation') as FormPostSubmitMode,
@@ -137,6 +169,8 @@ const formWriteRow = (form: FormDefinition) => ({
   title: form.title,
   event_name: form.eventName,
   description: form.description,
+  header_image: form.headerImage,
+  theme: form.theme,
   status: form.status,
   fields: form.fields,
   post_submit_mode: form.postSubmitMode,
@@ -345,6 +379,85 @@ const PaymentQrUploader: React.FC<{ value: string; onChange: (value: string) => 
   );
 };
 
+const FormHeaderUploader: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Pilih file gambar untuk header form.');
+      return;
+    }
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Header gagal dibaca.'));
+        reader.onload = () => {
+          const image = new Image();
+          image.onerror = () => reject(new Error('Format gambar header tidak didukung.'));
+          image.onload = () => {
+            const targetWidth = 1200;
+            const targetHeight = 150;
+            const sourceRatio = image.width / image.height;
+            const targetRatio = targetWidth / targetHeight;
+            const sourceWidth = sourceRatio > targetRatio ? image.height * targetRatio : image.width;
+            const sourceHeight = sourceRatio > targetRatio ? image.height : image.width / targetRatio;
+            const sourceX = (image.width - sourceWidth) / 2;
+            const sourceY = (image.height - sourceHeight) / 2;
+            const canvas = document.createElement('canvas');
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            const context = canvas.getContext('2d');
+            if (!context) return reject(new Error('Header gagal diproses.'));
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, targetWidth, targetHeight);
+            context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
+            resolve(canvas.toDataURL('image/jpeg', 0.86));
+          };
+          image.src = String(reader.result);
+        };
+        reader.readAsDataURL(file);
+      });
+      if (dataUrl.length > 1_800_000) {
+        setError('Ukuran header terlalu besar. Gunakan gambar yang lebih ringan.');
+        return;
+      }
+      onChange(dataUrl);
+    } catch (uploadError: any) {
+      setError(uploadError?.message || 'Header gagal diproses.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted)]">Header banner publik</p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Gunakan rasio 8:1. Gambar akan otomatis dipotong ke ukuran rekomendasi 1200 × 150 px agar tetap ringkas di layar.</p>
+        </div>
+        {value && <button type="button" onClick={() => onChange('')} className="shrink-0 text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus header</button>}
+      </div>
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+        {value ? <img src={value} alt="Preview header form publik" className="aspect-[8/1] w-full rounded-lg object-cover" /> : <div className="flex aspect-[8/1] min-h-[70px] items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--border-strong)] text-center text-sm text-[var(--muted)]"><ImagePlus size={22} /><span>Belum ada header</span></div>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        <Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing}>Upload header</Button>
+      </div>
+      <Input label="URL header (opsional)" value={value.startsWith('data:') ? '' : value} onChange={event => onChange(event.target.value)} placeholder="https://.../header.jpg" />
+      {error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}
+    </div>
+  );
+};
+
 export const FormMakerPage: React.FC<{ client: any }> = ({ client }) => {
   const navigate = useNavigate();
   const [forms, setForms] = useState<FormDefinition[]>([]);
@@ -498,6 +611,36 @@ export const FormEditorPage: React.FC<{ client: any }> = ({ client }) => {
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><Link to="/admin/forms" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {FORM_MAKER_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">Edit Form</h1><Badge color={form.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{form.status === 'published' ? 'Publik' : 'Draft'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Susun pertanyaan, atur halaman setelah submit, dan bagikan link form.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={Users} onClick={() => navigate(`/admin/forms/${form.id}/responses`)}>Responder</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Form</Button></div></div>
       <NoticeBanner notice={notice} />
       <Card className="space-y-5"><div><h2 className="text-lg font-bold">Informasi form</h2><p className="mt-1 text-xs text-[var(--muted)]">Nama event dipakai untuk mengelompokkan data responder di dashboard.</p></div><div className="grid gap-4 md:grid-cols-2"><Input label="Judul form" value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} /><Input label="Nama event" value={form.eventName} onChange={event => setForm({ ...form, eventName: event.target.value })} /></div><Textarea label="Deskripsi untuk responder" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /><div className="grid gap-4 md:grid-cols-2"><Input label="Slug link publik" value={form.slug} onChange={event => setForm({ ...form, slug: event.target.value })} onBlur={() => setForm(current => current ? { ...current, slug: slugify(current.slug || current.title) } : current)} /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status form</span><select value={form.status} onChange={event => setForm({ ...form, status: event.target.value as FormStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"><option value="draft">Draft</option><option value="published">Publik</option><option value="archived">Arsip</option></select></label></div><label className="inline-flex items-center gap-3 text-sm font-semibold cursor-pointer"><input type="checkbox" checked={form.allowMultiple} onChange={event => setForm({ ...form, allowMultiple: event.target.checked })} className="h-4 w-4 accent-[var(--accent)]" /> Izinkan satu email mengirim lebih dari satu kali</label>{form.status === 'published' && <div className="rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">Link publik: <span className="break-all font-semibold text-[var(--text)]">{createFormShareLink(form.slug)}</span></div>}</Card>
+
+      <Card className="space-y-6">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Tampilan publik</p>
+          <h2 className="mt-2 text-xl font-bold">Header & nuansa warna</h2>
+          <p className="mt-1 text-sm text-[var(--muted)]">Atur banner pendek di atas form dan pilih warna aksen yang mengikuti tema event Anda.</p>
+        </div>
+        <FormHeaderUploader value={form.headerImage} onChange={headerImage => setForm({ ...form, headerImage })} />
+        <div className="space-y-3">
+          <div>
+            <p className="text-xs font-semibold text-[var(--muted)]">Tema warna form</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">Warna ini diterapkan ke tombol, fokus input, badge, dan elemen aksen di halaman publik.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {FORM_THEME_OPTIONS.map(option => (
+              <button
+                key={option.value}
+                type="button"
+                aria-pressed={form.theme === option.value}
+                onClick={() => setForm({ ...form, theme: option.value })}
+                className={`rounded-xl border p-3 text-left transition-colors ${form.theme === option.value ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}
+              >
+                <span className="mb-3 block h-8 rounded-lg" style={{ backgroundColor: option.swatch }} aria-hidden="true" />
+                <span className="block text-sm font-semibold">{option.label}</span>
+                <span className="mt-1 block text-xs text-[var(--muted)]">{option.description}</span>
+              </button>
+            ))}
+          </div>
+        </div>
+      </Card>
 
       <section className="space-y-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Builder</p><h2 className="mt-2 text-2xl font-bold">Pertanyaan form</h2><p className="mt-1 text-sm text-[var(--muted)]">Nama dan email responder selalu dicatat otomatis. Tambahkan pertanyaan lain sesuai kebutuhan event.</p></div><div className="flex flex-wrap gap-2">{(['short_text', 'long_text', 'multiple_choice', 'checkbox'] as FormFieldType[]).map(type => <Button key={type} variant="secondary" className="text-xs px-3" icon={Plus} onClick={() => setForm({ ...form, fields: [...form.fields, createField(type, form.fields.length)] })}>{FIELD_TYPES.find(item => item.value === type)?.label}</Button>)}</div></div>{form.fields.map((field, index) => <FormFieldEditor key={field.id} field={field} index={index} total={form.fields.length} onChange={patch => updateField(index, patch)} onRemove={() => setForm({ ...form, fields: form.fields.filter((_, fieldIndex) => fieldIndex !== index) })} onMove={direction => moveField(index, direction)} />)}{form.fields.length === 0 && <Card className="border-dashed py-12 text-center text-sm text-[var(--muted)]">Belum ada pertanyaan tambahan. Nama dan email responder tetap tersedia di form publik.</Card>}</section>
 
@@ -668,13 +811,14 @@ export const PublicFormView: React.FC<{ client: any; slugOverride?: string }> = 
     const paymentWhatsapp = submitted.paymentWhatsapp || form.paymentWhatsapp;
     const whatsappLink = createWhatsAppLink(paymentWhatsapp, form, responderName, responderEmail, values, submitted.responseId);
     return (
-      <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8">
+      <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8" style={formThemeStyle(form.theme)}>
         <div className="mx-auto max-w-2xl space-y-6">
           <header className="flex items-center gap-3">
             <img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" />
             <div><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{FORM_MAKER_PUBLIC_LABEL}</p><p className="font-semibold">{form.title}</p></div>
           </header>
           <Card className="space-y-5 py-10 text-center">
+            {form.headerImage && <img src={form.headerImage} alt={`Header ${form.title}`} className="mx-auto mb-6 aspect-[8/1] w-full max-w-xl rounded-xl border border-[var(--border)] object-cover" />}
             <CheckCircle2 size={48} className="mx-auto text-[var(--success-text)]" />
             <div>
               <h1 className="text-2xl font-bold">{submitted.postSubmitTitle || form.postSubmitTitle}</h1>
@@ -703,6 +847,6 @@ export const PublicFormView: React.FC<{ client: any; slugOverride?: string }> = 
   }
 
   return (
-    <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8"><div className="mx-auto max-w-3xl space-y-6"><header className="flex items-center gap-3"><img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" /><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{FORM_MAKER_PUBLIC_LABEL}</p><p className="truncate font-semibold">{form.title}</p></div></header><Card className="space-y-6"><div><Badge color="var(--accent-soft)">{form.eventName}</Badge><h1 className="mt-4 text-3xl font-bold">{form.title}</h1><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{form.description}</p></div><form onSubmit={handleSubmit} className="space-y-5"><div className="grid gap-4 border-b border-[var(--border)] pb-5 md:grid-cols-2"><Input label="Nama lengkap" value={responderName} onChange={event => setResponderName(event.target.value)} required icon={Users} placeholder="Nama Anda" /><Input label="Email responder" value={responderEmail} onChange={event => setResponderEmail(event.target.value)} required type="email" icon={Mail} placeholder="nama@email.com" /></div>{form.fields.map(field => <div key={field.id} className="space-y-2"><label className="block text-xs font-semibold text-[var(--muted)]">{field.label}{field.required && <span className="text-[var(--danger-text)]"> *</span>}</label>{field.description && <p className="text-xs leading-relaxed text-[var(--muted)]">{field.description}</p>}{field.type === 'long_text' ? <textarea value={String(values[field.id] || '')} onChange={event => setValue(field.id, event.target.value)} placeholder={field.placeholder} className="min-h-[130px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]" /> : field.type === 'multiple_choice' ? <div className="space-y-2">{field.options.map(option => <label key={option} className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm"><input type="radio" name={field.id} checked={values[field.id] === option} onChange={() => setValue(field.id, option)} className="h-4 w-4 accent-[var(--accent)]" />{option}</label>)}</div> : field.type === 'dropdown' ? <select value={String(values[field.id] || '')} onChange={event => setValue(field.id, event.target.value)} className="min-h-[46px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"><option value="">Pilih jawaban</option>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select> : field.type === 'checkbox' ? <div className="space-y-2">{field.options.map(option => <label key={option} className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm"><input type="checkbox" checked={Array.isArray(values[field.id]) && (values[field.id] as string[]).includes(option)} onChange={event => { const current = Array.isArray(values[field.id]) ? values[field.id] as string[] : []; setValue(field.id, event.target.checked ? [...current, option] : current.filter(item => item !== option)); }} className="h-4 w-4 accent-[var(--accent)]" />{option}</label>)}</div> : <input type={field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'} value={String(values[field.id] || '')} onChange={event => setValue(field.id, event.target.value)} placeholder={field.placeholder} className="min-h-[46px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]" />}</div>)}{submitError && <p className="rounded-xl border border-[var(--border)] bg-[var(--danger-soft)] p-3 text-sm text-[var(--danger-text)]">{submitError}</p>}<Button type="submit" isLoading={isSubmitting} icon={Check} className="w-full">Kirim Form</Button></form></Card></div></div>
+    <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8" style={formThemeStyle(form.theme)}><div className="mx-auto max-w-3xl space-y-6"><header className="flex items-center gap-3"><img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" /><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{FORM_MAKER_PUBLIC_LABEL}</p><p className="truncate font-semibold">{form.title}</p></div></header><Card className="space-y-6">{form.headerImage && <img src={form.headerImage} alt={`Header ${form.title}`} className="aspect-[8/1] w-full rounded-xl border border-[var(--border)] object-cover" />}<div><Badge color="var(--accent-soft)">{form.eventName}</Badge><h1 className="mt-4 text-3xl font-bold">{form.title}</h1><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{form.description}</p></div><form onSubmit={handleSubmit} className="space-y-5"><div className="grid gap-4 border-b border-[var(--border)] pb-5 md:grid-cols-2"><Input label="Nama lengkap" value={responderName} onChange={event => setResponderName(event.target.value)} required icon={Users} placeholder="Nama Anda" /><Input label="Email responder" value={responderEmail} onChange={event => setResponderEmail(event.target.value)} required type="email" icon={Mail} placeholder="nama@email.com" /></div>{form.fields.map(field => <div key={field.id} className="space-y-2"><label className="block text-xs font-semibold text-[var(--muted)]">{field.label}{field.required && <span className="text-[var(--danger-text)]"> *</span>}</label>{field.description && <p className="text-xs leading-relaxed text-[var(--muted)]">{field.description}</p>}{field.type === 'long_text' ? <textarea value={String(values[field.id] || '')} onChange={event => setValue(field.id, event.target.value)} placeholder={field.placeholder} className="min-h-[130px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]" /> : field.type === 'multiple_choice' ? <div className="space-y-2">{field.options.map(option => <label key={option} className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm"><input type="radio" name={field.id} checked={values[field.id] === option} onChange={() => setValue(field.id, option)} className="h-4 w-4 accent-[var(--accent)]" />{option}</label>)}</div> : field.type === 'dropdown' ? <select value={String(values[field.id] || '')} onChange={event => setValue(field.id, event.target.value)} className="min-h-[46px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"><option value="">Pilih jawaban</option>{field.options.map(option => <option key={option} value={option}>{option}</option>)}</select> : field.type === 'checkbox' ? <div className="space-y-2">{field.options.map(option => <label key={option} className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm"><input type="checkbox" checked={Array.isArray(values[field.id]) && (values[field.id] as string[]).includes(option)} onChange={event => { const current = Array.isArray(values[field.id]) ? values[field.id] as string[] : []; setValue(field.id, event.target.checked ? [...current, option] : current.filter(item => item !== option)); }} className="h-4 w-4 accent-[var(--accent)]" />{option}</label>)}</div> : <input type={field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : field.type === 'date' ? 'date' : 'text'} value={String(values[field.id] || '')} onChange={event => setValue(field.id, event.target.value)} placeholder={field.placeholder} className="min-h-[46px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]" />}</div>)}{submitError && <p className="rounded-xl border border-[var(--border)] bg-[var(--danger-soft)] p-3 text-sm text-[var(--danger-text)]">{submitError}</p>}<Button type="submit" isLoading={isSubmitting} icon={Check} className="w-full">Kirim Form</Button></form></Card></div></div>
   );
 };
