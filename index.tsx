@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react'
 import ReactDOM from 'react-dom';
 import { createPortal } from 'react-dom';
 import ReactDOMClient from 'react-dom/client';
-import { HashRouter as Router, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
+import { HashRouter as Router, MemoryRouter, Routes, Route, Link, useNavigate, Navigate, useParams, useLocation } from 'react-router-dom';
 import './index.css';
 import { 
   Layout, 
@@ -2118,4 +2118,8 @@ const rootRegistry = window as any;
 const root = rootRegistry.__arunikaRoot
   || ReactDOMClient.createRoot(document.getElementById('root') as HTMLElement);
 rootRegistry.__arunikaRoot = root;
-root.render(<Router><App /></Router>);
+const directFormPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/form\/([^/]+)\/?$/);
+const directFormSlug = directFormPathMatch ? decodeURIComponent(directFormPathMatch[1]) : null;
+root.render(directFormSlug
+  ? <MemoryRouter initialEntries={[`/form/${directFormSlug}`]}><PublicFormView client={getPublicSupabaseClient()} slugOverride={directFormSlug} /></MemoryRouter>
+  : <Router><App /></Router>);
