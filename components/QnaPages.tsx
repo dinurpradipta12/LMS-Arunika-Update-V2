@@ -200,7 +200,7 @@ const Notice: React.FC<{ tone: 'success' | 'error'; children: React.ReactNode }>
 );
 
 const QnaHeaderBanner: React.FC<{ image: string; title: string }> = ({ image, title }) => (
-  image ? <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm"><img src={image} alt={`Header ${title}`} className="aspect-[8/1] max-h-44 w-full object-cover" /></div> : null
+  image ? <div className="shrink-0 overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm"><img src={image} alt={`Header ${title}`} className="aspect-[8/1] max-h-44 w-full object-cover" /></div> : null
 );
 
 export const QnaAdminPage: React.FC<{ client: any }> = ({ client }) => {
@@ -558,9 +558,9 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
   };
 
   return (
-    <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8" style={formThemeStyle(session.theme)}>
-      <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-center">
+    <div className="min-h-screen overflow-x-hidden bg-[var(--app-bg)] p-4 md:p-8 lg:h-[100dvh] lg:overflow-hidden" style={formThemeStyle(session.theme)}>
+      <div className="mx-auto max-w-7xl space-y-6 lg:flex lg:h-full lg:flex-col lg:gap-6 lg:space-y-0">
+        <header className="flex shrink-0 flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-center">
           <div className="flex items-center gap-3">
             <img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" />
             <div className="min-w-0">
@@ -575,8 +575,8 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
           </div>
         </header>
         <QnaHeaderBanner image={session.headerImage} title={session.title} />
-        {!isLive && <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div>}
-        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
+        {!isLive && <div className="shrink-0 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div>}
+        <div className="flex shrink-0 flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pertanyaan audience</p>
             <h2 className="mt-2 text-2xl font-bold">Diskusi yang sedang berlangsung</h2>
@@ -603,8 +603,8 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
             </div>
           </Card>
         ) : (
-          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start">
-            <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+          <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start">
+            <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
               <ol aria-live="polite" className="divide-y divide-[var(--border)]">
                 {visibleQuestions.map(item => (
                   <li key={item.id} className={newQuestionIds.has(item.id) ? 'qna-presenter-question-enter overflow-hidden' : 'overflow-hidden'}>
@@ -637,7 +637,7 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
                 ))}
               </ol>
             </div>
-            <aside className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm lg:sticky lg:top-4">
+            <aside className="self-start rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
               <div className="flex items-center gap-2">
                 <QrCode size={18} className="text-[var(--accent-strong)]" />
                 <div>
