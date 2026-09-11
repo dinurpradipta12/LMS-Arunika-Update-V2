@@ -239,6 +239,7 @@ begin
     from public.qna_questions as question
     where question.session_id = v_session.id
       and question.client_token_hash = v_token_hash
+      and question.body = v_question
       and question.created_at > now() - interval '20 seconds'
   ) then
     raise exception using message = 'QNA_RATE_LIMITED';

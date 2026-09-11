@@ -17,8 +17,9 @@ SQL tidak dapat dijalankan dengan anon key. Buka target project di Supabase Dash
 9. Jalankan `../migrations/20260909010000_form_payment_contact.sql` seluruhnya untuk nominal pembayaran, QR Code, nomor rekening, dan konfirmasi WhatsApp.
 10. Jalankan `../migrations/20260909020000_form_branding.sql` seluruhnya untuk header banner publik dan pilihan tema warna form.
 11. Jalankan `../migrations/20260911000000_qna_audience.sql` seluruhnya untuk sesi Q&A publik, moderasi, voting, dan layar presenter realtime.
-12. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
-13. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
+12. Jalankan `../migrations/20260911010000_qna_rate_limit_fix.sql` untuk mengizinkan beberapa pertanyaan berbeda dari perangkat yang sama.
+13. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
+14. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
 
 `01_schema.sql` sekarang fail-closed: semua tabel langsung memakai RLS tanpa policy terbuka. Halaman publik baru aktif setelah migration keamanan pada langkah 4 membuat policy yang hanya membaca konten `published`.
 
@@ -34,7 +35,8 @@ Untuk project `drezwxfgykkdnnwjrnnt` yang tabelnya sudah berisi data, tidak perl
 6. Jalankan migration `20260909010000_form_payment_contact.sql` seluruhnya.
 7. Jalankan migration `20260909020000_form_branding.sql` seluruhnya.
 8. Jalankan migration `20260911000000_qna_audience.sql` seluruhnya.
-9. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
+9. Jalankan migration `20260911010000_qna_rate_limit_fix.sql` seluruhnya.
+10. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
 
 Migration keamanan idempotent dan tidak menghapus kursus, analytics, quiz, ataupun hasil peserta. Begitu migration selesai, login lokal lama tidak berlaku lagi; gunakan email/password Supabase Auth yang dibuat pada langkah 1.
 
