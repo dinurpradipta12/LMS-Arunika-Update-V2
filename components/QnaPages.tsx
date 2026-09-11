@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Copy, Eye, FileText, Loader2, Maximize2, MessageCircle, Minimize2, Pin, Play, Plus, RefreshCw, Save, Send, Trash2, XCircle } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Eye, Heart, Loader2, Maximize2, MessageCircle, Minimize2, Pin, Play, Plus, QrCode, RefreshCw, Save, Send, Trash2, XCircle } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
 import {
@@ -465,11 +465,14 @@ const QnaAudienceView: React.FC<{
   );
 };
 
-const QnaPresenterView: React.FC<{ session: PublicQnaSession }> = ({ session }) => {
+const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (questionId: string) => Promise<boolean> }> = ({ session, onQuestionVote }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const [likedQuestionIds, setLikedQuestionIds] = useState<Set<string>>(() => new Set());
   const previousQuestionIdsRef = useRef<Set<string>>(new Set(session.questions.map(question => question.id)));
   const [newQuestionIds, setNewQuestionIds] = useState<Set<string>>(() => new Set());
   const isLive = session.status === 'live';
+  const audienceLink = createQnaLink(session.slug);
+  const audienceQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=12&data=${encodeURIComponent(audienceLink)}`;
 
   const orderedQuestions = useMemo(() => [...session.questions].sort((a, b) => (
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
@@ -503,13 +506,93 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession }> = ({ session }) 
     else await document.documentElement.requestFullscreen?.();
   };
 
+  const handleLike = async (questionId: string) => {
+    if (!session.votingEnabled || likedQuestionIds.has(questionId)) return;
+    try {
+      const didVote = await onQuestionVote(questionId);
+      if (didVote) setLikedQuestionIds(current => new Set([...current, questionId]));
+    } catch {
+      // Presenter tetap dapat digunakan sebagai layar display bila voting sedang tidak tersedia.
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8" style={formThemeStyle(session.theme)}>
       <div className="mx-auto max-w-7xl space-y-6">
-        <header className="flex flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-center"><div className="flex items-center gap-3"><img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" /><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Presenter Q&A</p><h1 className="truncate text-xl font-bold">{session.title}</h1><p className="mt-1 text-sm text-[var(--muted)]">{session.eventName}</p></div></div><div className="flex flex-wrap items-center gap-2"><Badge color={isLive ? 'var(--success-soft)' : 'var(--surface-soft)'}>{isLive ? 'LIVE' : session.status.toUpperCase()}</Badge><Button variant="secondary" icon={isFullscreen ? Minimize2 : Maximize2} onClick={() => void toggleFullscreen()}>{isFullscreen ? 'Keluar fullscreen' : 'Fullscreen'}</Button></div></header>
+        <header className="flex flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-center">
+          <div className="flex items-center gap-3">
+            <img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" />
+            <div className="min-w-0">
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Presenter Q&A</p>
+              <h1 className="truncate text-xl font-bold">{session.title}</h1>
+              <p className="mt-1 text-sm text-[var(--muted)]">{session.eventName}</p>
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge color={isLive ? 'var(--success-soft)' : 'var(--surface-soft)'}>{isLive ? 'LIVE' : session.status.toUpperCase()}</Badge>
+            <Button variant="secondary" icon={isFullscreen ? Minimize2 : Maximize2} onClick={() => void toggleFullscreen()}>{isFullscreen ? 'Keluar fullscreen' : 'Fullscreen'}</Button>
+          </div>
+        </header>
         {!isLive && <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div>}
-        <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pertanyaan audience</p><h2 className="mt-2 text-2xl font-bold">Diskusi yang sedang berlangsung</h2></div><Badge color="var(--accent-soft)">{session.questions.length} pertanyaan</Badge></div>
-        {orderedQuestions.length === 0 ? <Card className="flex min-h-[360px] flex-col items-center justify-center gap-4 text-center"><MessageCircle size={48} className="text-[var(--muted)]" /><div><p className="text-lg font-semibold">Belum ada pertanyaan</p><p className="mt-1 text-sm text-[var(--muted)]">Pertanyaan yang dikirim audience akan muncul realtime di sini.</p></div></Card> : <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm"><ol aria-live="polite" className="divide-y divide-[var(--border)]">{orderedQuestions.map(item => <li key={item.id} className={newQuestionIds.has(item.id) ? 'qna-presenter-question-enter overflow-hidden' : 'overflow-hidden'}><div className={`p-4 md:p-5 ${item.isPinned ? 'bg-[var(--accent-soft)]/40' : ''}`}><div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge color={item.status === 'answered' ? 'var(--success-soft)' : 'var(--accent-soft)'}>{item.status === 'answered' ? 'Terjawab' : 'Pertanyaan'}</Badge>{item.isPinned && <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent-strong)]"><Pin size={13} /> Prioritas</span>}</div><p className="mt-2 text-sm font-semibold text-[var(--muted)]">{item.displayName || 'Anonim'} · {item.upvotes} vote · {formatDate(item.createdAt)}</p></div><FileText size={21} className="shrink-0 text-[var(--accent-strong)]" /></div><p className="mt-4 whitespace-pre-wrap break-words text-lg font-semibold leading-relaxed md:text-xl">{item.body}</p>{item.answer && <div className="mt-4 rounded-xl bg-[var(--accent-soft)] p-3 md:p-4"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Jawaban moderator</p><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed md:text-base">{item.answer}</p></div>}</div></li>)}</ol></div>}
+        <div className="flex items-center justify-between gap-3">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pertanyaan audience</p>
+            <h2 className="mt-2 text-2xl font-bold">Diskusi yang sedang berlangsung</h2>
+          </div>
+          <Badge color="var(--accent-soft)">{session.questions.length} pertanyaan</Badge>
+        </div>
+        {orderedQuestions.length === 0 ? (
+          <Card className="flex min-h-[360px] flex-col items-center justify-center gap-4 text-center">
+            <MessageCircle size={48} className="text-[var(--muted)]" />
+            <div>
+              <p className="text-lg font-semibold">Belum ada pertanyaan</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">Pertanyaan yang dikirim audience akan muncul realtime di sini.</p>
+            </div>
+          </Card>
+        ) : (
+          <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start">
+            <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+              <ol aria-live="polite" className="divide-y divide-[var(--border)]">
+                {orderedQuestions.map(item => (
+                  <li key={item.id} className={newQuestionIds.has(item.id) ? 'qna-presenter-question-enter overflow-hidden' : 'overflow-hidden'}>
+                    <div className={`p-3 md:p-4 ${item.isPinned ? 'bg-[var(--success-soft)]/65' : ''}`}>
+                      <div className="flex items-start justify-between gap-4">
+                        <div className="min-w-0 flex-1">
+                          <p className="whitespace-pre-wrap break-words text-base font-medium leading-relaxed text-[var(--text)]">{item.body}</p>
+                          <p className="mt-2 text-xs text-[var(--muted)]">{item.displayName || 'Anonim'} · {formatDate(item.createdAt)}</p>
+                          {item.answer && <div className="mt-3 rounded-xl bg-[var(--accent-soft)] p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Jawaban moderator</p><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{item.answer}</p></div>}
+                        </div>
+                        <div className="flex shrink-0 flex-col items-end gap-3">
+                          <div className="flex flex-wrap justify-end gap-1.5">
+                            <Badge color={item.status === 'answered' ? 'var(--success-soft)' : 'var(--accent-soft)'} className="px-2 py-1 text-[9px]">{item.status === 'answered' ? 'Terjawab' : 'Pertanyaan'}</Badge>
+                            {item.isPinned && <span className="inline-flex items-center gap-1 rounded-md bg-[var(--success-soft)] px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-[var(--success-text)]"><Pin size={11} /> Pin</span>}
+                          </div>
+                          <button type="button" disabled={!session.votingEnabled || likedQuestionIds.has(item.id)} onClick={() => void handleLike(item.id)} aria-label={`${likedQuestionIds.has(item.id) ? 'Sudah menyukai' : 'Sukai'} pertanyaan dari ${item.displayName || 'anonim'}`} className={`flex min-w-10 flex-col items-center gap-0.5 rounded-xl border px-2 py-1.5 transition-colors ${likedQuestionIds.has(item.id) ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-transparent text-[var(--muted)] hover:border-[var(--border)] hover:bg-[var(--surface-soft)] hover:text-[var(--accent-strong)]'} disabled:cursor-default disabled:opacity-80`}>
+                            <Heart size={19} fill={likedQuestionIds.has(item.id) ? 'currentColor' : 'none'} />
+                            <span className="text-[11px] font-semibold leading-none">{item.upvotes}</span>
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  </li>
+                ))}
+              </ol>
+            </div>
+            <aside className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm lg:sticky lg:top-4">
+              <div className="flex items-center gap-2">
+                <QrCode size={18} className="text-[var(--accent-strong)]" />
+                <div>
+                  <p className="text-sm font-semibold">Ajukan pertanyaan</p>
+                  <p className="text-xs text-[var(--muted)]">Scan untuk ikut diskusi</p>
+                </div>
+              </div>
+              <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+                <img src={audienceQrUrl} alt="QR Code link pertanyaan audience" loading="eager" referrerPolicy="no-referrer" className="mx-auto aspect-square w-full max-w-[190px] rounded-lg bg-white p-2" />
+              </div>
+              <a href={audienceLink} target="_blank" rel="noreferrer" className="mt-3 block break-all text-center text-xs font-medium text-[var(--accent-strong)] hover:underline">{audienceLink}</a>
+            </aside>
+          </div>
+        )}
       </div>
     </div>
   );
@@ -572,6 +655,6 @@ export const PublicQnaPage: React.FC<{ client: any; presenterMode?: boolean; slu
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat sesi Q&A...</div>;
   if (loadError || !session) return <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md space-y-5 py-10 text-center"><XCircle size={34} className="mx-auto text-[var(--danger-text)]" /><div><h1 className="text-xl font-bold">Sesi Q&A tidak dapat dibuka</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{loadError}</p></div><Button icon={RefreshCw} onClick={() => void fetchSession()} className="mx-auto w-full">Coba Lagi</Button></Card></div>;
-  if (presenterMode) return <QnaPresenterView session={session} />;
+  if (presenterMode) return <QnaPresenterView session={session} onQuestionVote={handleQuestionVote} />;
   return <QnaAudienceView client={client} session={session} clientToken={clientToken} onQuestionVote={handleQuestionVote} />;
 };
