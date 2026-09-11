@@ -54,6 +54,15 @@ const normalizeQuestionCategory = (value: unknown) => {
   return category || 'Umum';
 };
 
+const compareQuestionDisplayOrder = (a: QnaQuestion, b: QnaQuestion) => {
+  if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+};
+
+const sortQuestionsForDisplay = (questions: QnaQuestion[]) => (
+  [...questions].sort(compareQuestionDisplayOrder)
+);
+
 const normalizeTheme = (value: unknown): FormThemeKey => (
   FORM_THEME_OPTIONS.some(item => item.value === value) ? value as FormThemeKey : 'navy'
 );
@@ -108,7 +117,7 @@ const mapPublicSession = (value: any) => {
     closedMessage: String(row.closedMessage || 'Sesi Q&A ini sudah ditutup.'),
     theme: normalizeTheme(row.theme),
     presenterValid: row.presenterValid === true || row.isPresenter === true,
-    questions: Array.isArray(row.questions) ? row.questions.map(mapQuestionRow) : []
+    questions: Array.isArray(row.questions) ? sortQuestionsForDisplay(row.questions.map(mapQuestionRow)) : []
   };
 };
 
@@ -471,7 +480,7 @@ const QnaAudienceView: React.FC<{
           {notice && <Notice tone={notice.tone}>{notice.message}</Notice>}
         </Card>
 
-        <section className="space-y-4"><div className="flex items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pertanyaan terpilih</p><h2 className="mt-2 text-xl font-bold">Diskusi audience</h2></div><Badge color="var(--surface-soft)">{session.questions.length} tampil</Badge></div>{session.questions.length === 0 ? <Card className="py-12 text-center text-sm text-[var(--muted)]"><MessageCircle size={30} className="mx-auto mb-3" />Belum ada pertanyaan yang ditampilkan.</Card> : <div className="space-y-3">{session.questions.map(item => <article key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{item.displayName || 'Anonim'}</span>{item.category && <span className="rounded-lg bg-[var(--surface-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{item.category}</span>}{item.isPinned && <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--accent-strong)]"><Pin size={11} /> Dipin</span>}</div><p className="mt-1 text-xs text-[var(--muted)]">{formatDate(item.createdAt)}</p></div>{session.votingEnabled && <button type="button" disabled={votedQuestions.has(item.id)} onClick={() => void handleVote(item.id)} className={`min-w-14 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors ${votedQuestions.has(item.id) ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent-strong)]'}`} aria-label={`Vote pertanyaan dari ${item.displayName || 'anonim'}`}><span className="block text-base leading-none">▲</span><span className="mt-1 block">{item.upvotes}</span></button>}</div><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed">{item.body}</p>{item.answer && <div className="mt-4 rounded-xl border border-[var(--border)] p-3"><p className="text-xs font-semibold text-[var(--muted)]">Jawaban moderator</p><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{item.answer}</p></div>}</article>)}</div>}</section>
+        <section className="space-y-4"><div className="flex items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pertanyaan terpilih</p><h2 className="mt-2 text-xl font-bold">Diskusi audience</h2></div><Badge color="var(--surface-soft)">{session.questions.length} tampil</Badge></div>{session.questions.length === 0 ? <Card className="py-12 text-center text-sm text-[var(--muted)]"><MessageCircle size={30} className="mx-auto mb-3" />Belum ada pertanyaan yang ditampilkan.</Card> : <div className="space-y-3">{sortQuestionsForDisplay(session.questions).map(item => <article key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{item.displayName || 'Anonim'}</span>{item.category && <span className="rounded-lg bg-[var(--surface-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{item.category}</span>}{item.isPinned && <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--accent-strong)]"><Pin size={11} /> Dipin</span>}</div><p className="mt-1 text-xs text-[var(--muted)]">{formatDate(item.createdAt)}</p></div>{session.votingEnabled && <button type="button" disabled={votedQuestions.has(item.id)} onClick={() => void handleVote(item.id)} className={`min-w-14 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors ${votedQuestions.has(item.id) ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent-strong)]'}`} aria-label={`Vote pertanyaan dari ${item.displayName || 'anonim'}`}><span className="block text-base leading-none">▲</span><span className="mt-1 block">{item.upvotes}</span></button>}</div><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed">{item.body}</p>{item.answer && <div className="mt-4 rounded-xl border border-[var(--border)] p-3"><p className="text-xs font-semibold text-[var(--muted)]">Jawaban moderator</p><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{item.answer}</p></div>}</article>)}</div>}</section>
       </div>
     </div>
   );
@@ -490,9 +499,7 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
   const audienceLink = createQnaLink(session.slug);
   const audienceQrUrl = `https://api.qrserver.com/v1/create-qr-code/?size=240x240&margin=12&data=${encodeURIComponent(audienceLink)}`;
 
-  const orderedQuestions = useMemo(() => [...session.questions].sort((a, b) => (
-    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
-  )), [session.questions]);
+  const orderedQuestions = useMemo(() => sortQuestionsForDisplay(session.questions), [session.questions]);
 
   const availableCategories = useMemo(() => {
     const existing = new Set(orderedQuestions.map(question => question.category || 'Umum'));

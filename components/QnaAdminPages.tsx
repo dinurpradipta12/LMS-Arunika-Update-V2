@@ -52,6 +52,15 @@ const normalizeQuestionCategory = (value: unknown) => {
   return category || 'Umum';
 };
 
+const compareQuestionDisplayOrder = (a: QnaQuestion, b: QnaQuestion) => {
+  if (a.isPinned !== b.isPinned) return a.isPinned ? -1 : 1;
+  return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+};
+
+const sortQuestionsForDisplay = (questions: QnaQuestion[]) => (
+  [...questions].sort(compareQuestionDisplayOrder)
+);
+
 const normalizeTheme = (value: unknown): FormThemeKey => (
   FORM_THEME_OPTIONS.some(item => item.value === value) ? value as FormThemeKey : 'navy'
 );
@@ -301,7 +310,7 @@ const QnaModerationPanel: React.FC<{
   onUpdate: (question: QnaQuestion, patch: Partial<QnaQuestion>) => void;
   onDelete: (question: QnaQuestion) => void;
 }> = ({ questions, isLoading, filter, onFilterChange, answerDrafts, onAnswerChange, onUpdate, onDelete }) => {
-  const filteredQuestions = useMemo(() => filter === 'all' ? questions : questions.filter(question => question.status === filter), [filter, questions]);
+  const filteredQuestions = useMemo(() => sortQuestionsForDisplay(filter === 'all' ? questions : questions.filter(question => question.status === filter)), [filter, questions]);
   const pendingCount = questions.filter(question => question.status === 'pending').length;
   const visibleCount = questions.filter(question => question.status === 'approved' || question.status === 'answered').length;
 
@@ -345,7 +354,7 @@ export const QnaAdminDetailPage: React.FC<{ client: any }> = ({ client }) => {
     const { data, error } = await client.from('qna_questions').select('*').eq('session_id', id).order('is_pinned', { ascending: false }).order('created_at', { ascending: false });
     if (error) setNotice({ tone: 'error', message: errorMessage(error) });
     else {
-      const mapped = (data || []).map(mapQuestionRow);
+      const mapped = sortQuestionsForDisplay((data || []).map(mapQuestionRow));
       setQuestions(mapped);
       setAnswerDrafts(current => ({ ...current, ...Object.fromEntries(mapped.map(question => [question.id, current[question.id] ?? question.answer])) }));
     }
@@ -386,7 +395,7 @@ export const QnaAdminDetailPage: React.FC<{ client: any }> = ({ client }) => {
     if (error) setNotice({ tone: 'error', message: errorMessage(error) });
     else if (data) {
       const mapped = mapQuestionRow(data);
-      setQuestions(current => current.map(item => item.id === mapped.id ? mapped : item));
+      setQuestions(current => sortQuestionsForDisplay(current.map(item => item.id === mapped.id ? mapped : item)));
       setAnswerDrafts(current => ({ ...current, [mapped.id]: mapped.answer }));
     }
   };
