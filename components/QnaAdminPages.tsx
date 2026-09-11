@@ -1,5 +1,5 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, Copy, Eye, Loader2, MessageCircle, Pin, Play, Plus, Save, Trash2, XCircle } from 'lucide-react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { ArrowLeft, Check, Copy, Eye, ImagePlus, Loader2, MessageCircle, Pin, Play, Plus, Save, Trash2, Upload, XCircle } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { FormThemeKey, QnaQuestion, QnaQuestionStatus, QnaSession, QnaSessionStatus } from '../types';
@@ -78,6 +78,7 @@ const mapSessionRow = (row: any): QnaSession => ({
   welcomeMessage: String(row?.welcome_message ?? row?.welcomeMessage ?? ''),
   closedMessage: String(row?.closed_message ?? row?.closedMessage ?? 'Sesi Q&A ini sudah ditutup.'),
   theme: normalizeTheme(row?.theme),
+  headerImage: String(row?.header_image ?? row?.headerImage ?? ''),
   presenterToken: String(row?.presenter_token ?? row?.presenterToken ?? ''),
   createdAt: row?.created_at ?? row?.createdAt,
   updatedAt: row?.updated_at ?? row?.updatedAt
@@ -110,6 +111,7 @@ const sessionWriteRow = (session: QnaSession) => ({
   welcome_message: session.welcomeMessage,
   closed_message: session.closedMessage,
   theme: session.theme,
+  header_image: session.headerImage,
   updated_at: new Date().toISOString()
 });
 
@@ -126,6 +128,7 @@ const defaultSession = (): QnaSession => ({
   welcomeMessage: 'Pertanyaan akan langsung tampil di ruang diskusi.',
   closedMessage: 'Sesi Q&A ini sudah ditutup.',
   theme: 'navy',
+  headerImage: '',
   presenterToken: ''
 });
 
@@ -178,6 +181,85 @@ const PageHeader: React.FC<{
   </div>
 );
 
+const QnaHeaderUploader: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Pilih file gambar untuk header Q&A.');
+      return;
+    }
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const dataUrl = await new Promise<string>((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Header gagal dibaca.'));
+        reader.onload = () => {
+          const image = new Image();
+          image.onerror = () => reject(new Error('Format gambar header tidak didukung.'));
+          image.onload = () => {
+            const targetWidth = 1200;
+            const targetHeight = 150;
+            const sourceRatio = image.width / image.height;
+            const targetRatio = targetWidth / targetHeight;
+            const sourceWidth = sourceRatio > targetRatio ? image.height * targetRatio : image.width;
+            const sourceHeight = sourceRatio > targetRatio ? image.height : image.width / targetRatio;
+            const sourceX = (image.width - sourceWidth) / 2;
+            const sourceY = (image.height - sourceHeight) / 2;
+            const canvas = document.createElement('canvas');
+            canvas.width = targetWidth;
+            canvas.height = targetHeight;
+            const context = canvas.getContext('2d');
+            if (!context) return reject(new Error('Header gagal diproses.'));
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, targetWidth, targetHeight);
+            context.drawImage(image, sourceX, sourceY, sourceWidth, sourceHeight, 0, 0, targetWidth, targetHeight);
+            resolve(canvas.toDataURL('image/jpeg', 0.86));
+          };
+          image.src = String(reader.result);
+        };
+        reader.readAsDataURL(file);
+      });
+      if (dataUrl.length > 1_800_000) {
+        setError('Ukuran header terlalu besar. Gunakan gambar yang lebih ringan.');
+        return;
+      }
+      onChange(dataUrl);
+    } catch (uploadError: any) {
+      setError(uploadError?.message || 'Header gagal diproses.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  return (
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted)]">Header visual Q&A</p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Gunakan rasio 8:1. Gambar otomatis dipotong ke ukuran 1200 × 150 px agar tetap ringan dan rapi di presenter maupun halaman audience.</p>
+        </div>
+        {value && <button type="button" onClick={() => onChange('')} className="shrink-0 text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus header</button>}
+      </div>
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+        {value ? <img src={value} alt="Preview header visual Q&A" className="aspect-[8/1] w-full rounded-lg object-cover" /> : <div className="flex aspect-[8/1] min-h-[70px] items-center justify-center gap-2 rounded-lg border border-dashed border-[var(--border-strong)] text-center text-sm text-[var(--muted)]"><ImagePlus size={22} /><span>Belum ada header visual</span></div>}
+      </div>
+      <div className="flex flex-wrap gap-2">
+        <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+        <Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing}>Upload header</Button>
+      </div>
+      <Input label="URL header (opsional)" value={value.startsWith('data:') ? '' : value} onChange={event => onChange(event.target.value)} placeholder="https://.../header.jpg" />
+      {error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}
+    </div>
+  );
+};
+
 const QnaSessionForm: React.FC<{
   session: QnaSession;
   isSaving: boolean;
@@ -199,6 +281,7 @@ const QnaSessionForm: React.FC<{
       <Input label="Nama event / kelas" value={session.eventName} onChange={event => onChange({ eventName: event.target.value })} placeholder="Contoh: Webinar September" />
     </div>
     <Textarea label="Deskripsi" value={session.description} onChange={event => onChange({ description: event.target.value })} placeholder="Jelaskan konteks sesi kepada audience." />
+    <QnaHeaderUploader value={session.headerImage} onChange={headerImage => onChange({ headerImage })} />
     <div className="grid gap-4 md:grid-cols-2">
       <Input label="Slug link audience" value={session.slug} onChange={event => onChange({ slug: event.target.value })} onBlur={() => onChange({ slug: slugify(session.slug || session.title) })} placeholder="qna-webinar-september" />
       <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status sesi</span><select value={session.status} onChange={event => onChange({ status: event.target.value as QnaSessionStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">{SESSION_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}</select></label>

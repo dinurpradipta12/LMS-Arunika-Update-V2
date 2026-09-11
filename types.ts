@@ -231,6 +231,7 @@ export interface QnaSession {
   welcomeMessage: string;
   closedMessage: string;
   theme: FormThemeKey;
+  headerImage: string;
   presenterToken: string;
   createdAt?: string;
   updatedAt?: string;

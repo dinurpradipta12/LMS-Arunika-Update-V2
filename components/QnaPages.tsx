@@ -80,6 +80,7 @@ const mapSessionRow = (row: any): QnaSession => ({
   welcomeMessage: String(row?.welcome_message ?? row?.welcomeMessage ?? ''),
   closedMessage: String(row?.closed_message ?? row?.closedMessage ?? 'Sesi Q&A ini sudah ditutup.'),
   theme: normalizeTheme(row?.theme),
+  headerImage: String(row?.header_image ?? row?.headerImage ?? ''),
   presenterToken: String(row?.presenter_token ?? row?.presenterToken ?? ''),
   createdAt: row?.created_at ?? row?.createdAt,
   updatedAt: row?.updated_at ?? row?.updatedAt
@@ -116,6 +117,7 @@ const mapPublicSession = (value: any) => {
     welcomeMessage: String(row.welcomeMessage || ''),
     closedMessage: String(row.closedMessage || 'Sesi Q&A ini sudah ditutup.'),
     theme: normalizeTheme(row.theme),
+    headerImage: String(row.headerImage ?? row.header_image ?? ''),
     presenterValid: row.presenterValid === true || row.isPresenter === true,
     questions: Array.isArray(row.questions) ? sortQuestionsForDisplay(row.questions.map(mapQuestionRow)) : []
   };
@@ -139,6 +141,7 @@ const sessionWriteRow = (session: QnaSession) => ({
   welcome_message: session.welcomeMessage,
   closed_message: session.closedMessage,
   theme: session.theme,
+  header_image: session.headerImage,
   updated_at: new Date().toISOString()
 });
 
@@ -194,6 +197,10 @@ const Notice: React.FC<{ tone: 'success' | 'error'; children: React.ReactNode }>
   <div className={`rounded-xl border border-[var(--border)] p-3 text-sm ${tone === 'success' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>
     {children}
   </div>
+);
+
+const QnaHeaderBanner: React.FC<{ image: string; title: string }> = ({ image, title }) => (
+  image ? <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm"><img src={image} alt={`Header ${title}`} className="aspect-[8/1] max-h-44 w-full object-cover" /></div> : null
 );
 
 export const QnaAdminPage: React.FC<{ client: any }> = ({ client }) => {
@@ -276,6 +283,7 @@ export const QnaAdminPage: React.FC<{ client: any }> = ({ client }) => {
       welcomeMessage: 'Pertanyaan akan langsung tampil di ruang diskusi.',
       closedMessage: 'Sesi Q&A ini sudah ditutup.',
       theme: 'navy',
+      headerImage: '',
       presenterToken: ''
     };
     const { data, error } = await client.from('qna_sessions').insert(sessionWriteRow(draft)).select('*').single();
@@ -474,6 +482,7 @@ const QnaAudienceView: React.FC<{
     <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8" style={formThemeStyle(session.theme)}>
       <div className="mx-auto max-w-3xl space-y-6">
         <header className="flex items-center gap-3"><img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" /><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{FORM_MAKER_PUBLIC_LABEL}</p><p className="truncate font-semibold">{session.title}</p></div></header>
+        <QnaHeaderBanner image={session.headerImage} title={session.title} />
         <Card className="space-y-6">
           <div><div className="flex flex-wrap items-center gap-2"><Badge color="var(--accent-soft)">Q&A Audience</Badge><Badge color={isLive ? 'var(--success-soft)' : 'var(--surface-soft)'}>{isLive ? 'LIVE' : session.status.toUpperCase()}</Badge></div><h1 className="mt-4 text-3xl font-bold">{session.title}</h1><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{session.description}</p>{session.welcomeMessage && <p className="mt-4 rounded-xl bg-[var(--surface-soft)] p-3 text-sm leading-relaxed text-[var(--muted)]">{session.welcomeMessage}</p>}</div>
           {!isLive ? <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div> : <form onSubmit={handleSubmit} className="space-y-4"><div className="grid gap-4 md:grid-cols-2"><Input label={`Nama ${nameRequired ? '*' : '(opsional)'}`} value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder={session.allowAnonymous && !nameRequired ? 'Anonim' : 'Nama Anda'} required={nameRequired} /><div className="flex items-end text-xs leading-relaxed text-[var(--muted)]"><span>Pertanyaan Anda akan langsung tampil di ruang diskusi.</span></div></div><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Kategori pertanyaan</span><select value={category} onChange={event => setCategory(event.target.value)} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]">{QNA_CATEGORY_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}</select></label><Textarea label="Pertanyaan Anda" value={question} onChange={event => setQuestion(event.target.value.slice(0, 1200))} maxLength={1200} placeholder="Tulis pertanyaan untuk pembicara..." className="min-h-[130px]" /><div className="flex items-center justify-between gap-3"><span className="text-xs text-[var(--muted)]">{question.length}/1200 karakter</span><Button type="submit" icon={Send} isLoading={isSubmitting}>Kirim pertanyaan</Button></div></form>}
@@ -565,6 +574,7 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
             <Button variant="secondary" icon={isFullscreen ? Minimize2 : Maximize2} onClick={() => void toggleFullscreen()}>{isFullscreen ? 'Keluar fullscreen' : 'Fullscreen'}</Button>
           </div>
         </header>
+        <QnaHeaderBanner image={session.headerImage} title={session.title} />
         {!isLive && <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div>}
         <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
