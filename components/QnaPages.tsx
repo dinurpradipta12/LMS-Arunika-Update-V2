@@ -604,8 +604,9 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
           </Card>
         ) : (
           <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_240px] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:overflow-hidden">
-            <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
-              <ol aria-live="polite" className="divide-y divide-[var(--border)]">
+            <div className="min-h-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-2 shadow-sm lg:overflow-hidden">
+              <div className="qna-presenter-scroll h-full min-h-0 overflow-y-auto rounded-xl border border-[var(--border)] bg-[var(--surface)] lg:overscroll-contain">
+                <ol aria-live="polite" className="divide-y divide-[var(--border)]">
                 {visibleQuestions.map(item => (
                   <li key={item.id} className={newQuestionIds.has(item.id) ? 'qna-presenter-question-enter overflow-hidden' : 'overflow-hidden'}>
                     <div className={`p-3 md:p-4 ${item.isPinned ? 'bg-[var(--success-soft)]' : 'bg-[var(--surface)]'}`}>
@@ -635,7 +636,8 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
                     </div>
                   </li>
                 ))}
-              </ol>
+                </ol>
+              </div>
             </div>
             <aside className="self-start rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm">
               <div className="flex items-center gap-2">
