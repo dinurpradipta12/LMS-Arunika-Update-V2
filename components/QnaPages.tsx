@@ -603,7 +603,7 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
             </div>
           </Card>
         ) : (
-          <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start">
+          <div className="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[minmax(0,1fr)_240px] lg:grid-rows-[minmax(0,1fr)] lg:items-stretch lg:overflow-hidden">
             <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm lg:min-h-0 lg:overflow-y-auto lg:overscroll-contain">
               <ol aria-live="polite" className="divide-y divide-[var(--border)]">
                 {visibleQuestions.map(item => (
