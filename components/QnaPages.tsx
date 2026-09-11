@@ -564,7 +564,7 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
           <div className="flex items-center gap-3">
             <img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" />
             <div className="min-w-0">
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Presenter Q&A</p>
+              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Q&amp;A &amp; Discussion Center</p>
               <h1 className="truncate text-xl font-bold">{session.title}</h1>
               <p className="mt-1 text-sm text-[var(--muted)]">{session.eventName}</p>
             </div>
