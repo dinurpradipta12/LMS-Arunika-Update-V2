@@ -601,7 +601,7 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
                     <div className={`p-3 md:p-4 ${item.isPinned ? 'bg-[var(--success-soft)]' : 'bg-[var(--surface)]'}`}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="flex min-w-0 flex-1 items-start gap-3">
-                          <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full text-xs font-bold ${item.status === 'answered' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'}`} aria-hidden="true">{item.status === 'answered' ? 'A' : 'Q'}</span>
+                          {!item.isPinned && <span className={`flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${item.status === 'answered' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'}`} aria-hidden="true">{item.status === 'answered' ? <Check size={15} strokeWidth={2.5} /> : <MessageCircle size={15} strokeWidth={2.5} />}</span>}
                           <div className="min-w-0 flex-1">
                             <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
                               <p className="text-sm font-bold text-[var(--text)]">{item.displayName || 'Anonim'}</p>
