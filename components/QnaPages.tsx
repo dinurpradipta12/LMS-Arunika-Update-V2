@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useMemo, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ArrowLeft, Check, Copy, Eye, FileText, Loader2, Maximize2, MessageCircle, Minimize2, Pin, Play, Plus, RefreshCw, Save, Send, Trash2, XCircle } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
@@ -455,7 +455,7 @@ const QnaAudienceView: React.FC<{
         <header className="flex items-center gap-3"><img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" /><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{FORM_MAKER_PUBLIC_LABEL}</p><p className="truncate font-semibold">{session.title}</p></div></header>
         <Card className="space-y-6">
           <div><div className="flex flex-wrap items-center gap-2"><Badge color="var(--accent-soft)">Q&A Audience</Badge><Badge color={isLive ? 'var(--success-soft)' : 'var(--surface-soft)'}>{isLive ? 'LIVE' : session.status.toUpperCase()}</Badge></div><h1 className="mt-4 text-3xl font-bold">{session.title}</h1><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{session.description}</p>{session.welcomeMessage && <p className="mt-4 rounded-xl bg-[var(--surface-soft)] p-3 text-sm leading-relaxed text-[var(--muted)]">{session.welcomeMessage}</p>}</div>
-          {!isLive ? <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div> : <form onSubmit={handleSubmit} className="space-y-4"><div className="grid gap-4 md:grid-cols-2"><Input label={`Nama ${nameRequired ? '*' : '(opsional)'}`} value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder={session.allowAnonymous && !nameRequired ? 'Anonim' : 'Nama Anda'} required={nameRequired} /><div className="flex items-end text-xs leading-relaxed text-[var(--muted)]"><span>Pertanyaan Anda akan diperiksa moderator sebelum tampil ke peserta lain.</span></div></div><Textarea label="Pertanyaan Anda" value={question} onChange={event => setQuestion(event.target.value.slice(0, 1200))} maxLength={1200} placeholder="Tulis pertanyaan untuk pembicara..." className="min-h-[130px]" /><div className="flex items-center justify-between gap-3"><span className="text-xs text-[var(--muted)]">{question.length}/1200 karakter</span><Button type="submit" icon={Send} isLoading={isSubmitting}>Kirim pertanyaan</Button></div></form>}
+          {!isLive ? <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div> : <form onSubmit={handleSubmit} className="space-y-4"><div className="grid gap-4 md:grid-cols-2"><Input label={`Nama ${nameRequired ? '*' : '(opsional)'}`} value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder={session.allowAnonymous && !nameRequired ? 'Anonim' : 'Nama Anda'} required={nameRequired} /><div className="flex items-end text-xs leading-relaxed text-[var(--muted)]"><span>Pertanyaan Anda akan langsung tampil di ruang diskusi.</span></div></div><Textarea label="Pertanyaan Anda" value={question} onChange={event => setQuestion(event.target.value.slice(0, 1200))} maxLength={1200} placeholder="Tulis pertanyaan untuk pembicara..." className="min-h-[130px]" /><div className="flex items-center justify-between gap-3"><span className="text-xs text-[var(--muted)]">{question.length}/1200 karakter</span><Button type="submit" icon={Send} isLoading={isSubmitting}>Kirim pertanyaan</Button></div></form>}
           {notice && <Notice tone={notice.tone}>{notice.message}</Notice>}
         </Card>
 
@@ -467,7 +467,30 @@ const QnaAudienceView: React.FC<{
 
 const QnaPresenterView: React.FC<{ session: PublicQnaSession }> = ({ session }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
+  const previousQuestionIdsRef = useRef<Set<string>>(new Set(session.questions.map(question => question.id)));
+  const [newQuestionIds, setNewQuestionIds] = useState<Set<string>>(() => new Set());
   const isLive = session.status === 'live';
+
+  const orderedQuestions = useMemo(() => [...session.questions].sort((a, b) => (
+    new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
+  )), [session.questions]);
+
+  useEffect(() => {
+    const currentIds = new Set<string>(session.questions.map(question => question.id));
+    const additions = session.questions.filter(question => !previousQuestionIdsRef.current.has(question.id));
+    previousQuestionIdsRef.current = currentIds;
+    if (!additions.length) return;
+
+    setNewQuestionIds(new Set<string>(additions.map(question => question.id)));
+    const timer = window.setTimeout(() => {
+      setNewQuestionIds(current => {
+        const next = new Set(current);
+        additions.forEach(question => next.delete(question.id));
+        return next;
+      });
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [session.questions]);
 
   useEffect(() => {
     const handleFullscreenChange = () => setIsFullscreen(Boolean(document.fullscreenElement));
@@ -486,7 +509,7 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession }> = ({ session }) 
         <header className="flex flex-col justify-between gap-4 border-b border-[var(--border)] pb-5 sm:flex-row sm:items-center"><div className="flex items-center gap-3"><img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" /><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Presenter Q&A</p><h1 className="truncate text-xl font-bold">{session.title}</h1><p className="mt-1 text-sm text-[var(--muted)]">{session.eventName}</p></div></div><div className="flex flex-wrap items-center gap-2"><Badge color={isLive ? 'var(--success-soft)' : 'var(--surface-soft)'}>{isLive ? 'LIVE' : session.status.toUpperCase()}</Badge><Button variant="secondary" icon={isFullscreen ? Minimize2 : Maximize2} onClick={() => void toggleFullscreen()}>{isFullscreen ? 'Keluar fullscreen' : 'Fullscreen'}</Button></div></header>
         {!isLive && <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div>}
         <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pertanyaan audience</p><h2 className="mt-2 text-2xl font-bold">Diskusi yang sedang berlangsung</h2></div><Badge color="var(--accent-soft)">{session.questions.length} pertanyaan</Badge></div>
-        {session.questions.length === 0 ? <Card className="flex min-h-[360px] flex-col items-center justify-center gap-4 text-center"><MessageCircle size={48} className="text-[var(--muted)]" /><div><p className="text-lg font-semibold">Belum ada pertanyaan</p><p className="mt-1 text-sm text-[var(--muted)]">Pertanyaan yang dikirim audience akan muncul realtime di sini.</p></div></Card> : <div className="grid gap-5 md:grid-cols-2">{session.questions.map(item => <article key={item.id} className={`rounded-2xl border bg-[var(--surface)] p-6 shadow-sm ${item.isPinned ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)]'}`}><div className="flex items-start justify-between gap-4"><div><div className="flex flex-wrap items-center gap-2"><Badge color={item.status === 'answered' ? 'var(--success-soft)' : 'var(--accent-soft)'}>{item.status === 'answered' ? 'Terjawab' : 'Pertanyaan'}</Badge>{item.isPinned && <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent-strong)]"><Pin size={13} /> Prioritas</span>}</div><p className="mt-3 text-sm font-semibold text-[var(--muted)]">{item.displayName || 'Anonim'} · {item.upvotes} vote</p></div><FileText size={22} className="shrink-0 text-[var(--accent-strong)]" /></div><p className="mt-5 whitespace-pre-wrap break-words text-xl font-semibold leading-relaxed md:text-2xl">{item.body}</p>{item.answer && <div className="mt-5 rounded-xl bg-[var(--accent-soft)] p-4"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Jawaban moderator</p><p className="mt-2 whitespace-pre-wrap text-base leading-relaxed">{item.answer}</p></div>}</article>)}</div>}
+        {orderedQuestions.length === 0 ? <Card className="flex min-h-[360px] flex-col items-center justify-center gap-4 text-center"><MessageCircle size={48} className="text-[var(--muted)]" /><div><p className="text-lg font-semibold">Belum ada pertanyaan</p><p className="mt-1 text-sm text-[var(--muted)]">Pertanyaan yang dikirim audience akan muncul realtime di sini.</p></div></Card> : <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm"><ol aria-live="polite" className="divide-y divide-[var(--border)]">{orderedQuestions.map(item => <li key={item.id} className={newQuestionIds.has(item.id) ? 'qna-presenter-question-enter overflow-hidden' : 'overflow-hidden'}><div className={`p-4 md:p-5 ${item.isPinned ? 'bg-[var(--accent-soft)]/40' : ''}`}><div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge color={item.status === 'answered' ? 'var(--success-soft)' : 'var(--accent-soft)'}>{item.status === 'answered' ? 'Terjawab' : 'Pertanyaan'}</Badge>{item.isPinned && <span className="inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent-strong)]"><Pin size={13} /> Prioritas</span>}</div><p className="mt-2 text-sm font-semibold text-[var(--muted)]">{item.displayName || 'Anonim'} · {item.upvotes} vote · {formatDate(item.createdAt)}</p></div><FileText size={21} className="shrink-0 text-[var(--accent-strong)]" /></div><p className="mt-4 whitespace-pre-wrap break-words text-lg font-semibold leading-relaxed md:text-xl">{item.body}</p>{item.answer && <div className="mt-4 rounded-xl bg-[var(--accent-soft)] p-3 md:p-4"><p className="text-xs font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Jawaban moderator</p><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed md:text-base">{item.answer}</p></div>}</div></li>)}</ol></div>}
       </div>
     </div>
   );
@@ -499,27 +522,33 @@ export const PublicQnaPage: React.FC<{ client: any; presenterMode?: boolean; slu
   const [session, setSession] = useState<PublicQnaSession | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const hasLoadedSessionRef = useRef(false);
   const clientToken = useMemo(createClientToken, []);
   const presenterToken = new URLSearchParams(location.search).get('key') || '';
 
-  const fetchSession = useCallback(async () => {
+  const fetchSession = useCallback(async (options: { silent?: boolean } = {}) => {
+    const silent = options.silent === true;
     if (!client || !slug) {
       setLoadError('Link sesi Q&A tidak valid.');
       setIsLoading(false);
       return;
     }
-    setIsLoading(true);
+    if (!silent) setIsLoading(true);
     const { data, error } = await client.rpc('get_public_qna_session', { p_slug: decodeURIComponent(slug), p_presenter_token: presenterToken });
-    if (error || !data) setLoadError(errorMessage(error || 'QNA_NOT_FOUND'));
-    else {
+    if (error || !data) {
+      if (!silent || !hasLoadedSessionRef.current) setLoadError(errorMessage(error || 'QNA_NOT_FOUND'));
+    } else {
       const mapped = mapPublicSession(data);
-      if (!mapped) setLoadError('Sesi Q&A tidak ditemukan.');
+      if (!mapped) {
+        if (!silent || !hasLoadedSessionRef.current) setLoadError('Sesi Q&A tidak ditemukan.');
+      }
       else {
+        hasLoadedSessionRef.current = true;
         setSession(mapped);
         setLoadError(presenterMode && !mapped.presenterValid ? 'Link presenter tidak valid atau sudah dicabut.' : null);
       }
     }
-    setIsLoading(false);
+    if (!silent) setIsLoading(false);
   }, [client, presenterMode, presenterToken, slug]);
 
   useEffect(() => { void fetchSession(); }, [fetchSession]);
@@ -528,7 +557,7 @@ export const PublicQnaPage: React.FC<{ client: any; presenterMode?: boolean; slu
     if (!client || !slug) return;
     const channel = client.channel(`public_qna_${slug}`).on('postgres_changes', {
       event: 'UPDATE', schema: 'public', table: 'public_content_revisions', filter: 'scope=eq.qna'
-    }, () => { void fetchSession(); }).subscribe();
+    }, () => { void fetchSession({ silent: true }); }).subscribe();
     return () => { void client.removeChannel(channel); };
   }, [client, fetchSession, slug]);
 
