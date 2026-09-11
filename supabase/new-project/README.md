@@ -16,8 +16,9 @@ SQL tidak dapat dijalankan dengan anon key. Buka target project di Supabase Dash
 8. Jalankan `../migrations/20260909000000_form_maker.sql` seluruhnya untuk ruang Form Maker, form publik, responder, dan status pembayaran/konfirmasi.
 9. Jalankan `../migrations/20260909010000_form_payment_contact.sql` seluruhnya untuk nominal pembayaran, QR Code, nomor rekening, dan konfirmasi WhatsApp.
 10. Jalankan `../migrations/20260909020000_form_branding.sql` seluruhnya untuk header banner publik dan pilihan tema warna form.
-11. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
-12. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
+11. Jalankan `../migrations/20260911000000_qna_audience.sql` seluruhnya untuk sesi Q&A publik, moderasi, voting, dan layar presenter realtime.
+12. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
+13. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
 
 `01_schema.sql` sekarang fail-closed: semua tabel langsung memakai RLS tanpa policy terbuka. Halaman publik baru aktif setelah migration keamanan pada langkah 4 membuat policy yang hanya membaca konten `published`.
 
@@ -32,7 +33,8 @@ Untuk project `drezwxfgykkdnnwjrnnt` yang tabelnya sudah berisi data, tidak perl
 5. Jalankan migration `20260909000000_form_maker.sql` seluruhnya.
 6. Jalankan migration `20260909010000_form_payment_contact.sql` seluruhnya.
 7. Jalankan migration `20260909020000_form_branding.sql` seluruhnya.
-8. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
+8. Jalankan migration `20260911000000_qna_audience.sql` seluruhnya.
+9. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
 
 Migration keamanan idempotent dan tidak menghapus kursus, analytics, quiz, ataupun hasil peserta. Begitu migration selesai, login lokal lama tidak berlaku lagi; gunakan email/password Supabase Auth yang dibuat pada langkah 1.
 
@@ -59,7 +61,11 @@ select 'class_feedback_submissions', count(*) from public.class_feedback_submiss
 union all
 select 'form_forms', count(*) from public.form_forms
 union all
-select 'form_responses', count(*) from public.form_responses;
+select 'form_responses', count(*) from public.form_responses
+union all
+select 'qna_sessions', count(*) from public.qna_sessions
+union all
+select 'qna_questions', count(*) from public.qna_questions;
 ```
 
 Hasil minimum setelah langkah 1 dan 2:
@@ -72,6 +78,8 @@ Hasil minimum setelah langkah 1 dan 2:
 - `quiz_attempts`: 0 karena tabel ini belum ada di database lama
 - `form_forms`: 0 sebelum form pertama dibuat dari dashboard
 - `form_responses`: 0 sebelum form publik menerima responder
+- `qna_sessions`: 0 sebelum sesi Q&A pertama dibuat dari dashboard
+- `qna_questions`: 0 sebelum audience mengirim pertanyaan
 
 Kelas Recording dan post-test baru dapat dibuat dari dashboard Arunika setelah schema keamanan dan akun admin tersedia.
 
@@ -95,7 +103,8 @@ where n.nspname = 'public'
   and c.relname in (
     'courses', 'mentor', 'branding', 'events',
     'course_quizzes', 'quiz_attempts', 'class_feedback_submissions',
-    'form_forms', 'form_responses', 'public_content_revisions'
+    'form_forms', 'form_responses', 'qna_sessions', 'qna_questions',
+    'qna_question_votes', 'public_content_revisions'
   )
 order by c.relname;
 ```
@@ -108,7 +117,8 @@ from pg_publication_tables
 where pubname = 'supabase_realtime'
   and tablename in (
     'courses', 'mentor', 'branding', 'events', 'course_quizzes',
-    'quiz_attempts', 'form_forms', 'form_responses', 'public_content_revisions'
+    'quiz_attempts', 'form_forms', 'form_responses', 'qna_sessions',
+    'qna_questions', 'qna_question_votes', 'public_content_revisions'
   )
 order by tablename;
 ```

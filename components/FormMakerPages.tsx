@@ -18,7 +18,7 @@ import logoUtama from '../src/logo-utama.png';
 export const FORM_MAKER_SPACE_LABEL = 'Form Maker';
 export const FORM_MAKER_PUBLIC_LABEL = 'Arunika Form Development';
 
-const FORM_THEME_OPTIONS: Array<{ value: FormThemeKey; label: string; description: string; swatch: string }> = [
+export const FORM_THEME_OPTIONS: Array<{ value: FormThemeKey; label: string; description: string; swatch: string }> = [
   { value: 'navy', label: 'Navy', description: 'Profesional dan tegas', swatch: '#173b5e' },
   { value: 'emerald', label: 'Emerald', description: 'Segar dan edukatif', swatch: '#0f766e' },
   { value: 'coral', label: 'Coral', description: 'Hangat dan energik', swatch: '#c2413a' },
@@ -28,7 +28,7 @@ const FORM_THEME_OPTIONS: Array<{ value: FormThemeKey; label: string; descriptio
 
 const isFormThemeKey = (value: unknown): value is FormThemeKey => FORM_THEME_OPTIONS.some(theme => theme.value === value);
 
-const formThemeStyle = (theme?: FormThemeKey): React.CSSProperties => {
+export const formThemeStyle = (theme?: FormThemeKey): React.CSSProperties => {
   const colors: Record<FormThemeKey, { accent: string; hover: string; soft: string; strong: string }> = {
     navy: { accent: '#173b5e', hover: '#214e75', soft: '#e2ebf3', strong: '#143552' },
     emerald: { accent: '#0f766e', hover: '#0d9488', soft: '#d9f2ed', strong: '#0b5e58' },

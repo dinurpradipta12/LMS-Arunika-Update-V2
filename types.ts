@@ -212,3 +212,38 @@ export interface FormResponse {
   paidAt?: string | null;
   updatedAt?: string;
 }
+
+export type QnaSessionStatus = 'draft' | 'live' | 'paused' | 'closed' | 'archived';
+export type QnaQuestionStatus = 'pending' | 'approved' | 'answered' | 'hidden' | 'archived';
+
+export interface QnaSession {
+  id: string;
+  slug: string;
+  title: string;
+  eventName: string;
+  description: string;
+  status: QnaSessionStatus;
+  allowAnonymous: boolean;
+  requireName: boolean;
+  votingEnabled: boolean;
+  welcomeMessage: string;
+  closedMessage: string;
+  theme: FormThemeKey;
+  presenterToken: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface QnaQuestion {
+  id: string;
+  sessionId: string;
+  body: string;
+  displayName: string;
+  status: QnaQuestionStatus;
+  answer: string;
+  isPinned: boolean;
+  upvotes: number;
+  sortOrder: number;
+  createdAt: string;
+  updatedAt?: string;
+}
