@@ -85,7 +85,8 @@ import {
   PublicFormView,
   FORM_MAKER_SPACE_LABEL
 } from './components/FormMakerPages';
-import { QnaAdminPage, PublicQnaPage, QNA_SPACE_LABEL } from './components/QnaPages';
+import { PublicQnaPage, QNA_SPACE_LABEL } from './components/QnaPages';
+import { QnaAdminCreatePage, QnaAdminDetailPage, QnaAdminListPage } from './components/QnaAdminPages';
 import logoUtama from './src/logo-utama.png';
 import faviconLogo from './src/favicon.png';
 
@@ -2111,7 +2112,9 @@ const App: React.FC = () => {
         <Route path="/admin/forms" element={renderAdminPage(<FormMakerPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/forms/:id/responses" element={renderAdminPage(<FormResponsesPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/forms/:id" element={renderAdminPage(<FormEditorPage client={getAdminSupabaseClient()} />)} />
-        <Route path="/admin/qna" element={renderAdminPage(<QnaAdminPage client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/qna/new" element={renderAdminPage(<QnaAdminCreatePage client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/qna/:id" element={renderAdminPage(<QnaAdminDetailPage client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/qna" element={renderAdminPage(<QnaAdminListPage client={getAdminSupabaseClient()} />)} />
         <Route path="/analytics" element={renderAdminPage(<AnalyticsPage courses={courses} supabase={PUBLIC_SUPABASE_CONFIG} />)} />
         <Route path="/settings" element={renderAdminPage(<Settings />)} />
         <Route path="/c/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} usesShortCode />} />
