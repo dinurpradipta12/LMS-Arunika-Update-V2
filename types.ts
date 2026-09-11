@@ -215,6 +215,8 @@ export interface FormResponse {
 
 export type QnaSessionStatus = 'draft' | 'live' | 'paused' | 'closed' | 'archived';
 export type QnaQuestionStatus = 'pending' | 'approved' | 'answered' | 'hidden' | 'archived';
+export const QNA_CATEGORY_OPTIONS = ['Umum', 'Materi', 'Teknis', 'Studi kasus', 'Administratif', 'Lainnya'] as const;
+export type QnaQuestionCategory = typeof QNA_CATEGORY_OPTIONS[number];
 
 export interface QnaSession {
   id: string;
@@ -239,6 +241,7 @@ export interface QnaQuestion {
   sessionId: string;
   body: string;
   displayName: string;
+  category: string;
   status: QnaQuestionStatus;
   answer: string;
   isPinned: boolean;

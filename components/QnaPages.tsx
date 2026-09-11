@@ -4,6 +4,7 @@ import { Link, useLocation, useParams } from 'react-router-dom';
 
 import {
   FormThemeKey,
+  QNA_CATEGORY_OPTIONS,
   QnaQuestion,
   QnaQuestionStatus,
   QnaSession,
@@ -48,6 +49,11 @@ const normalizeQuestionStatus = (value: unknown): QnaQuestionStatus => (
   QUESTION_STATUSES.some(item => item.value === value) ? value as QnaQuestionStatus : 'pending'
 );
 
+const normalizeQuestionCategory = (value: unknown) => {
+  const category = String(value || '').trim();
+  return category || 'Umum';
+};
+
 const normalizeTheme = (value: unknown): FormThemeKey => (
   FORM_THEME_OPTIONS.some(item => item.value === value) ? value as FormThemeKey : 'navy'
 );
@@ -75,6 +81,7 @@ const mapQuestionRow = (row: any): QnaQuestion => ({
   sessionId: String(row?.session_id ?? row?.sessionId ?? ''),
   body: String(row?.body || ''),
   displayName: String(row?.display_name ?? row?.displayName ?? ''),
+  category: normalizeQuestionCategory(row?.category),
   status: normalizeQuestionStatus(row?.status),
   answer: String(row?.answer || ''),
   isPinned: row?.is_pinned === true || row?.isPinned === true,
@@ -148,6 +155,9 @@ const errorMessage = (error: any) => {
   if (message.includes('QNA_CLOSED')) return 'Sesi Q&A sedang ditutup atau dijeda.';
   if (message.includes('QNA_NAME_REQUIRED')) return 'Nama wajib diisi untuk mengirim pertanyaan.';
   if (message.includes('QNA_NAME_TOO_LONG')) return 'Nama terlalu panjang.';
+  if (message.includes('QNA_CATEGORY_TOO_LONG')) return 'Kategori pertanyaan terlalu panjang.';
+  if (message.includes('QNA_PRESENTER_REQUIRED')) return 'Token presenter wajib tersedia untuk menandai pertanyaan.';
+  if (message.includes('QNA_PRESENTER_INVALID')) return 'Link presenter tidak valid atau sudah dicabut.';
   if (message.includes('QNA_QUESTION_REQUIRED')) return 'Pertanyaan wajib diisi.';
   if (message.includes('QNA_RATE_LIMITED')) return 'Tunggu sebentar sebelum mengirim pertanyaan lagi.';
   if (message.includes('QNA_VOTING_DISABLED')) return 'Voting sedang dimatikan untuk sesi ini.';
@@ -381,7 +391,7 @@ export const QnaAdminPage: React.FC<{ client: any }> = ({ client }) => {
           <Card className="space-y-5">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Moderasi</p><h2 className="mt-2 text-xl font-bold">Pertanyaan audience</h2><p className="mt-1 text-sm text-[var(--muted)]">Setujui pertanyaan sebelum ditampilkan di layar presenter.</p></div><div className="flex gap-2"><Badge color="var(--surface-soft)">{pendingCount} menunggu</Badge><Badge color="var(--success-soft)">{visibleCount} tampil</Badge></div></div>
             <div className="flex flex-wrap gap-2">{(['all', 'pending', 'approved', 'answered', 'hidden'] as const).map(filter => <button key={filter} type="button" onClick={() => setQuestionFilter(filter)} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${questionFilter === filter ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--border-strong)]'}`}>{filter === 'all' ? 'Semua' : questionStatusLabel(filter)}</button>)}</div>
-            {isLoadingQuestions ? <div className="flex items-center justify-center gap-3 py-12 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat pertanyaan...</div> : filteredQuestions.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-8 text-center text-sm text-[var(--muted)]">Belum ada pertanyaan pada filter ini.</div> : <div className="space-y-3">{filteredQuestions.map(question => <article key={question.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{question.displayName || 'Anonim'}</span><span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${questionStatusClass(question.status)}`}>{questionStatusLabel(question.status)}</span>{question.isPinned && <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--accent-strong)]"><Pin size={11} /> Dipin</span>}</div><p className="mt-1 text-xs text-[var(--muted)]">{formatDate(question.createdAt)} · {question.upvotes} vote</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { isPinned: !question.isPinned })}>{question.isPinned ? 'Lepas pin' : 'Pin'}</Button>{question.status === 'pending' && <Button type="button" className="text-xs" icon={Check} onClick={() => void updateQuestion(question, { status: 'approved' })}>Tampilkan</Button>}{(question.status === 'approved' || question.status === 'answered') && <Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { status: 'hidden' })}>Sembunyikan</Button>}{question.status === 'hidden' && <Button type="button" className="text-xs" onClick={() => void updateQuestion(question, { status: 'approved' })}>Tampilkan lagi</Button>}<Button type="button" variant="danger" className="text-xs" icon={Trash2} onClick={() => setDeleteTarget({ kind: 'question', id: question.id, label: question.body })}>Hapus</Button></div></div><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text)]">{question.body}</p><div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"><Textarea label="Jawaban moderator (opsional)" value={answerDrafts[question.id] ?? question.answer} onChange={event => setAnswerDrafts(current => ({ ...current, [question.id]: event.target.value }))} className="min-h-[84px]" placeholder="Tulis jawaban yang akan tampil di presenter..." /><Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { answer: answerDrafts[question.id] ?? question.answer, status: (answerDrafts[question.id] ?? question.answer).trim() ? 'answered' : question.status === 'answered' ? 'approved' : question.status })}>Simpan jawaban</Button></div></article>)}</div>}
+            {isLoadingQuestions ? <div className="flex items-center justify-center gap-3 py-12 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat pertanyaan...</div> : filteredQuestions.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-8 text-center text-sm text-[var(--muted)]">Belum ada pertanyaan pada filter ini.</div> : <div className="space-y-3">{filteredQuestions.map(question => <article key={question.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{question.displayName || 'Anonim'}</span>{question.category && <span className="rounded-lg bg-[var(--surface)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{question.category}</span>}<span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${questionStatusClass(question.status)}`}>{questionStatusLabel(question.status)}</span>{question.isPinned && <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--accent-strong)]"><Pin size={11} /> Dipin</span>}</div><p className="mt-1 text-xs text-[var(--muted)]">{formatDate(question.createdAt)} · {question.upvotes} vote</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { isPinned: !question.isPinned })}>{question.isPinned ? 'Lepas pin' : 'Pin'}</Button>{question.status === 'pending' && <Button type="button" className="text-xs" icon={Check} onClick={() => void updateQuestion(question, { status: 'approved' })}>Tampilkan</Button>}{(question.status === 'approved' || question.status === 'answered') && <Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { status: 'hidden' })}>Sembunyikan</Button>}{question.status === 'hidden' && <Button type="button" className="text-xs" onClick={() => void updateQuestion(question, { status: 'approved' })}>Tampilkan lagi</Button>}<Button type="button" variant="danger" className="text-xs" icon={Trash2} onClick={() => setDeleteTarget({ kind: 'question', id: question.id, label: question.body })}>Hapus</Button></div></div><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text)]">{question.body}</p><div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"><Textarea label="Jawaban moderator (opsional)" value={answerDrafts[question.id] ?? question.answer} onChange={event => setAnswerDrafts(current => ({ ...current, [question.id]: event.target.value }))} className="min-h-[84px]" placeholder="Tulis jawaban yang akan tampil di presenter..." /><Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { answer: answerDrafts[question.id] ?? question.answer, status: (answerDrafts[question.id] ?? question.answer).trim() ? 'answered' : question.status === 'answered' ? 'approved' : question.status })}>Simpan jawaban</Button></div></article>)}</div>}
           </Card>
         </div>}
       </div>
@@ -406,6 +416,7 @@ const QnaAudienceView: React.FC<{
 }> = ({ client, session, clientToken, onQuestionVote }) => {
   const [displayName, setDisplayName] = useState('');
   const [question, setQuestion] = useState('');
+  const [category, setCategory] = useState<string>(QNA_CATEGORY_OPTIONS[0]);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [votedQuestions, setVotedQuestions] = useState<Set<string>>(() => new Set());
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
@@ -429,7 +440,8 @@ const QnaAudienceView: React.FC<{
       p_slug: session.slug,
       p_question: question.trim(),
       p_display_name: displayName.trim(),
-      p_client_token: clientToken
+      p_client_token: clientToken,
+      p_category: category
     });
     if (error) setNotice({ tone: 'error', message: errorMessage(error) });
     else {
@@ -455,19 +467,23 @@ const QnaAudienceView: React.FC<{
         <header className="flex items-center gap-3"><img src={logoUtama} alt="Arunika LMS" className="h-10 w-14 object-contain" /><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{FORM_MAKER_PUBLIC_LABEL}</p><p className="truncate font-semibold">{session.title}</p></div></header>
         <Card className="space-y-6">
           <div><div className="flex flex-wrap items-center gap-2"><Badge color="var(--accent-soft)">Q&A Audience</Badge><Badge color={isLive ? 'var(--success-soft)' : 'var(--surface-soft)'}>{isLive ? 'LIVE' : session.status.toUpperCase()}</Badge></div><h1 className="mt-4 text-3xl font-bold">{session.title}</h1><p className="mt-2 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{session.description}</p>{session.welcomeMessage && <p className="mt-4 rounded-xl bg-[var(--surface-soft)] p-3 text-sm leading-relaxed text-[var(--muted)]">{session.welcomeMessage}</p>}</div>
-          {!isLive ? <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div> : <form onSubmit={handleSubmit} className="space-y-4"><div className="grid gap-4 md:grid-cols-2"><Input label={`Nama ${nameRequired ? '*' : '(opsional)'}`} value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder={session.allowAnonymous && !nameRequired ? 'Anonim' : 'Nama Anda'} required={nameRequired} /><div className="flex items-end text-xs leading-relaxed text-[var(--muted)]"><span>Pertanyaan Anda akan langsung tampil di ruang diskusi.</span></div></div><Textarea label="Pertanyaan Anda" value={question} onChange={event => setQuestion(event.target.value.slice(0, 1200))} maxLength={1200} placeholder="Tulis pertanyaan untuk pembicara..." className="min-h-[130px]" /><div className="flex items-center justify-between gap-3"><span className="text-xs text-[var(--muted)]">{question.length}/1200 karakter</span><Button type="submit" icon={Send} isLoading={isSubmitting}>Kirim pertanyaan</Button></div></form>}
+          {!isLive ? <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div> : <form onSubmit={handleSubmit} className="space-y-4"><div className="grid gap-4 md:grid-cols-2"><Input label={`Nama ${nameRequired ? '*' : '(opsional)'}`} value={displayName} onChange={event => setDisplayName(event.target.value)} placeholder={session.allowAnonymous && !nameRequired ? 'Anonim' : 'Nama Anda'} required={nameRequired} /><div className="flex items-end text-xs leading-relaxed text-[var(--muted)]"><span>Pertanyaan Anda akan langsung tampil di ruang diskusi.</span></div></div><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Kategori pertanyaan</span><select value={category} onChange={event => setCategory(event.target.value)} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]">{QNA_CATEGORY_OPTIONS.map(option => <option key={option} value={option}>{option}</option>)}</select></label><Textarea label="Pertanyaan Anda" value={question} onChange={event => setQuestion(event.target.value.slice(0, 1200))} maxLength={1200} placeholder="Tulis pertanyaan untuk pembicara..." className="min-h-[130px]" /><div className="flex items-center justify-between gap-3"><span className="text-xs text-[var(--muted)]">{question.length}/1200 karakter</span><Button type="submit" icon={Send} isLoading={isSubmitting}>Kirim pertanyaan</Button></div></form>}
           {notice && <Notice tone={notice.tone}>{notice.message}</Notice>}
         </Card>
 
-        <section className="space-y-4"><div className="flex items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pertanyaan terpilih</p><h2 className="mt-2 text-xl font-bold">Diskusi audience</h2></div><Badge color="var(--surface-soft)">{session.questions.length} tampil</Badge></div>{session.questions.length === 0 ? <Card className="py-12 text-center text-sm text-[var(--muted)]"><MessageCircle size={30} className="mx-auto mb-3" />Belum ada pertanyaan yang ditampilkan.</Card> : <div className="space-y-3">{session.questions.map(item => <article key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{item.displayName || 'Anonim'}</span>{item.isPinned && <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--accent-strong)]"><Pin size={11} /> Dipin</span>}</div><p className="mt-1 text-xs text-[var(--muted)]">{formatDate(item.createdAt)}</p></div>{session.votingEnabled && <button type="button" disabled={votedQuestions.has(item.id)} onClick={() => void handleVote(item.id)} className={`min-w-14 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors ${votedQuestions.has(item.id) ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent-strong)]'}`} aria-label={`Vote pertanyaan dari ${item.displayName || 'anonim'}`}><span className="block text-base leading-none">▲</span><span className="mt-1 block">{item.upvotes}</span></button>}</div><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed">{item.body}</p>{item.answer && <div className="mt-4 rounded-xl bg-[var(--accent-soft)] p-3"><p className="text-xs font-semibold text-[var(--accent-strong)]">Jawaban moderator</p><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{item.answer}</p></div>}</article>)}</div>}</section>
+        <section className="space-y-4"><div className="flex items-end justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pertanyaan terpilih</p><h2 className="mt-2 text-xl font-bold">Diskusi audience</h2></div><Badge color="var(--surface-soft)">{session.questions.length} tampil</Badge></div>{session.questions.length === 0 ? <Card className="py-12 text-center text-sm text-[var(--muted)]"><MessageCircle size={30} className="mx-auto mb-3" />Belum ada pertanyaan yang ditampilkan.</Card> : <div className="space-y-3">{session.questions.map(item => <article key={item.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{item.displayName || 'Anonim'}</span>{item.category && <span className="rounded-lg bg-[var(--surface-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{item.category}</span>}{item.isPinned && <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--accent-strong)]"><Pin size={11} /> Dipin</span>}</div><p className="mt-1 text-xs text-[var(--muted)]">{formatDate(item.createdAt)}</p></div>{session.votingEnabled && <button type="button" disabled={votedQuestions.has(item.id)} onClick={() => void handleVote(item.id)} className={`min-w-14 rounded-xl border px-2 py-2 text-xs font-semibold transition-colors ${votedQuestions.has(item.id) ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--accent)] hover:text-[var(--accent-strong)]'}`} aria-label={`Vote pertanyaan dari ${item.displayName || 'anonim'}`}><span className="block text-base leading-none">▲</span><span className="mt-1 block">{item.upvotes}</span></button>}</div><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed">{item.body}</p>{item.answer && <div className="mt-4 rounded-xl border border-[var(--border)] p-3"><p className="text-xs font-semibold text-[var(--muted)]">Jawaban moderator</p><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{item.answer}</p></div>}</article>)}</div>}</section>
       </div>
     </div>
   );
 };
 
-const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (questionId: string) => Promise<boolean> }> = ({ session, onQuestionVote }) => {
+const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (questionId: string) => Promise<boolean>; onMarkAnswered: (questionId: string) => Promise<void> }> = ({ session, onQuestionVote, onMarkAnswered }) => {
   const [isFullscreen, setIsFullscreen] = useState(false);
   const [likedQuestionIds, setLikedQuestionIds] = useState<Set<string>>(() => new Set());
+  const [answeringQuestionIds, setAnsweringQuestionIds] = useState<Set<string>>(() => new Set());
+  const [presenterTab, setPresenterTab] = useState<'live' | 'done'>('live');
+  const [categoryFilter, setCategoryFilter] = useState('all');
+  const [actionNotice, setActionNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const previousQuestionIdsRef = useRef<Set<string>>(new Set(session.questions.map(question => question.id)));
   const [newQuestionIds, setNewQuestionIds] = useState<Set<string>>(() => new Set());
   const isLive = session.status === 'live';
@@ -477,6 +493,17 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
   const orderedQuestions = useMemo(() => [...session.questions].sort((a, b) => (
     new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime()
   )), [session.questions]);
+
+  const availableCategories = useMemo(() => {
+    const existing = new Set(orderedQuestions.map(question => question.category || 'Umum'));
+    return [...QNA_CATEGORY_OPTIONS.filter(category => existing.has(category)), ...[...existing].filter(category => !QNA_CATEGORY_OPTIONS.includes(category as typeof QNA_CATEGORY_OPTIONS[number]))];
+  }, [orderedQuestions]);
+
+  const visibleQuestions = useMemo(() => orderedQuestions.filter(question => {
+    const matchesTab = presenterTab === 'done' ? question.status === 'answered' : question.status !== 'answered';
+    const matchesCategory = categoryFilter === 'all' || (question.category || 'Umum') === categoryFilter;
+    return matchesTab && matchesCategory;
+  }), [categoryFilter, orderedQuestions, presenterTab]);
 
   useEffect(() => {
     const currentIds = new Set<string>(session.questions.map(question => question.id));
@@ -516,6 +543,23 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
     }
   };
 
+  const handleMarkAnswered = async (questionId: string) => {
+    if (answeringQuestionIds.has(questionId)) return;
+    setAnsweringQuestionIds(current => new Set([...current, questionId]));
+    try {
+      await onMarkAnswered(questionId);
+      setActionNotice({ tone: 'success', message: 'Pertanyaan dipindahkan ke tab Done.' });
+    } catch (error) {
+      setActionNotice({ tone: 'error', message: errorMessage(error) });
+    } finally {
+      setAnsweringQuestionIds(current => {
+        const next = new Set(current);
+        next.delete(questionId);
+        return next;
+      });
+    }
+  };
+
   return (
     <div className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8" style={formThemeStyle(session.theme)}>
       <div className="mx-auto max-w-7xl space-y-6">
@@ -534,43 +578,57 @@ const QnaPresenterView: React.FC<{ session: PublicQnaSession; onQuestionVote: (q
           </div>
         </header>
         {!isLive && <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">{session.closedMessage}</div>}
-        <div className="flex items-center justify-between gap-3">
+        {actionNotice && <Notice tone={actionNotice.tone}>{actionNotice.message}</Notice>}
+        <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end">
           <div>
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pertanyaan audience</p>
             <h2 className="mt-2 text-2xl font-bold">Diskusi yang sedang berlangsung</h2>
           </div>
-          <Badge color="var(--accent-soft)">{session.questions.length} pertanyaan</Badge>
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <div className="flex rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1">
+              <button type="button" onClick={() => setPresenterTab('live')} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${presenterTab === 'live' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>Live ({session.questions.filter(question => question.status !== 'answered').length})</button>
+              <button type="button" onClick={() => setPresenterTab('done')} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${presenterTab === 'done' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>Done ({session.questions.filter(question => question.status === 'answered').length})</button>
+            </div>
+            <label className="sr-only" htmlFor="qna-presenter-category">Filter kategori pertanyaan</label>
+            <select id="qna-presenter-category" value={categoryFilter} onChange={event => setCategoryFilter(event.target.value)} className="min-h-[38px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text)] outline-none focus:border-[var(--accent)]">
+              <option value="all">Semua kategori</option>
+              {availableCategories.map(category => <option key={category} value={category}>{category}</option>)}
+            </select>
+            <Badge color={presenterTab === 'done' ? 'var(--success-soft)' : 'var(--accent-soft)'}>{visibleQuestions.length} tampil</Badge>
+          </div>
         </div>
-        {orderedQuestions.length === 0 ? (
+        {visibleQuestions.length === 0 ? (
           <Card className="flex min-h-[360px] flex-col items-center justify-center gap-4 text-center">
             <MessageCircle size={48} className="text-[var(--muted)]" />
             <div>
-              <p className="text-lg font-semibold">Belum ada pertanyaan</p>
-              <p className="mt-1 text-sm text-[var(--muted)]">Pertanyaan yang dikirim audience akan muncul realtime di sini.</p>
+              <p className="text-lg font-semibold">{presenterTab === 'done' ? 'Belum ada pertanyaan selesai' : 'Belum ada pertanyaan aktif'}</p>
+              <p className="mt-1 text-sm text-[var(--muted)]">{presenterTab === 'done' ? 'Pertanyaan yang sudah ditandai selesai akan muncul di tab ini.' : 'Pertanyaan yang dikirim audience akan muncul realtime di sini.'}</p>
             </div>
           </Card>
         ) : (
           <div className="grid gap-5 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-start">
             <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
               <ol aria-live="polite" className="divide-y divide-[var(--border)]">
-                {orderedQuestions.map(item => (
+                {visibleQuestions.map(item => (
                   <li key={item.id} className={newQuestionIds.has(item.id) ? 'qna-presenter-question-enter overflow-hidden' : 'overflow-hidden'}>
-                    <div className={`p-3 md:p-4 ${item.isPinned ? 'bg-[var(--success-soft)]/65' : ''}`}>
+                    <div className={`p-3 md:p-4 ${item.isPinned ? 'bg-[var(--success-soft)]' : 'bg-[var(--surface)]'}`}>
                       <div className="flex items-start justify-between gap-4">
                         <div className="min-w-0 flex-1">
                           <p className="whitespace-pre-wrap break-words text-base font-medium leading-relaxed text-[var(--text)]">{item.body}</p>
                           <p className="mt-2 text-xs text-[var(--muted)]">{item.displayName || 'Anonim'} · {formatDate(item.createdAt)}</p>
-                          {item.answer && <div className="mt-3 rounded-xl bg-[var(--accent-soft)] p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--accent-strong)]">Jawaban moderator</p><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{item.answer}</p></div>}
+                          {item.answer && <div className="mt-3 rounded-xl border border-[var(--border)] p-3"><p className="text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">Jawaban moderator</p><p className="mt-1 whitespace-pre-wrap text-sm leading-relaxed">{item.answer}</p></div>}
                         </div>
                         <div className="flex shrink-0 flex-col items-end gap-3">
                           <div className="flex flex-wrap justify-end gap-1.5">
-                            <Badge color={item.status === 'answered' ? 'var(--success-soft)' : 'var(--accent-soft)'} className="px-2 py-1 text-[9px]">{item.status === 'answered' ? 'Terjawab' : 'Pertanyaan'}</Badge>
+                            <Badge color={item.status === 'answered' ? 'var(--success-soft)' : 'var(--accent-soft)'} className="px-2 py-1 text-[9px]"><span aria-hidden="true">{item.status === 'answered' ? 'A' : 'Q'}</span><span className="sr-only">{item.status === 'answered' ? 'Terjawab' : 'Pertanyaan'}</span></Badge>
+                            {item.category && <Badge color="var(--surface-soft)" className="px-2 py-1 text-[9px]">{item.category}</Badge>}
                             {item.isPinned && <span className="inline-flex items-center gap-1 rounded-md bg-[var(--success-soft)] px-2 py-1 text-[9px] font-semibold uppercase tracking-wider text-[var(--success-text)]"><Pin size={11} /> Pin</span>}
                           </div>
                           <button type="button" disabled={!session.votingEnabled || likedQuestionIds.has(item.id)} onClick={() => void handleLike(item.id)} aria-label={`${likedQuestionIds.has(item.id) ? 'Sudah menyukai' : 'Sukai'} pertanyaan dari ${item.displayName || 'anonim'}`} className={`flex min-w-10 flex-col items-center gap-0.5 rounded-xl border px-2 py-1.5 transition-colors ${likedQuestionIds.has(item.id) ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-transparent text-[var(--muted)] hover:border-[var(--border)] hover:bg-[var(--surface-soft)] hover:text-[var(--accent-strong)]'} disabled:cursor-default disabled:opacity-80`}>
                             <Heart size={19} fill={likedQuestionIds.has(item.id) ? 'currentColor' : 'none'} />
                             <span className="text-[11px] font-semibold leading-none">{item.upvotes}</span>
                           </button>
+                          {presenterTab === 'live' && <button type="button" disabled={answeringQuestionIds.has(item.id)} onClick={() => void handleMarkAnswered(item.id)} className="inline-flex items-center gap-1 rounded-lg border border-[var(--border)] px-2 py-1.5 text-[10px] font-semibold text-[var(--muted)] transition-colors hover:border-[var(--success-text)] hover:bg-[var(--success-soft)] hover:text-[var(--success-text)] disabled:cursor-wait disabled:opacity-60" aria-label="Tandai pertanyaan sudah terjawab"><Check size={13} /> Selesai</button>}
                         </div>
                       </div>
                     </div>
@@ -653,8 +711,19 @@ export const PublicQnaPage: React.FC<{ client: any; presenterMode?: boolean; slu
     return data?.voted !== false;
   };
 
+  const handleMarkAnswered = async (questionId: string): Promise<void> => {
+    if (!session || !client || !presenterMode) return;
+    const { error } = await client.rpc('mark_public_qna_question_answered', {
+      p_slug: session.slug,
+      p_presenter_token: presenterToken,
+      p_question_id: questionId
+    });
+    if (error) throw error;
+    setSession(current => current ? { ...current, questions: current.questions.map(question => question.id === questionId ? { ...question, status: 'answered' } : question) } : current);
+  };
+
   if (isLoading) return <div className="flex min-h-screen items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat sesi Q&A...</div>;
   if (loadError || !session) return <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md space-y-5 py-10 text-center"><XCircle size={34} className="mx-auto text-[var(--danger-text)]" /><div><h1 className="text-xl font-bold">Sesi Q&A tidak dapat dibuka</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{loadError}</p></div><Button icon={RefreshCw} onClick={() => void fetchSession()} className="mx-auto w-full">Coba Lagi</Button></Card></div>;
-  if (presenterMode) return <QnaPresenterView session={session} onQuestionVote={handleQuestionVote} />;
+  if (presenterMode) return <QnaPresenterView session={session} onQuestionVote={handleQuestionVote} onMarkAnswered={handleMarkAnswered} />;
   return <QnaAudienceView client={client} session={session} clientToken={clientToken} onQuestionVote={handleQuestionVote} />;
 };
