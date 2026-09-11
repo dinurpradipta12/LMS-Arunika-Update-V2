@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react';
-import { ArrowLeft, Check, Copy, Eye, FileText, Loader2, Maximize2, MessageCircle, Minimize2, Pin, Play, Plus, RefreshCw, Save, Send, XCircle } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Eye, FileText, Loader2, Maximize2, MessageCircle, Minimize2, Pin, Play, Plus, RefreshCw, Save, Send, Trash2, XCircle } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router-dom';
 
 import {
@@ -9,7 +9,7 @@ import {
   QnaSession,
   QnaSessionStatus
 } from '../types';
-import { Badge, Button, Card, Input, Textarea } from './UI';
+import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_MAKER_PUBLIC_LABEL, FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
 import logoUtama from '../src/logo-utama.png';
 
@@ -107,6 +107,10 @@ const mapPublicSession = (value: any) => {
 
 type PublicQnaSession = NonNullable<ReturnType<typeof mapPublicSession>>;
 
+type QnaDeleteTarget =
+  | { kind: 'session'; id: string; label: string }
+  | { kind: 'question'; id: string; label: string };
+
 const sessionWriteRow = (session: QnaSession) => ({
   slug: session.slug,
   title: session.title,
@@ -183,6 +187,8 @@ export const QnaAdminPage: React.FC<{ client: any }> = ({ client }) => {
   const [isLoadingQuestions, setIsLoadingQuestions] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<QnaDeleteTarget | null>(null);
   const [notice, setNotice] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
 
   const selectedSession = sessions.find(session => session.id === selectedSessionId) || null;
@@ -295,6 +301,37 @@ export const QnaAdminPage: React.FC<{ client: any }> = ({ client }) => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!client || !deleteTarget) return;
+    setIsDeleting(true);
+    const target = deleteTarget;
+    const table = target.kind === 'session' ? 'qna_sessions' : 'qna_questions';
+    const { data, error } = await client.from(table).delete().eq('id', target.id).select('id');
+    if (error) {
+      setNotice({ tone: 'error', message: errorMessage(error) });
+    } else if (!data?.length) {
+      setNotice({ tone: 'error', message: `${target.kind === 'session' ? 'Sesi Q&A' : 'Pertanyaan'} tidak ditemukan atau sudah dihapus.` });
+    } else if (target.kind === 'session') {
+      const remaining = sessions.filter(session => session.id !== target.id);
+      setSessions(remaining);
+      setSelectedSessionId(current => current === target.id ? remaining[0]?.id || null : current);
+      setQuestions([]);
+      setAnswerDrafts({});
+      setDeleteTarget(null);
+      setNotice({ tone: 'success', message: `Sesi “${target.label}” dan seluruh pertanyaannya berhasil dihapus.` });
+    } else {
+      setQuestions(current => current.filter(question => question.id !== target.id));
+      setAnswerDrafts(current => {
+        const next = { ...current };
+        delete next[target.id];
+        return next;
+      });
+      setDeleteTarget(null);
+      setNotice({ tone: 'success', message: 'Pertanyaan berhasil dihapus permanen.' });
+    }
+    setIsDeleting(false);
+  };
+
   const copyLink = async (value: string, label: string) => {
     try {
       await navigator.clipboard.writeText(value);
@@ -325,7 +362,7 @@ export const QnaAdminPage: React.FC<{ client: any }> = ({ client }) => {
       <div className="grid gap-6 lg:grid-cols-[280px_minmax(0,1fr)]">
         <Card className="h-fit space-y-4">
           <div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Sesi</p><h2 className="mt-1 text-lg font-bold">Daftar Q&A</h2></div><MessageCircle size={20} className="text-[var(--accent-strong)]" /></div>
-          {sessions.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-4 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada sesi. Buat sesi pertama untuk mulai mengumpulkan pertanyaan.</div> : <div className="space-y-2">{sessions.map(session => <button key={session.id} type="button" aria-pressed={selectedSessionId === session.id} onClick={() => setSelectedSessionId(session.id)} className={`w-full rounded-xl border p-3 text-left transition-colors ${selectedSessionId === session.id ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><div className="flex items-start justify-between gap-2"><span className="min-w-0 truncate text-sm font-semibold">{session.title}</span><span className={`shrink-0 rounded-md px-1.5 py-1 text-[9px] font-semibold uppercase ${session.status === 'live' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--surface-soft)] text-[var(--muted)]'}`}>{session.status}</span></div><span className="mt-1 block truncate text-xs text-[var(--muted)]">{session.eventName || 'Tanpa nama event'}</span></button>)}</div>}
+          {sessions.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-4 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada sesi. Buat sesi pertama untuk mulai mengumpulkan pertanyaan.</div> : <div className="space-y-2">{sessions.map(session => <div key={session.id} className={`flex items-start gap-1 rounded-xl border p-1 transition-colors ${selectedSessionId === session.id ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><button type="button" aria-pressed={selectedSessionId === session.id} onClick={() => setSelectedSessionId(session.id)} className="min-w-0 flex-1 rounded-lg p-2 text-left"><div className="flex items-start justify-between gap-2"><span className="min-w-0 truncate text-sm font-semibold">{session.title}</span><span className={`shrink-0 rounded-md px-1.5 py-1 text-[9px] font-semibold uppercase ${session.status === 'live' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--surface-soft)] text-[var(--muted)]'}`}>{session.status}</span></div><span className="mt-1 block truncate text-xs text-[var(--muted)]">{session.eventName || 'Tanpa nama event'}</span></button><button type="button" aria-label={`Hapus sesi ${session.title}`} onClick={() => setDeleteTarget({ kind: 'session', id: session.id, label: session.title })} className="mt-1 rounded-lg p-2 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button></div>)}</div>}
         </Card>
 
         {!selectedSession ? <Card className="flex min-h-[360px] flex-col items-center justify-center gap-4 text-center"><MessageCircle size={38} className="text-[var(--muted)]" /><div><p className="font-semibold">Pilih atau buat sesi Q&A</p><p className="mt-1 text-sm text-[var(--muted)]">Satu sesi dapat dipakai untuk satu webinar, kelas, atau event.</p></div><Button icon={Plus} onClick={() => void handleCreate()} isLoading={isCreating}>Buat Sesi Q&A</Button></Card> : <div className="space-y-6">
@@ -337,17 +374,26 @@ export const QnaAdminPage: React.FC<{ client: any }> = ({ client }) => {
             <div className="grid gap-3 md:grid-cols-3"><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm"><input type="checkbox" checked={selectedSession.allowAnonymous} onChange={event => updateSelectedSession({ allowAnonymous: event.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" /><span><span className="block font-semibold">Boleh anonim</span><span className="mt-1 block text-xs text-[var(--muted)]">Audience tidak wajib menulis nama.</span></span></label><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm"><input type="checkbox" checked={selectedSession.requireName} onChange={event => updateSelectedSession({ requireName: event.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" /><span><span className="block font-semibold">Wajibkan nama</span><span className="mt-1 block text-xs text-[var(--muted)]">Tampilkan identitas pengirim.</span></span></label><label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm"><input type="checkbox" checked={selectedSession.votingEnabled} onChange={event => updateSelectedSession({ votingEnabled: event.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" /><span><span className="block font-semibold">Aktifkan voting</span><span className="mt-1 block text-xs text-[var(--muted)]">Audience dapat menaikkan pertanyaan.</span></span></label></div>
             <div className="grid gap-4 md:grid-cols-2"><Textarea label="Pesan pembuka audience" value={selectedSession.welcomeMessage} onChange={event => updateSelectedSession({ welcomeMessage: event.target.value })} placeholder="Pertanyaan akan dimoderasi sebelum tampil." /><Textarea label="Pesan saat ditutup" value={selectedSession.closedMessage} onChange={event => updateSelectedSession({ closedMessage: event.target.value })} /></div>
             <div className="space-y-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Tema presenter dan audience</p><p className="mt-1 text-xs text-[var(--muted)]">Pilih warna aksen yang sesuai dengan event.</p></div><div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">{FORM_THEME_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={selectedSession.theme === option.value} onClick={() => updateSelectedSession({ theme: option.value })} className={`rounded-xl border p-3 text-left transition-colors ${selectedSession.theme === option.value ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><span className="mb-2 block h-7 rounded-lg" style={{ backgroundColor: option.swatch }} aria-hidden="true" /><span className="block text-sm font-semibold">{option.label}</span><span className="mt-1 block text-xs text-[var(--muted)]">{option.description}</span></button>)}</div></div>
-            <div className="flex flex-wrap justify-end gap-2"><Button variant="secondary" icon={Eye} onClick={() => window.open(createQnaLink(selectedSession.slug), '_blank', 'noopener,noreferrer')}>Preview Audience</Button><Button variant="secondary" icon={Play} disabled={!selectedSession.presenterToken} onClick={() => window.open(createQnaLink(selectedSession.slug, selectedSession.presenterToken), '_blank', 'noopener,noreferrer')}>Buka Presenter</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Sesi</Button></div>
+            <div className="flex flex-wrap items-center justify-between gap-2"><Button type="button" variant="danger" icon={Trash2} onClick={() => setDeleteTarget({ kind: 'session', id: selectedSession.id, label: selectedSession.title })}>Hapus Sesi</Button><div className="flex flex-wrap justify-end gap-2"><Button variant="secondary" icon={Eye} onClick={() => window.open(createQnaLink(selectedSession.slug), '_blank', 'noopener,noreferrer')}>Preview Audience</Button><Button variant="secondary" icon={Play} disabled={!selectedSession.presenterToken} onClick={() => window.open(createQnaLink(selectedSession.slug, selectedSession.presenterToken), '_blank', 'noopener,noreferrer')}>Buka Presenter</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Sesi</Button></div></div>
             <div className="grid gap-3 rounded-xl bg-[var(--surface-soft)] p-4 text-xs text-[var(--muted)] md:grid-cols-2"><div><p className="font-semibold text-[var(--text)]">Link audience</p><p className="mt-1 break-all">{createQnaLink(selectedSession.slug)}</p><Button type="button" variant="secondary" className="mt-3 text-xs" icon={Copy} onClick={() => void copyLink(createQnaLink(selectedSession.slug), 'Link audience')}>Copy link</Button></div><div><p className="font-semibold text-[var(--text)]">Link presenter</p><p className="mt-1 break-all">{selectedSession.presenterToken ? createQnaLink(selectedSession.slug, selectedSession.presenterToken) : 'Simpan sesi untuk membuat link presenter.'}</p>{selectedSession.presenterToken && <Button type="button" variant="secondary" className="mt-3 text-xs" icon={Copy} onClick={() => void copyLink(createQnaLink(selectedSession.slug, selectedSession.presenterToken), 'Link presenter')}>Copy link</Button>}</div></div>
           </Card>
 
           <Card className="space-y-5">
             <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Moderasi</p><h2 className="mt-2 text-xl font-bold">Pertanyaan audience</h2><p className="mt-1 text-sm text-[var(--muted)]">Setujui pertanyaan sebelum ditampilkan di layar presenter.</p></div><div className="flex gap-2"><Badge color="var(--surface-soft)">{pendingCount} menunggu</Badge><Badge color="var(--success-soft)">{visibleCount} tampil</Badge></div></div>
             <div className="flex flex-wrap gap-2">{(['all', 'pending', 'approved', 'answered', 'hidden'] as const).map(filter => <button key={filter} type="button" onClick={() => setQuestionFilter(filter)} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${questionFilter === filter ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--border-strong)]'}`}>{filter === 'all' ? 'Semua' : questionStatusLabel(filter)}</button>)}</div>
-            {isLoadingQuestions ? <div className="flex items-center justify-center gap-3 py-12 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat pertanyaan...</div> : filteredQuestions.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-8 text-center text-sm text-[var(--muted)]">Belum ada pertanyaan pada filter ini.</div> : <div className="space-y-3">{filteredQuestions.map(question => <article key={question.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{question.displayName || 'Anonim'}</span><span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${questionStatusClass(question.status)}`}>{questionStatusLabel(question.status)}</span>{question.isPinned && <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--accent-strong)]"><Pin size={11} /> Dipin</span>}</div><p className="mt-1 text-xs text-[var(--muted)]">{formatDate(question.createdAt)} · {question.upvotes} vote</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { isPinned: !question.isPinned })}>{question.isPinned ? 'Lepas pin' : 'Pin'}</Button>{question.status === 'pending' && <Button type="button" className="text-xs" icon={Check} onClick={() => void updateQuestion(question, { status: 'approved' })}>Tampilkan</Button>}{(question.status === 'approved' || question.status === 'answered') && <Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { status: 'hidden' })}>Sembunyikan</Button>}{question.status === 'hidden' && <Button type="button" className="text-xs" onClick={() => void updateQuestion(question, { status: 'approved' })}>Tampilkan lagi</Button>}</div></div><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text)]">{question.body}</p><div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"><Textarea label="Jawaban moderator (opsional)" value={answerDrafts[question.id] ?? question.answer} onChange={event => setAnswerDrafts(current => ({ ...current, [question.id]: event.target.value }))} className="min-h-[84px]" placeholder="Tulis jawaban yang akan tampil di presenter..." /><Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { answer: answerDrafts[question.id] ?? question.answer, status: (answerDrafts[question.id] ?? question.answer).trim() ? 'answered' : question.status === 'answered' ? 'approved' : question.status })}>Simpan jawaban</Button></div></article>)}</div>}
+            {isLoadingQuestions ? <div className="flex items-center justify-center gap-3 py-12 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat pertanyaan...</div> : filteredQuestions.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-8 text-center text-sm text-[var(--muted)]">Belum ada pertanyaan pada filter ini.</div> : <div className="space-y-3">{filteredQuestions.map(question => <article key={question.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{question.displayName || 'Anonim'}</span><span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${questionStatusClass(question.status)}`}>{questionStatusLabel(question.status)}</span>{question.isPinned && <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--accent-strong)]"><Pin size={11} /> Dipin</span>}</div><p className="mt-1 text-xs text-[var(--muted)]">{formatDate(question.createdAt)} · {question.upvotes} vote</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { isPinned: !question.isPinned })}>{question.isPinned ? 'Lepas pin' : 'Pin'}</Button>{question.status === 'pending' && <Button type="button" className="text-xs" icon={Check} onClick={() => void updateQuestion(question, { status: 'approved' })}>Tampilkan</Button>}{(question.status === 'approved' || question.status === 'answered') && <Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { status: 'hidden' })}>Sembunyikan</Button>}{question.status === 'hidden' && <Button type="button" className="text-xs" onClick={() => void updateQuestion(question, { status: 'approved' })}>Tampilkan lagi</Button>}<Button type="button" variant="danger" className="text-xs" icon={Trash2} onClick={() => setDeleteTarget({ kind: 'question', id: question.id, label: question.body })}>Hapus</Button></div></div><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text)]">{question.body}</p><div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"><Textarea label="Jawaban moderator (opsional)" value={answerDrafts[question.id] ?? question.answer} onChange={event => setAnswerDrafts(current => ({ ...current, [question.id]: event.target.value }))} className="min-h-[84px]" placeholder="Tulis jawaban yang akan tampil di presenter..." /><Button type="button" variant="secondary" className="text-xs" onClick={() => void updateQuestion(question, { answer: answerDrafts[question.id] ?? question.answer, status: (answerDrafts[question.id] ?? question.answer).trim() ? 'answered' : question.status === 'answered' ? 'approved' : question.status })}>Simpan jawaban</Button></div></article>)}</div>}
           </Card>
         </div>}
       </div>
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title={deleteTarget?.kind === 'session' ? 'Hapus sesi Q&A ini?' : 'Hapus pertanyaan ini?'}
+        description={deleteTarget?.kind === 'session' ? <>Sesi <strong className="text-[var(--text)]">{deleteTarget.label}</strong> beserta seluruh pertanyaan dan vote di dalamnya akan dihapus permanen.</> : <>Pertanyaan <strong className="text-[var(--text)]">{deleteTarget?.label}</strong> akan dihapus permanen dan tidak akan muncul lagi setelah halaman dimuat ulang.</>}
+        confirmLabel={deleteTarget?.kind === 'session' ? 'Hapus Sesi' : 'Hapus Pertanyaan'}
+        isLoading={isDeleting}
+        onCancel={() => { if (!isDeleting) setDeleteTarget(null); }}
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   );
 };

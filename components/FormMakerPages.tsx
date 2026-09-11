@@ -12,7 +12,7 @@ import {
   FormStatus,
   FormThemeKey
 } from '../types';
-import { Badge, Button, Card, Input, Textarea } from './UI';
+import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import logoUtama from '../src/logo-utama.png';
 
 export const FORM_MAKER_SPACE_LABEL = 'Form Maker';
@@ -467,6 +467,8 @@ export const FormMakerPage: React.FC<{ client: any }> = ({ client }) => {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FormDefinition | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const fetchForms = useCallback(async () => {
     if (!client) {
@@ -523,6 +525,28 @@ export const FormMakerPage: React.FC<{ client: any }> = ({ client }) => {
     }
   };
 
+  const handleDelete = async () => {
+    if (!client || !deleteTarget) return;
+    setIsDeleting(true);
+    const target = deleteTarget;
+    const { data, error } = await client.from('form_forms').delete().eq('id', target.id).select('id');
+    if (error) {
+      setNotice({ tone: 'error', message: errorMessage(error) });
+    } else if (!data?.length) {
+      setNotice({ tone: 'error', message: 'Form tidak ditemukan atau sudah dihapus.' });
+    } else {
+      setForms(current => current.filter(form => form.id !== target.id));
+      setResponseCounts(current => {
+        const next = { ...current };
+        delete next[target.id];
+        return next;
+      });
+      setDeleteTarget(null);
+      setNotice({ tone: 'success', message: `Form “${target.title}” dan seluruh responder terkait berhasil dihapus.` });
+    }
+    setIsDeleting(false);
+  };
+
   return (
     <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-8">
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
@@ -543,11 +567,20 @@ export const FormMakerPage: React.FC<{ client: any }> = ({ client }) => {
               <div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge color="var(--accent-soft)">{FORM_MAKER_SPACE_LABEL}</Badge><span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${form.status === 'published' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : form.status === 'archived' ? 'bg-[var(--danger-soft)] text-[var(--danger-text)]' : 'bg-[var(--surface-soft)] text-[var(--muted)]'}`}>{form.status === 'published' ? 'Publik' : form.status === 'archived' ? 'Arsip' : 'Draft'}</span></div><h2 className="mt-3 truncate text-xl font-bold">{form.title}</h2><p className="mt-1 text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">{form.eventName || 'Tanpa nama event'}</p></div><ClipboardList className="flex-shrink-0 text-[var(--accent-strong)]" size={24} /></div>
               <p className="line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{form.description || 'Belum ada deskripsi form.'}</p>
               <div className="grid grid-cols-2 gap-3 text-xs text-[var(--muted)]"><span className="flex items-center gap-2"><ClipboardList size={14} /> {form.fields.length} pertanyaan</span><span className="flex items-center gap-2"><Users size={14} /> {responseCounts[form.id] || 0} responder</span></div>
-              <div className="mt-auto grid grid-cols-2 gap-2 pt-2"><Button variant="secondary" className="text-xs px-2" onClick={() => navigate(`/admin/forms/${form.id}`)}>Edit Form</Button><Button variant="secondary" className="text-xs px-2" icon={Users} onClick={() => navigate(`/admin/forms/${form.id}/responses`)}>Responder</Button><Button variant={copiedSlug === form.slug ? 'green' : 'secondary'} className="text-xs px-2" icon={copiedSlug === form.slug ? Check : Copy} onClick={() => void handleCopy(form)}>{copiedSlug === form.slug ? 'Tersalin' : 'Copy Link'}</Button><Button className="text-xs px-2" icon={ExternalLink} disabled={form.status !== 'published'} onClick={() => window.open(createFormShareLink(form.slug), '_blank', 'noopener,noreferrer')}>Buka Publik</Button></div>
+              <div className="mt-auto grid grid-cols-2 gap-2 pt-2"><Button variant="secondary" className="px-2 text-xs" onClick={() => navigate(`/admin/forms/${form.id}`)}>Edit Form</Button><Button variant="secondary" className="px-2 text-xs" icon={Users} onClick={() => navigate(`/admin/forms/${form.id}/responses`)}>Responder</Button><Button variant={copiedSlug === form.slug ? 'green' : 'secondary'} className="px-2 text-xs" icon={copiedSlug === form.slug ? Check : Copy} onClick={() => void handleCopy(form)}>{copiedSlug === form.slug ? 'Tersalin' : 'Copy Link'}</Button><Button className="px-2 text-xs" icon={ExternalLink} disabled={form.status !== 'published'} onClick={() => window.open(createFormShareLink(form.slug), '_blank', 'noopener,noreferrer')}>Buka Publik</Button><Button type="button" variant="danger" className="col-span-2 px-2 text-xs" icon={Trash2} onClick={() => setDeleteTarget(form)}>Hapus Form</Button></div>
             </Card>
           ))}
         </div>
       )}
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title="Hapus form ini?"
+        description={deleteTarget ? <>Form <strong className="text-[var(--text)]">{deleteTarget.title}</strong> beserta seluruh responder dan data jawaban yang terkait akan dihapus permanen.</> : null}
+        confirmLabel="Hapus Form"
+        isLoading={isDeleting}
+        onCancel={() => { if (!isDeleting) setDeleteTarget(null); }}
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   );
 };
@@ -558,6 +591,8 @@ export const FormEditorPage: React.FC<{ client: any }> = ({ client }) => {
   const [form, setForm] = useState<FormDefinition | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDeleting, setIsDeleting] = useState(false);
+  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
 
   const fetchForm = useCallback(async () => {
@@ -603,12 +638,33 @@ export const FormEditorPage: React.FC<{ client: any }> = ({ client }) => {
     setIsSaving(false);
   };
 
+  const handleDelete = async () => {
+    if (!form || !client) return;
+    setIsDeleting(true);
+    const target = form;
+    const { data, error } = await client.from('form_forms').delete().eq('id', target.id).select('id');
+    if (error) {
+      setNotice({ tone: 'error', message: errorMessage(error) });
+      setIsDeleting(false);
+      return;
+    }
+    if (!data?.length) {
+      setNotice({ tone: 'error', message: 'Form tidak ditemukan atau sudah dihapus.' });
+      setIsDeleting(false);
+      return;
+    }
+    setIsDeleteModalOpen(false);
+    setNotice({ tone: 'success', message: `Form “${target.title}” berhasil dihapus.` });
+    setIsDeleting(false);
+    navigate('/admin/forms');
+  };
+
   if (isLoading) return <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat editor form...</div>;
   if (!form) return <div className="mx-auto max-w-xl p-8"><Card className="space-y-4 text-center"><XCircle className="mx-auto text-[var(--danger-text)]" /><p>Form tidak ditemukan.</p><Button variant="secondary" onClick={() => navigate('/admin/forms')}>Kembali</Button></Card></div>;
 
   return (
     <div className="mx-auto max-w-5xl space-y-8 p-4 pb-28 md:p-8">
-      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><Link to="/admin/forms" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {FORM_MAKER_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">Edit Form</h1><Badge color={form.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{form.status === 'published' ? 'Publik' : 'Draft'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Susun pertanyaan, atur halaman setelah submit, dan bagikan link form.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={Users} onClick={() => navigate(`/admin/forms/${form.id}/responses`)}>Responder</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Form</Button></div></div>
+      <div className="flex flex-col justify-between gap-4 md:flex-row md:items-center"><div><Link to="/admin/forms" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {FORM_MAKER_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">Edit Form</h1><Badge color={form.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{form.status === 'published' ? 'Publik' : 'Draft'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Susun pertanyaan, atur halaman setelah submit, dan bagikan link form.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={Users} onClick={() => navigate(`/admin/forms/${form.id}/responses`)}>Responder</Button><Button variant="danger" icon={Trash2} onClick={() => setIsDeleteModalOpen(true)}>Hapus Form</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Form</Button></div></div>
       <NoticeBanner notice={notice} />
       <Card className="space-y-5"><div><h2 className="text-lg font-bold">Informasi form</h2><p className="mt-1 text-xs text-[var(--muted)]">Nama event dipakai untuk mengelompokkan data responder di dashboard.</p></div><div className="grid gap-4 md:grid-cols-2"><Input label="Judul form" value={form.title} onChange={event => setForm({ ...form, title: event.target.value })} /><Input label="Nama event" value={form.eventName} onChange={event => setForm({ ...form, eventName: event.target.value })} /></div><Textarea label="Deskripsi untuk responder" value={form.description} onChange={event => setForm({ ...form, description: event.target.value })} /><div className="grid gap-4 md:grid-cols-2"><Input label="Slug link publik" value={form.slug} onChange={event => setForm({ ...form, slug: event.target.value })} onBlur={() => setForm(current => current ? { ...current, slug: slugify(current.slug || current.title) } : current)} /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status form</span><select value={form.status} onChange={event => setForm({ ...form, status: event.target.value as FormStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"><option value="draft">Draft</option><option value="published">Publik</option><option value="archived">Arsip</option></select></label></div><label className="inline-flex items-center gap-3 text-sm font-semibold cursor-pointer"><input type="checkbox" checked={form.allowMultiple} onChange={event => setForm({ ...form, allowMultiple: event.target.checked })} className="h-4 w-4 accent-[var(--accent)]" /> Izinkan satu email mengirim lebih dari satu kali</label>{form.status === 'published' && <div className="rounded-xl bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">Link publik: <span className="break-all font-semibold text-[var(--text)]">{createFormShareLink(form.slug)}</span></div>}</Card>
 
@@ -645,6 +701,15 @@ export const FormEditorPage: React.FC<{ client: any }> = ({ client }) => {
       <section className="space-y-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Builder</p><h2 className="mt-2 text-2xl font-bold">Pertanyaan form</h2><p className="mt-1 text-sm text-[var(--muted)]">Nama dan email responder selalu dicatat otomatis. Tambahkan pertanyaan lain sesuai kebutuhan event.</p></div><div className="flex flex-wrap gap-2">{(['short_text', 'long_text', 'multiple_choice', 'checkbox'] as FormFieldType[]).map(type => <Button key={type} variant="secondary" className="text-xs px-3" icon={Plus} onClick={() => setForm({ ...form, fields: [...form.fields, createField(type, form.fields.length)] })}>{FIELD_TYPES.find(item => item.value === type)?.label}</Button>)}</div></div>{form.fields.map((field, index) => <FormFieldEditor key={field.id} field={field} index={index} total={form.fields.length} onChange={patch => updateField(index, patch)} onRemove={() => setForm({ ...form, fields: form.fields.filter((_, fieldIndex) => fieldIndex !== index) })} onMove={direction => moveField(index, direction)} />)}{form.fields.length === 0 && <Card className="border-dashed py-12 text-center text-sm text-[var(--muted)]">Belum ada pertanyaan tambahan. Nama dan email responder tetap tersedia di form publik.</Card>}</section>
 
       <Card className="space-y-5"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Setelah submit</p><h2 className="mt-2 text-xl font-bold">Halaman lanjutan responder</h2><p className="mt-1 text-sm text-[var(--muted)]">Atur informasi yang dilihat peserta sebelum status mereka diubah menjadi terkonfirmasi atau paid oleh admin.</p></div><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Jenis halaman setelah dikirim</span><select value={form.postSubmitMode} onChange={event => setForm({ ...form, postSubmitMode: event.target.value as FormPostSubmitMode })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">{POST_SUBMIT_MODES.map(mode => <option key={mode.value} value={mode.value}>{mode.label}</option>)}</select></label><p className="-mt-2 text-xs text-[var(--muted)]">{POST_SUBMIT_MODES.find(mode => mode.value === form.postSubmitMode)?.description}</p><div className="grid gap-4 md:grid-cols-2"><Input label="Judul halaman" value={form.postSubmitTitle} onChange={event => setForm({ ...form, postSubmitTitle: event.target.value })} /><Textarea label="Pesan konfirmasi" value={form.postSubmitMessage} onChange={event => setForm({ ...form, postSubmitMessage: event.target.value })} className="min-h-[100px]" /></div>{form.postSubmitMode === 'payment' && <div className="space-y-5"><div className="grid gap-4 md:grid-cols-2"><Textarea label="Instruksi pembayaran" value={form.paymentInstructions} onChange={event => setForm({ ...form, paymentInstructions: event.target.value })} placeholder="Transfer ke rekening..., kirim bukti ke..." /><Input label="Link pembayaran (opsional)" value={form.paymentLink} onChange={event => setForm({ ...form, paymentLink: event.target.value })} placeholder="https://..." /></div><div className="grid gap-4 md:grid-cols-2"><Input label="Nominal pembayaran" value={form.paymentAmount} onChange={event => setForm({ ...form, paymentAmount: event.target.value })} placeholder="Contoh: Rp 250.000" /><Input label="Nomor rekening pembayaran (opsional)" value={form.paymentAccountNumber} onChange={event => setForm({ ...form, paymentAccountNumber: event.target.value })} icon={Phone} placeholder="Contoh: 1234567890 a.n. Arunika" /></div><div className="grid gap-4 md:grid-cols-2"><Input label="Nomor WhatsApp konfirmasi" value={form.paymentWhatsapp} onChange={event => setForm({ ...form, paymentWhatsapp: event.target.value })} icon={Phone} placeholder="Contoh: 62812xxxxxxx" /><div className="flex items-end"><p className="pb-3 text-xs leading-relaxed text-[var(--muted)]">Nomor WhatsApp dipakai untuk membuat tombol konfirmasi otomatis di halaman responder.</p></div></div><PaymentQrUploader value={form.paymentQrCode} onChange={paymentQrCode => setForm({ ...form, paymentQrCode })} /></div>}{form.postSubmitMode === 'redirect' && <Input label="URL halaman lanjutan" value={form.redirectUrl} onChange={event => setForm({ ...form, redirectUrl: event.target.value })} placeholder="https://..." />}</Card>
+      <ConfirmModal
+        open={isDeleteModalOpen}
+        title="Hapus form ini?"
+        description={<>Form <strong className="text-[var(--text)]">{form.title}</strong> beserta seluruh responder dan data jawaban yang terkait akan dihapus permanen.</>}
+        confirmLabel="Hapus Form"
+        isLoading={isDeleting}
+        onCancel={() => { if (!isDeleting) setIsDeleteModalOpen(false); }}
+        onConfirm={() => void handleDelete()}
+      />
     </div>
   );
 };

@@ -1,7 +1,7 @@
 import React from 'react';
 
 interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> {
-  variant?: 'primary' | 'secondary' | 'accent' | 'pink' | 'yellow' | 'green';
+  variant?: 'primary' | 'secondary' | 'accent' | 'pink' | 'yellow' | 'green' | 'danger';
   // Use React.ComponentType to allow any valid React component as an icon, including custom SVGs
   icon?: React.ComponentType<any>;
   isLoading?: boolean;
@@ -23,7 +23,8 @@ export const Button: React.FC<ButtonProps> = ({
     accent: "bg-[var(--accent)] border-[var(--accent)] text-white hover:bg-[var(--accent-hover)]",
     pink: "bg-[var(--accent-soft)] border-[var(--border)] text-[var(--accent-strong)] hover:border-[var(--border-strong)]",
     yellow: "bg-[var(--accent-soft)] border-[var(--border)] text-[var(--accent-strong)] hover:border-[var(--border-strong)]",
-    green: "bg-[var(--success-soft)] border-[var(--border)] text-[var(--success-text)] hover:border-[var(--border-strong)]"
+    green: "bg-[var(--success-soft)] border-[var(--border)] text-[var(--success-text)] hover:border-[var(--border-strong)]",
+    danger: "bg-[var(--danger-text)] border-[var(--danger-text)] text-white hover:opacity-90"
   };
 
   return (
@@ -90,3 +91,50 @@ export const Badge: React.FC<{ children: React.ReactNode; color?: string; classN
     {children}
   </span>
 );
+
+export const ConfirmModal: React.FC<{
+  open: boolean;
+  title: string;
+  description: React.ReactNode;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  isLoading?: boolean;
+  onConfirm: () => void;
+  onCancel: () => void;
+}> = ({
+  open,
+  title,
+  description,
+  confirmLabel = 'Hapus',
+  cancelLabel = 'Batal',
+  isLoading = false,
+  onConfirm,
+  onCancel
+}) => {
+  if (!open) return null;
+
+  return (
+    <div
+      className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-950/45 p-4 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget && !isLoading) onCancel();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="arunika-confirm-modal-title"
+        className="w-full max-w-md rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-2xl"
+        onMouseDown={event => event.stopPropagation()}
+      >
+        <h2 id="arunika-confirm-modal-title" className="text-xl font-bold text-[var(--text)]">{title}</h2>
+        <div className="mt-3 text-sm leading-relaxed text-[var(--muted)]">{description}</div>
+        <div className="mt-6 flex flex-wrap justify-end gap-2">
+          <Button type="button" variant="secondary" onClick={onCancel} disabled={isLoading}>{cancelLabel}</Button>
+          <Button type="button" variant="danger" onClick={onConfirm} isLoading={isLoading}>{confirmLabel}</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
