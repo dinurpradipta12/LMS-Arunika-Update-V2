@@ -78,6 +78,16 @@ type LandingImageLayout = 'slider' | 'marquee' | 'row';
 type LandingImageItem = { url: string; alt: string; caption: string };
 type LandingTestimonialItem = { quote: string; name: string; role: string; rating: number };
 
+const normalizeHeroImageScale = (value: unknown, fallback = 1.15) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? Math.min(1.7, Math.max(0.7, numericValue)) : fallback;
+};
+
+const normalizeHeroImagePosition = (value: unknown) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? Math.min(100, Math.max(0, numericValue)) : 50;
+};
+
 const LANDING_IMAGE_LAYOUT_OPTIONS: Array<{ value: LandingImageLayout; label: string; description: string }> = [
   { value: 'slider', label: 'Foto slider', description: 'Satu foto utama dengan navigasi dan indikator.' },
   { value: 'marquee', label: 'Gallery otomatis', description: 'Bergerak dari kanan ke kiri dan berulang.' },
@@ -102,6 +112,9 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       eyebrow: 'Produk pilihan untuk Anda',
       headline: 'Tampilkan produk Anda dengan lebih meyakinkan',
       body: 'Jelaskan manfaat utama produk Anda dengan kalimat singkat yang mudah dipahami.',
+      imageScale: 1.15,
+      imagePositionX: 50,
+      imagePositionY: 50,
       buttonLabel: 'Saya berminat',
       buttonUrl: ''
     },
@@ -235,6 +248,11 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   const rawData = value?.data && typeof value.data === 'object' && !Array.isArray(value.data) ? value.data : {};
   const data = { ...fallback.data, ...rawData };
   if (type === 'features') data.items = normalizeLineItems(rawData.items, fallback.data.items);
+  if (type === 'hero') {
+    data.imageScale = normalizeHeroImageScale(rawData.imageScale, fallback.data.imageScale);
+    data.imagePositionX = normalizeHeroImagePosition(rawData.imagePositionX);
+    data.imagePositionY = normalizeHeroImagePosition(rawData.imagePositionY);
+  }
   if (type === 'pricing') data.features = Array.isArray(rawData.features) ? rawData.features.map((item: unknown) => asText(item)).filter(Boolean) : fallback.data.features;
   if (type === 'faq') data.items = normalizeFaqItems(rawData.items, fallback.data.items);
   if (type === 'image') {
@@ -630,6 +648,9 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
   const textBody = asText(data.body);
   switch (block.type) {
     case 'hero':
+      const heroImageScale = normalizeHeroImageScale(data.imageScale);
+      const heroImagePositionX = normalizeHeroImagePosition(data.imagePositionX);
+      const heroImagePositionY = normalizeHeroImagePosition(data.imagePositionY);
       return (
         <section className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-7 shadow-sm md:p-10">
           <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[var(--accent-soft)] opacity-70" aria-hidden="true" />
@@ -641,7 +662,9 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
               <ActionLink label={asText(data.buttonLabel, 'Pelajari lebih lanjut')} href={asText(data.buttonUrl)} className="mt-6" />
             </div>
             {asText(data.imageUrl) ? (
-              <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="max-h-64 w-full rounded-2xl object-cover shadow-sm" />
+              <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm">
+                <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="absolute inset-0 h-full w-full object-cover transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `scale(${heroImageScale})` }} />
+              </div>
             ) : (
               <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-center text-xs text-[var(--muted)]">Visual produk dapat ditambahkan dari pengaturan blok.</div>
             )}
@@ -800,6 +823,47 @@ const ImageUploader: React.FC<{ label: string; value: string; onChange: (value: 
   return <div className="space-y-3"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-[var(--muted)]">{label}</p>{value && <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus gambar</button>}</div><div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">{value ? <img src={value} alt={`Preview ${label}`} className="max-h-48 w-full rounded-lg object-contain" /> : <div className="flex min-h-28 items-center justify-center gap-2 text-sm text-[var(--muted)]"><ImagePlus size={22} /> Belum ada gambar</div>}</div><input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} /><Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing}>Upload gambar</Button>{error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}</div>;
 };
 
+const HeroImageControls: React.FC<{
+  imageUrl: string;
+  scale: number;
+  positionX: number;
+  positionY: number;
+  onChange: (values: Record<string, number>) => void;
+}> = ({ imageUrl, scale, positionX, positionY, onChange }) => {
+  const sizePercent = Math.round(normalizeHeroImageScale(scale) * 100);
+  const horizontalPosition = normalizeHeroImagePosition(positionX);
+  const verticalPosition = normalizeHeroImagePosition(positionY);
+  const rangeClass = 'h-2 w-full cursor-pointer accent-[var(--accent)]';
+
+  return (
+    <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+      <div>
+        <p className="text-xs font-semibold text-[var(--muted)]">Atur tampilan gambar</p>
+        <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Geser posisi dan ubah ukuran gambar yang tampil di Hero.</p>
+      </div>
+      {imageUrl ? <>
+        <label className="flex flex-col gap-2">
+          <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Ukuran gambar</span><span className="text-[var(--text)]">{sizePercent}%</span></span>
+          <input type="range" min="70" max="170" step="5" value={sizePercent} onChange={event => onChange({ imageScale: Number(event.target.value) / 100 })} className={rangeClass} aria-label="Ukuran gambar Hero" />
+          <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Kecil</span><span>Besar</span></span>
+        </label>
+        <div className="grid gap-3 sm:grid-cols-2">
+          <label className="flex flex-col gap-2">
+            <span className="flex items-center justify-between gap-2 text-xs font-semibold text-[var(--muted)]"><span>Geser horizontal</span><span className="text-[var(--text)]">{Math.round(horizontalPosition)}%</span></span>
+            <input type="range" min="0" max="100" step="1" value={horizontalPosition} onChange={event => onChange({ imagePositionX: Number(event.target.value) })} className={rangeClass} aria-label="Posisi horizontal gambar Hero" />
+            <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Kiri</span><span>Kanan</span></span>
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="flex items-center justify-between gap-2 text-xs font-semibold text-[var(--muted)]"><span>Geser vertikal</span><span className="text-[var(--text)]">{Math.round(verticalPosition)}%</span></span>
+            <input type="range" min="0" max="100" step="1" value={verticalPosition} onChange={event => onChange({ imagePositionY: Number(event.target.value) })} className={rangeClass} aria-label="Posisi vertikal gambar Hero" />
+            <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Atas</span><span>Bawah</span></span>
+          </label>
+        </div>
+      </> : <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-3 text-[11px] leading-relaxed text-[var(--muted)]">Upload visual Hero terlebih dahulu untuk mengatur ukuran dan posisinya.</p>}
+    </div>
+  );
+};
+
 const ImageGalleryUploader: React.FC<{ items: LandingImageItem[]; onChange: (items: LandingImageItem[]) => void }> = ({ items, onChange }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [urlInput, setUrlInput] = useState('');
@@ -941,7 +1005,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
   switch (block.type) {
     case 'hero':
-      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} /><Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
+      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} /><Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><HeroImageControls imageUrl={asText(data.imageUrl)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
     case 'text':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Textarea label="Isi teks" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} className="min-h-[180px]" /></div>;
     case 'image': {
