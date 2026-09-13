@@ -301,7 +301,8 @@ const createWhatsAppLink = (phone: string, form: FormDefinition, responderName: 
     `Nominal transfer: ${transferAmount}`,
     responseId ? `ID pendaftaran: ${responseId}` : '',
     '',
-    `Saya sudah menyelesaikan pembayaran untuk ${form.title}. Mohon bantu cek dan konfirmasi pendaftaran saya. Jika diperlukan, saya siap mengirimkan bukti transfer melalui chat ini.`,
+    `Saya sudah menyelesaikan pembayaran untuk ${form.title}. Mohon bantuannya untuk follow-up langkah selanjutnya setelah pembelian, termasuk konfirmasi pembayaran dan informasi akses, jadwal, atau instruksi berikutnya.`,
+    'Bukti transfer siap saya kirimkan melalui chat ini bila diperlukan.',
     'Terima kasih.'
   ].filter(Boolean).join('\n');
   return `https://wa.me/${normalizedPhone}?text=${encodeURIComponent(message)}`;

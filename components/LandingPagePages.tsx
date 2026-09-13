@@ -301,10 +301,20 @@ const normalizeWhatsAppNumber = (value: unknown) => {
   return digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
 };
 
-const whatsappHref = (phone: unknown, pageTitle: string) => {
+const whatsappHref = (phone: unknown, pageTitle: string, paymentAmount?: string) => {
   const normalized = normalizeWhatsAppNumber(phone);
   if (!normalized) return '';
-  const message = `Halo, saya tertarik dengan ${pageTitle}. Mohon kirimkan informasi lengkap dan cara pemesanannya. Terima kasih.`;
+  const amount = paymentAmount?.trim() || 'akan saya informasikan melalui chat ini';
+  const message = [
+    `Halo, saya sudah melakukan pembelian untuk ${pageTitle}.`,
+    '',
+    `Nominal pembayaran: ${amount}`,
+    '',
+    'Mohon bantuannya untuk follow-up langkah selanjutnya setelah pembelian, termasuk konfirmasi pembayaran dan informasi akses, jadwal, atau instruksi berikutnya.',
+    'Bukti transfer siap saya kirimkan di chat ini bila diperlukan.',
+    '',
+    'Terima kasih.'
+  ].join('\n');
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 };
 
@@ -702,7 +712,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
         </section>
       );
     case 'payment': {
-      const confirmationHref = whatsappHref(data.whatsapp, pageTitle) || safeHref(data.buttonUrl);
+      const confirmationHref = whatsappHref(data.whatsapp, pageTitle, asText(data.amount)) || safeHref(data.buttonUrl);
       const ctaBeforePrice = asText(data.ctaBeforePrice).trim();
       const originalAmount = asText(data.originalAmount).trim();
       return (
