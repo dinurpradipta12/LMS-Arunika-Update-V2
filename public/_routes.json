@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "include": [
+    "/landing",
+    "/landing/*",
+    "/form",
+    "/form/*",
+    "/qna",
+    "/qna/*"
+  ],
+  "exclude": []
+}
