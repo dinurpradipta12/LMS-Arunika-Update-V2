@@ -13,7 +13,7 @@ import {
   FormThemeKey
 } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
-import { setPublicMetadata } from './PublicMetadata';
+import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
 import logoUtama from '../src/logo-utama.png';
 
 export const FORM_MAKER_SPACE_LABEL = 'Form Maker';
@@ -196,7 +196,7 @@ const slugify = (value: string) => value
   .slice(0, 80) || `form-${Date.now()}`;
 
 const createFormShareLink = (slug: string) => {
-  const url = new URL(window.location.origin);
+  const url = new URL(getPublicBaseUrl());
   url.pathname = `/form/${encodeURIComponent(slug)}`;
   return url.toString();
 };

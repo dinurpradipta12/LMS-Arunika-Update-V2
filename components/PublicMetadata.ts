@@ -11,6 +11,24 @@ export type PublicMetadata = {
 
 const DEFAULT_TITLE = 'Arunika Learning Hub';
 const DEFAULT_DESCRIPTION = 'Konten publik Arunika untuk belajar, mendaftar, dan mengikuti sesi bersama.';
+const DEFAULT_PUBLIC_APP_URL = 'https://arunika.space';
+
+/**
+ * Public links must point to the deployed site even when an admin is editing
+ * from the local Vite server. Set VITE_PUBLIC_APP_URL per deployment when the
+ * public host differs from arunika.space.
+ */
+export const getPublicBaseUrl = () => {
+  const configuredUrl = String(import.meta.env.VITE_PUBLIC_APP_URL || '').trim();
+  if (configuredUrl) return configuredUrl;
+  if (typeof window !== 'undefined') {
+    const hostname = window.location.hostname.toLowerCase();
+    if (hostname !== 'localhost' && hostname !== '127.0.0.1' && hostname !== '0.0.0.0') {
+      return window.location.origin;
+    }
+  }
+  return DEFAULT_PUBLIC_APP_URL;
+};
 
 const upsertMeta = (attribute: 'name' | 'property', key: string, content: string) => {
   let element = document.head.querySelector<HTMLMetaElement>(`meta[${attribute}="${key}"]`);

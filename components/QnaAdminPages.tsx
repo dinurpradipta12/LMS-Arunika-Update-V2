@@ -5,6 +5,7 @@ import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { FormThemeKey, QnaQuestion, QnaQuestionStatus, QnaSession, QnaSessionStatus } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
+import { getPublicBaseUrl } from './PublicMetadata';
 
 export const QNA_SPACE_LABEL = 'Q&A Audience';
 
@@ -142,7 +143,7 @@ const slugify = (value: string) => value
   .slice(0, 80) || `qna-${Date.now()}`;
 
 const createQnaLink = (slug: string, presenterToken?: string) => {
-  const url = new URL(window.location.origin);
+  const url = new URL(getPublicBaseUrl());
   url.pathname = `/qna/${encodeURIComponent(slug)}${presenterToken ? '/present' : ''}`;
   if (presenterToken) url.searchParams.set('key', presenterToken);
   return url.toString();

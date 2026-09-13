@@ -39,7 +39,7 @@ import {
 } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
-import { setPublicMetadata } from './PublicMetadata';
+import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
 import logoUtama from '../src/logo-utama.png';
 
 export const LANDING_PAGE_SPACE_LABEL = 'Landing Page';
@@ -326,7 +326,7 @@ const landingWriteRow = (page: LandingPage) => ({
 });
 
 const createLandingShareLink = (slug: string) => {
-  const url = new URL(window.location.origin);
+  const url = new URL(getPublicBaseUrl());
   url.pathname = `/landing/${encodeURIComponent(slug)}`;
   return url.toString();
 };

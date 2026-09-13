@@ -72,7 +72,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset, Category } from './types';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
-import { setPublicMetadata } from './components/PublicMetadata';
+import { getPublicBaseUrl, setPublicMetadata } from './components/PublicMetadata';
 import {
   ClassResultsPage,
   PublicRecordedClassView,
@@ -303,7 +303,7 @@ const generateShareLink = (courseId: string, contentType: 'course' | 'class' = '
   const publicRoute = contentType === 'class' ? 'class' : 'c';
 
   try {
-    const publicUrl = new URL(configuredPublicUrl || window.location.href);
+    const publicUrl = new URL(configuredPublicUrl || getPublicBaseUrl());
     publicUrl.search = '';
     publicUrl.hash = `/${publicRoute}/${code}`;
     return publicUrl.toString();

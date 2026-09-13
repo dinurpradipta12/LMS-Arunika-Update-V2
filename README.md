@@ -25,12 +25,12 @@ View your app in AI Studio: https://ai.studio/apps/290b0712-77c2-461a-a62e-81b78
 Set the canonical public base URL in the deployment environment:
 
 ```env
-VITE_PUBLIC_APP_URL=https://lms.example.com/
+VITE_PUBLIC_APP_URL=https://arunika.space/
 VITE_PUBLIC_SUPABASE_URL=https://your-project.supabase.co
 VITE_PUBLIC_SUPABASE_ANON_KEY=your-public-anon-key
 ```
 
-The Copy Link and Share buttons then generate a unique hash route for each course, for example `https://lms.example.com/#/c/2t`. Public course pages always read from the canonical public Supabase configuration, so stale Supabase settings stored in an admin browser cannot redirect visitors to a different project. Without `VITE_PUBLIC_APP_URL`, the app falls back to the host currently displaying the dashboard, which is useful locally but should not be used as the production share URL.
+The Copy Link and Share buttons then generate a unique hash route for each course, for example `https://arunika.space/#/c/2t`. Public course pages always read from the canonical public Supabase configuration, so stale Supabase settings stored in an admin browser cannot redirect visitors to a different project. When `VITE_PUBLIC_APP_URL` is not set, the app uses `https://arunika.space` for local admin sessions and the current deployed origin for other hosts.
 
 ## Secure database and admin setup
 

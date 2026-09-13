@@ -33,7 +33,7 @@ const getPublicRoute = (request) => {
     }
   }
 
-  return { kind, slug, url };
+  return { kind, slug, action: segments[2] === 'og-image' ? 'image' : 'page', url };
 };
 
 const getSupabaseConfig = (env) => ({
@@ -81,11 +81,72 @@ const getLandingImage = (row) => {
   return '';
 };
 
+const getPublicImage = (kind, row) => {
+  if (kind === 'landing') return getLandingImage(row);
+  return row?.headerImage || '';
+};
+
 const getLandingDescription = (row) => {
   const description = cleanText(row?.description);
   if (description) return description;
   const heroBlock = parseJson(row?.blocks).find((block) => block?.type === 'hero');
   return cleanText(heroBlock?.data?.body);
+};
+
+const getPublicRow = async (env, route) => {
+  if (route.kind === 'landing') {
+    return callPublicRpc(env, 'get_public_landing_page', { p_slug: route.slug });
+  }
+  if (route.kind === 'form') {
+    return callPublicRpc(env, 'get_public_form', { p_slug: route.slug });
+  }
+  return callPublicRpc(env, 'get_public_qna_session', { p_slug: route.slug, p_presenter_token: '' });
+};
+
+const isDataImage = (value) => /^data:image\//i.test(String(value || '').trim());
+
+const getImageProxyUrl = (route) => {
+  const url = new URL(`/${route.kind}/${encodeURIComponent(route.slug)}/og-image`, route.url);
+  url.search = '';
+  url.hash = '';
+  return url.toString();
+};
+
+const decodeDataImage = (value) => {
+  const raw = String(value || '').trim();
+  const match = raw.match(/^data:([^;,]+)(;base64)?,([\s\S]*)$/i);
+  if (!match || !match[1].toLowerCase().startsWith('image/')) return null;
+
+  try {
+    if (match[2]) {
+      const binary = atob(match[3].replace(/\s/g, ''));
+      const bytes = new Uint8Array(binary.length);
+      for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+      return { contentType: match[1], bytes };
+    }
+    return { contentType: match[1], bytes: new TextEncoder().encode(decodeURIComponent(match[3])) };
+  } catch {
+    return null;
+  }
+};
+
+const getImageResponse = async (env, route) => {
+  try {
+    const row = await getPublicRow(env, route);
+    if (!row) return new Response(null, { status: 404 });
+    const image = decodeDataImage(getPublicImage(route.kind, row));
+    if (!image) return new Response(null, { status: 404 });
+    return new Response(image.bytes, {
+      status: 200,
+      headers: {
+        'content-type': image.contentType,
+        'cache-control': 'public, max-age=300, s-maxage=300',
+        'x-content-type-options': 'nosniff'
+      }
+    });
+  } catch {
+    return new Response(null, { status: 404 });
+  }
 };
 
 const toPublicAssetUrl = (value, requestUrl) => {
@@ -110,28 +171,34 @@ const getMetadata = async (env, route) => {
 
   try {
     if (route.kind === 'landing') {
-      const row = await callPublicRpc(env, 'get_public_landing_page', { p_slug: route.slug });
+      const row = await getPublicRow(env, route);
+      const image = getPublicImage(route.kind, row);
       return row ? {
         title: cleanText(row.title, 'Landing Page'),
         description: truncate(getLandingDescription(row), 300),
-        image: getLandingImage(row)
+        image,
+        imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
       } : null;
     }
 
     if (route.kind === 'form') {
-      const row = await callPublicRpc(env, 'get_public_form', { p_slug: route.slug });
+      const row = await getPublicRow(env, route);
+      const image = getPublicImage(route.kind, row);
       return row ? {
         title: cleanText(row.title, 'Form Maker'),
         description: truncate(row.description || row.eventName, 300),
-        image: row.headerImage || ''
+        image,
+        imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
       } : null;
     }
 
-    const row = await callPublicRpc(env, 'get_public_qna_session', { p_slug: route.slug, p_presenter_token: '' });
+    const row = await getPublicRow(env, route);
+    const image = getPublicImage(route.kind, row);
     return row ? {
       title: cleanText(row.title, 'Q&A Audience'),
       description: truncate(row.description || row.eventName || row.welcomeMessage, 300),
-      image: row.headerImage || ''
+      image,
+      imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
     } : null;
   } catch {
     return null;
@@ -141,7 +208,7 @@ const getMetadata = async (env, route) => {
 const injectMetadata = (html, metadata, pageUrl) => {
   const title = escapeHtml(metadata.title);
   const description = escapeHtml(metadata.description || '');
-  const image = toPublicAssetUrl(metadata.image, pageUrl);
+  const image = toPublicAssetUrl(metadata.image, pageUrl) || toPublicAssetUrl(metadata.imageProxyUrl, pageUrl);
   const imageTags = image
     ? `\n    <meta property="og:image" content="${escapeHtml(image)}" />\n    <meta property="og:image:alt" content="${title}" />\n    <meta name="twitter:image" content="${escapeHtml(image)}" />`
     : '';
@@ -167,6 +234,8 @@ export async function onRequest(context) {
 
   const route = getPublicRoute(context.request);
   if (!route) return context.next();
+
+  if (route.action === 'image') return getImageResponse(context.env, route);
 
   const metadata = await getMetadata(context.env, route);
   const fallbackMetadata = metadata || {

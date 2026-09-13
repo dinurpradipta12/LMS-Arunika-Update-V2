@@ -12,7 +12,7 @@ import {
 } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_MAKER_PUBLIC_LABEL, FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
-import { setPublicMetadata } from './PublicMetadata';
+import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
 import logoUtama from '../src/logo-utama.png';
 
 export const QNA_SPACE_LABEL = 'Q&A Audience';
@@ -156,7 +156,7 @@ const slugify = (value: string) => value
   .slice(0, 80) || `qna-${Date.now()}`;
 
 const createQnaLink = (slug: string, presenterToken?: string) => {
-  const url = new URL(window.location.origin);
+  const url = new URL(getPublicBaseUrl());
   url.pathname = `/qna/${encodeURIComponent(slug)}${presenterToken ? '/present' : ''}`;
   if (presenterToken) url.searchParams.set('key', presenterToken);
   return url.toString();
