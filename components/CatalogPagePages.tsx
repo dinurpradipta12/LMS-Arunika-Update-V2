@@ -640,25 +640,115 @@ const CatalogItemEditor: React.FC<{
 };
 
 function CatalogMobilePreview({ page }: { page: CatalogPage }) {
-  return <Card className="space-y-4 xl:sticky xl:top-6">
-    <div className="flex items-start justify-between gap-3">
-      <div>
-        <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Preview live</p>
-        <h2 className="mt-2 text-xl font-bold">Tampilan mobile</h2>
-        <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Perubahan di editor langsung terlihat seperti saat dibuka dari HP.</p>
-      </div>
-      <span className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--success-soft)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--success-text)]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--success-text)]" /> Live</span>
-    </div>
-    <div className="mx-auto w-full max-w-[360px] rounded-[2.7rem] border-[10px] border-slate-950 bg-slate-950 p-1 shadow-2xl">
-      <div className="relative overflow-hidden rounded-[2.15rem] border border-slate-800 bg-[var(--app-bg)]">
-        <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-5 w-24 -translate-x-1/2 rounded-full bg-slate-950" aria-hidden="true" />
-        <div className="h-[650px] overflow-y-auto overscroll-contain" onClick={event => { if ((event.target as HTMLElement).closest('a')) event.preventDefault(); }}>
-          <PublicCatalogPageView client={null} pageOverride={page} embedded />
+  const previewRef = useRef<HTMLDivElement>(null);
+  const [zoom, setZoom] = useState(0.7);
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [isDragging, setIsDragging] = useState(false);
+  const dragRef = useRef<{ pointerId: number; startX: number; startY: number; originX: number; originY: number } | null>(null);
+  const zoomPercent = Math.round(zoom * 100);
+  const phoneWidth = 360;
+  const phoneHeight = 682;
+
+  const endDragging = useCallback(() => {
+    dragRef.current = null;
+    setIsDragging(false);
+  }, []);
+
+  useEffect(() => {
+    if (!isDragging) return undefined;
+    window.addEventListener('pointerup', endDragging, true);
+    window.addEventListener('pointercancel', endDragging, true);
+    window.addEventListener('blur', endDragging);
+    return () => {
+      window.removeEventListener('pointerup', endDragging, true);
+      window.removeEventListener('pointercancel', endDragging, true);
+      window.removeEventListener('blur', endDragging);
+    };
+  }, [endDragging, isDragging]);
+
+  const clampOffset = (nextX: number, nextY: number) => {
+    const element = previewRef.current;
+    if (!element) return { x: nextX, y: nextY };
+    const rect = element.getBoundingClientRect();
+    const origin = dragRef.current;
+    const baseLeft = rect.left - (origin?.originX || 0);
+    const baseTop = rect.top - (origin?.originY || 0);
+    const minX = 12 - baseLeft;
+    const maxX = window.innerWidth - rect.width - 12 - baseLeft;
+    const minY = 12 - baseTop;
+    const maxY = window.innerHeight - rect.height - 12 - baseTop;
+    return {
+      x: Math.min(Math.max(nextX, Math.min(minX, maxX)), Math.max(minX, maxX)),
+      y: Math.min(Math.max(nextY, Math.min(minY, maxY)), Math.max(minY, maxY))
+    };
+  };
+
+  const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
+    const target = event.target as Element | null;
+    if (event.button !== 0 || target?.closest('button')) return;
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId);
+    } catch {
+      // Pointer capture is unavailable for synthetic events, but dragging can still continue.
+    }
+    dragRef.current = { pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, originX: offset.x, originY: offset.y };
+    setIsDragging(true);
+  };
+
+  const handlePointerMove = (event: React.PointerEvent<HTMLDivElement>) => {
+    const drag = dragRef.current;
+    if (!drag || drag.pointerId !== event.pointerId) return;
+    setOffset(clampOffset(drag.originX + event.clientX - drag.startX, drag.originY + event.clientY - drag.startY));
+  };
+
+  const stopDragging = (event: React.PointerEvent<HTMLDivElement>) => {
+    if (dragRef.current?.pointerId === event.pointerId && event.currentTarget.hasPointerCapture(event.pointerId)) event.currentTarget.releasePointerCapture(event.pointerId);
+    endDragging();
+  };
+
+  const changeZoom = (direction: -1 | 1) => setZoom(current => Math.min(1, Math.max(0.6, Number((current + direction * 0.1).toFixed(2)))));
+  const resetPosition = () => {
+    endDragging();
+    setOffset({ x: 0, y: 0 });
+  };
+
+  return <div ref={previewRef} className="fixed bottom-4 right-4 z-50 w-[min(420px,calc(100vw-2rem))]" style={{ transform: `translate3d(${offset.x}px, ${offset.y}px, 0)` }}>
+    <Card className={`space-y-3 border-[var(--border-strong)] p-4 shadow-2xl ${isDragging ? 'cursor-grabbing select-none' : ''}`}>
+      <div className="touch-none flex items-start justify-between gap-3" onPointerDown={handlePointerDown} onPointerMove={handlePointerMove} onPointerUp={stopDragging} onPointerCancel={stopDragging} onLostPointerCapture={endDragging}>
+        <div className={`flex min-w-0 items-start gap-2 ${isDragging ? 'cursor-grabbing' : 'cursor-grab'}`} title="Tarik untuk memindahkan preview">
+          <GripVertical size={17} className="mt-1 shrink-0 text-[var(--muted)]" aria-hidden="true" />
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Preview live</p>
+            <h2 className="mt-1 text-lg font-bold">Tampilan mobile</h2>
+            <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Tarik grip untuk memindahkan preview di sekitar layar.</p>
+          </div>
+        </div>
+        <div className="flex shrink-0 items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--success-soft)] px-2 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--success-text)]"><span className="h-1.5 w-1.5 animate-pulse rounded-full bg-[var(--success-text)]" /> Live</span>
+          <button type="button" onClick={resetPosition} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[10px] font-semibold text-[var(--muted)] hover:bg-[var(--surface-soft)]" aria-label="Kembalikan posisi preview">Reset</button>
         </div>
       </div>
-    </div>
-    <p className="text-center text-[11px] leading-relaxed text-[var(--muted)]">Preview ini tidak mengubah data publik sampai Anda menekan “Simpan katalog”.</p>
-  </Card>;
+      <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2">
+        <span className="text-[11px] font-semibold text-[var(--muted)]">Ukuran preview</span>
+        <div className="flex items-center gap-2" role="group" aria-label="Kontrol zoom preview">
+          <button type="button" onClick={() => changeZoom(-1)} disabled={zoom <= 0.6} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Perkecil preview">−</button>
+          <span className="w-10 text-center text-[11px] font-bold text-[var(--text)]">{zoomPercent}%</span>
+          <button type="button" onClick={() => changeZoom(1)} disabled={zoom >= 1} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Perbesar preview">+</button>
+        </div>
+      </div>
+      <div className="mx-auto overflow-hidden" style={{ width: `${phoneWidth * zoom}px`, height: `${phoneHeight * zoom}px` }}>
+        <div className="w-[360px] rounded-[2.7rem] border-[10px] border-slate-950 bg-slate-950 p-1 shadow-2xl" style={{ height: `${phoneHeight}px`, transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
+          <div className="relative overflow-hidden rounded-[2.15rem] border border-slate-800 bg-[var(--app-bg)]">
+            <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-5 w-24 -translate-x-1/2 rounded-full bg-slate-950" aria-hidden="true" />
+            <div className="h-[650px] overflow-y-auto overscroll-contain" onClick={event => { if ((event.target as HTMLElement).closest('a')) event.preventDefault(); }}>
+              <PublicCatalogPageView client={null} pageOverride={page} embedded />
+            </div>
+          </div>
+        </div>
+      </div>
+      <p className="text-center text-[11px] leading-relaxed text-[var(--muted)]">Preview ini tidak mengubah data publik sampai Anda menekan “Simpan katalog”.</p>
+    </Card>
+  </div>;
 }
 
 export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
