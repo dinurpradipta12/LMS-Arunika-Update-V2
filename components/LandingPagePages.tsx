@@ -1,4 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
   Check,
@@ -400,9 +401,10 @@ const LandingImageLightbox: React.FC<{
   if (activeIndex === null || !items[activeIndex]) return null;
   const item = items[activeIndex];
 
-  return (
+  return createPortal(
     <div
-      className="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[2147483647] flex min-h-screen items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+      style={{ zIndex: 2147483647 }}
       role="dialog"
       aria-modal="true"
       aria-label="Preview foto"
@@ -428,7 +430,8 @@ const LandingImageLightbox: React.FC<{
           {items.length > 1 && <span className="shrink-0">{activeIndex + 1} / {items.length}</span>}
         </div>
       </div>
-    </div>
+    </div>,
+    document.body
   );
 };
 
