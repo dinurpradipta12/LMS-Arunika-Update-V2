@@ -15,6 +15,7 @@ import {
   FileText,
   GraduationCap,
   HelpCircle,
+  Layout,
   Link as LinkIcon,
   Loader2,
   LockKeyhole,
@@ -628,6 +629,23 @@ export const SpacesDashboard: React.FC<{ courses: Course[] }> = ({ courses }) =>
               <Badge>Realtime</Badge>
             </div>
             <p className="text-sm text-[var(--muted)] mt-4 leading-relaxed">Kumpulkan pertanyaan audience, moderasi sebelum tampil, voting, dan layar presenter untuk webinar.</p>
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-strong)] mt-7">Buka ruang <ChevronRight size={16} /></span>
+          </Card>
+        </Link>
+
+        <Link to="/admin/landing-pages" className="group block">
+          <Card className="h-full p-7 md:p-8 group-hover:border-[var(--border-strong)]">
+            <div className="w-12 h-12 rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)] flex items-center justify-center mb-6">
+              <Layout size={23} />
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 05</p>
+                <h2 className="text-xl font-bold mt-2">Landing Page</h2>
+              </div>
+              <Badge>Promosi</Badge>
+            </div>
+            <p className="text-sm text-[var(--muted)] mt-4 leading-relaxed">Susun halaman promosi produk dengan blok drag-and-drop, CTA, dan informasi pembayaran QR Code.</p>
             <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-strong)] mt-7">Buka ruang <ChevronRight size={16} /></span>
           </Card>
         </Link>

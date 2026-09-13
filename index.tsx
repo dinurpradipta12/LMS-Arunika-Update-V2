@@ -85,6 +85,12 @@ import {
   PublicFormView,
   FORM_MAKER_SPACE_LABEL
 } from './components/FormMakerPages';
+import {
+  LandingPageEditor,
+  LandingPagesPage,
+  PublicLandingPageView,
+  LANDING_PAGE_SPACE_LABEL
+} from './components/LandingPagePages';
 import { PublicQnaPage, QNA_SPACE_LABEL } from './components/QnaPages';
 import { QnaAdminCreatePage, QnaAdminDetailPage, QnaAdminListPage } from './components/QnaAdminPages';
 import logoUtama from './src/logo-utama.png';
@@ -762,6 +768,13 @@ const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: bool
             className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname.startsWith('/admin/forms') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
           >
             <ClipboardList size={18} /> {FORM_MAKER_SPACE_LABEL}
+          </Link>
+          <Link
+            to="/admin/landing-pages"
+            onClick={() => { if(window.innerWidth < 768) onClose(); }}
+            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname.startsWith('/admin/landing-pages') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
+          >
+            <Layout size={18} /> {LANDING_PAGE_SPACE_LABEL}
           </Link>
           <Link
             to="/admin/qna"
@@ -1789,7 +1802,7 @@ const App: React.FC = () => {
   const isSyncingRef = useRef(false);
   const lastLocalUpdateRef = useRef<number>(0);
   const isAdmin = authStatus === 'admin';
-  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna)\//.test(location.pathname);
+  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing)\//.test(location.pathname);
 
   useEffect(() => {
     // Hapus otorisasi dan cache data lama yang sebelumnya dipercaya dari localStorage.
@@ -2112,6 +2125,8 @@ const App: React.FC = () => {
         <Route path="/admin/forms" element={renderAdminPage(<FormMakerPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/forms/:id/responses" element={renderAdminPage(<FormResponsesPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/forms/:id" element={renderAdminPage(<FormEditorPage client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/landing-pages" element={renderAdminPage(<LandingPagesPage client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/landing-pages/:id" element={renderAdminPage(<LandingPageEditor client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna/new" element={renderAdminPage(<QnaAdminCreatePage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna/:id" element={renderAdminPage(<QnaAdminDetailPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna" element={renderAdminPage(<QnaAdminListPage client={getAdminSupabaseClient()} />)} />
@@ -2121,6 +2136,7 @@ const App: React.FC = () => {
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} />} />
         <Route path="/class/:id" element={<PublicRecordedClassView client={getPublicSupabaseClient()} mentor={mentor} resolveCourseId={getCourseIdFromPublicCode} />} />
         <Route path="/form/:slug" element={<PublicFormView client={getPublicSupabaseClient()} />} />
+        <Route path="/landing/:slug" element={<PublicLandingPageView client={getPublicSupabaseClient()} />} />
         <Route path="/qna/:slug/present" element={<PublicQnaPage client={getPublicSupabaseClient()} presenterMode />} />
         <Route path="/qna/:slug" element={<PublicQnaPage client={getPublicSupabaseClient()} />} />
         <Route path="/" element={authStatus === 'loading' ? <AuthLoading /> : <Navigate to={isAdmin ? '/admin' : '/login'} replace />} />
@@ -2135,6 +2151,8 @@ const root = rootRegistry.__arunikaRoot
 rootRegistry.__arunikaRoot = root;
 const directFormPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/form\/([^/]+)\/?$/);
 const directFormSlug = directFormPathMatch ? decodeURIComponent(directFormPathMatch[1]) : null;
+const directLandingPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/landing\/([^/]+)\/?$/);
+const directLandingSlug = directLandingPathMatch ? decodeURIComponent(directLandingPathMatch[1]) : null;
 const directQnaPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/qna\/([^/]+)(\/present)?\/?$/);
 const directQnaSlug = directQnaPathMatch ? decodeURIComponent(directQnaPathMatch[1]) : null;
 const directQnaPresenter = Boolean(directQnaPathMatch?.[2]);
@@ -2143,6 +2161,8 @@ const directQnaEntry = directQnaSlug
   : null;
 root.render(directFormSlug
   ? <MemoryRouter initialEntries={[`/form/${directFormSlug}`]}><PublicFormView client={getPublicSupabaseClient()} slugOverride={directFormSlug} /></MemoryRouter>
+  : directLandingSlug
+    ? <MemoryRouter initialEntries={[`/landing/${directLandingSlug}`]}><PublicLandingPageView client={getPublicSupabaseClient()} slugOverride={directLandingSlug} /></MemoryRouter>
   : directQnaSlug
     ? <MemoryRouter initialEntries={[directQnaEntry || `/qna/${directQnaSlug}`]}><PublicQnaPage client={getPublicSupabaseClient()} presenterMode={directQnaPresenter} slugOverride={directQnaSlug} /></MemoryRouter>
   : <Router><App /></Router>);

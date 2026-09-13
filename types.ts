@@ -213,6 +213,27 @@ export interface FormResponse {
   updatedAt?: string;
 }
 
+export type LandingPageStatus = 'draft' | 'published' | 'archived';
+export type LandingBlockType = 'hero' | 'text' | 'image' | 'features' | 'pricing' | 'testimonial' | 'faq' | 'cta' | 'payment' | 'video' | 'spacer';
+
+export interface LandingBlock {
+  id: string;
+  type: LandingBlockType;
+  data: Record<string, any>;
+}
+
+export interface LandingPage {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  theme: FormThemeKey;
+  status: LandingPageStatus;
+  blocks: LandingBlock[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type QnaSessionStatus = 'draft' | 'live' | 'paused' | 'closed' | 'archived';
 export type QnaQuestionStatus = 'pending' | 'approved' | 'answered' | 'hidden' | 'archived';
 export const QNA_CATEGORY_OPTIONS = ['Umum', 'Materi', 'Teknis', 'Studi kasus', 'Administratif', 'Lainnya'] as const;
