@@ -243,13 +243,39 @@ export interface CatalogPageItem {
   title: string;
   description: string;
   imageUrl: string;
+  imageAlt?: string;
   buttonLabel: string;
+  category?: string;
+  format?: string;
+  badge?: string;
+  price?: string;
+  compareAtPrice?: string;
+  featured?: boolean;
 }
 
 export interface CatalogSocialLink {
   id: string;
   label: string;
   url: string;
+}
+
+export interface CatalogBenefit {
+  id: string;
+  title: string;
+  description: string;
+}
+
+export interface CatalogContent {
+  announcement: string;
+  heroEyebrow: string;
+  heroTitle: string;
+  heroDescription: string;
+  heroImageUrl: string;
+  heroImageAlt: string;
+  heroCtaLabel: string;
+  heroCtaUrl: string;
+  benefitsHeading: string;
+  benefits: CatalogBenefit[];
 }
 
 export interface CatalogPage {
@@ -262,6 +288,7 @@ export interface CatalogPage {
   avatarUrl: string;
   customDomain: string;
   socialLinks: CatalogSocialLink[];
+  content: CatalogContent;
   items: CatalogPageItem[];
   createdAt?: string;
   updatedAt?: string;

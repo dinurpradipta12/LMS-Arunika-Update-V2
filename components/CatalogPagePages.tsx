@@ -2,7 +2,9 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import {
   ArrowDown,
   ArrowLeft,
+  ArrowRight,
   ArrowUp,
+  BadgeCheck,
   Check,
   ChevronDown,
   ChevronUp,
@@ -14,8 +16,12 @@ import {
   Link as LinkIcon,
   Loader2,
   Palette,
+  Package,
   Plus,
   Save,
+  Sparkles,
+  Star,
+  Tag,
   Trash2,
   Upload,
   X,
@@ -23,7 +29,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { CatalogPage, CatalogPageItem, CatalogPageStatus, CatalogSocialLink, FormThemeKey } from '../types';
+import { CatalogBenefit, CatalogContent, CatalogPage, CatalogPageItem, CatalogPageStatus, CatalogSocialLink, FormThemeKey } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
 import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
@@ -72,6 +78,62 @@ const normalizeSocialLinks = (value: unknown): CatalogSocialLink[] => {
   })).filter(item => item.label || item.url);
 };
 
+const normalizeCatalogBenefits = (value: unknown): CatalogBenefit[] => {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 6).map((item, index) => ({
+    id: asText(item?.id, `catalog-benefit-${Date.now()}-${index}`),
+    title: asText(item?.title),
+    description: asText(item?.description)
+  })).filter(item => item.title || item.description);
+};
+
+const emptyCatalogContent = (): CatalogContent => ({
+  announcement: '',
+  heroEyebrow: '',
+  heroTitle: '',
+  heroDescription: '',
+  heroImageUrl: '',
+  heroImageAlt: 'Visual katalog produk',
+  heroCtaLabel: '',
+  heroCtaUrl: '',
+  benefitsHeading: 'Kenapa memilih produk ini?',
+  benefits: []
+});
+
+const createDefaultCatalogContent = (): CatalogContent => ({
+  announcement: 'Produk digital siap dipakai',
+  heroEyebrow: 'KOLEKSI PRODUK DIGITAL',
+  heroTitle: 'Temukan resource untuk bekerja lebih cerdas',
+  heroDescription: 'Template, panduan, dan resource praktis untuk membantu Anda bergerak lebih cepat.',
+  heroImageUrl: '',
+  heroImageAlt: 'Koleksi produk digital',
+  heroCtaLabel: 'Lihat koleksi',
+  heroCtaUrl: '#catalog-products',
+  benefitsHeading: 'Belanja digital dengan lebih mudah',
+  benefits: [
+    { id: 'catalog-benefit-default-1', title: 'Siap digunakan', description: 'Pilih resource yang sesuai lalu akses detailnya dalam satu klik.' },
+    { id: 'catalog-benefit-default-2', title: 'Dibuat praktis', description: 'Produk digital yang ringkas, jelas, dan mudah disesuaikan.' },
+    { id: 'catalog-benefit-default-3', title: 'Dukungan berkelanjutan', description: 'Dapatkan panduan dan bantuan setelah pembelian.' }
+  ]
+});
+
+const normalizeCatalogContent = (value: unknown): CatalogContent => {
+  const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
+  const fallback = emptyCatalogContent();
+  return {
+    announcement: asText(raw.announcement),
+    heroEyebrow: asText(raw.heroEyebrow),
+    heroTitle: asText(raw.heroTitle),
+    heroDescription: asText(raw.heroDescription),
+    heroImageUrl: asText(raw.heroImageUrl || raw.hero_image_url),
+    heroImageAlt: asText(raw.heroImageAlt || raw.hero_image_alt, fallback.heroImageAlt),
+    heroCtaLabel: asText(raw.heroCtaLabel || raw.hero_cta_label),
+    heroCtaUrl: asText(raw.heroCtaUrl || raw.hero_cta_url),
+    benefitsHeading: asText(raw.benefitsHeading || raw.benefits_heading, fallback.benefitsHeading),
+    benefits: normalizeCatalogBenefits(raw.benefits)
+  };
+};
+
 const safeExternalHref = (value: unknown) => {
   let raw = asText(value).trim();
   if (!raw) return '';
@@ -115,7 +177,14 @@ const normalizeItem = (value: any, index: number): CatalogPageItem => ({
   title: asText(value?.title),
   description: asText(value?.description),
   imageUrl: asText(value?.imageUrl || value?.image_url),
-  buttonLabel: asText(value?.buttonLabel || value?.button_label, 'Lihat produk')
+  imageAlt: asText(value?.imageAlt || value?.image_alt),
+  buttonLabel: asText(value?.buttonLabel || value?.button_label, 'Lihat produk'),
+  category: asText(value?.category),
+  format: asText(value?.format),
+  badge: asText(value?.badge),
+  price: asText(value?.price),
+  compareAtPrice: asText(value?.compareAtPrice || value?.compare_at_price),
+  featured: value?.featured === true || value?.featured === 'true'
 });
 
 const mapCatalogRow = (row: any): CatalogPage => ({
@@ -128,6 +197,7 @@ const mapCatalogRow = (row: any): CatalogPage => ({
   avatarUrl: asText(row?.avatar_url || row?.avatarUrl),
   customDomain: normalizeCustomDomain(row?.custom_domain || row?.customDomain),
   socialLinks: normalizeSocialLinks(row?.social_links || row?.socialLinks),
+  content: normalizeCatalogContent(row?.content || row?.catalog_content),
   items: Array.isArray(row?.items) ? row.items.map(normalizeItem).filter((item: CatalogPageItem) => item.landingPageId) : [],
   createdAt: row?.created_at ?? row?.createdAt,
   updatedAt: row?.updated_at ?? row?.updatedAt
@@ -143,6 +213,7 @@ const createDefaultCatalogPage = (): CatalogPage => ({
   avatarUrl: '',
   customDomain: '',
   socialLinks: [],
+  content: createDefaultCatalogContent(),
   items: []
 });
 
@@ -156,13 +227,32 @@ const catalogWriteRow = (page: CatalogPage) => ({
   avatar_url: page.avatarUrl || '',
   custom_domain: normalizeCustomDomain(page.customDomain),
   social_links: page.socialLinks.map(link => ({ id: link.id, label: link.label, url: link.url })),
+  content: {
+    announcement: page.content.announcement || '',
+    heroEyebrow: page.content.heroEyebrow || '',
+    heroTitle: page.content.heroTitle || '',
+    heroDescription: page.content.heroDescription || '',
+    heroImageUrl: page.content.heroImageUrl || '',
+    heroImageAlt: page.content.heroImageAlt || 'Visual katalog produk',
+    heroCtaLabel: page.content.heroCtaLabel || '',
+    heroCtaUrl: page.content.heroCtaUrl || '',
+    benefitsHeading: page.content.benefitsHeading || 'Kenapa memilih produk ini?',
+    benefits: page.content.benefits.map(benefit => ({ id: benefit.id, title: benefit.title || '', description: benefit.description || '' }))
+  },
   items: page.items.map((item, index) => ({
     id: item.id,
     landingPageId: item.landingPageId,
     title: item.title || '',
     description: item.description || '',
     imageUrl: item.imageUrl || '',
+    imageAlt: item.imageAlt || '',
     buttonLabel: item.buttonLabel || 'Lihat produk',
+    category: item.category || '',
+    format: item.format || '',
+    badge: item.badge || '',
+    price: item.price || '',
+    compareAtPrice: item.compareAtPrice || '',
+    featured: item.featured === true,
     position: index
   })),
   updated_at: new Date().toISOString()
@@ -207,7 +297,7 @@ const CatalogPageCard: React.FC<{
     <div className="flex items-start justify-between gap-4">
       <div className="flex min-w-0 items-center gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-          {page.avatarUrl ? <img src={page.avatarUrl} alt="" className="h-full w-full object-cover" /> : <LayoutGrid size={20} />}
+          {page.avatarUrl || page.content.heroImageUrl ? <img src={page.avatarUrl || page.content.heroImageUrl} alt="" className="h-full w-full object-cover" /> : <LayoutGrid size={20} />}
         </span>
         <div className="min-w-0">
           <div className="flex flex-wrap items-center gap-2">
@@ -368,6 +458,75 @@ const CatalogAvatarField: React.FC<{ value: string; onChange: (value: string) =>
   return <div className="space-y-3"><div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-[var(--muted)]">Foto profil / avatar katalog (opsional)</span>{value && <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus foto</button>}</div><div className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">{value ? <img src={value} alt="Preview avatar katalog" className="h-16 w-16 rounded-full object-cover" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-strong)]"><LayoutGrid size={24} /></span>}<div className="min-w-0 flex-1"><p className="text-xs leading-relaxed text-[var(--muted)]">Gunakan foto/logo persegi agar header katalog terlihat lebih personal.</p><input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} /><Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing} className="mt-3">Upload foto</Button></div></div>{error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}<Input label="atau URL avatar" value={value.startsWith('data:') ? '' : value} onChange={event => onChange(event.target.value)} placeholder="https://.../avatar.jpg" /></div>;
 };
 
+const readCatalogImage = (file: File, maxWidth = 1600): Promise<string> => new Promise((resolve, reject) => {
+  const reader = new FileReader();
+  reader.onerror = () => reject(new Error('Gambar gagal dibaca.'));
+  reader.onload = () => {
+    const image = new Image();
+    image.onerror = () => reject(new Error('Format gambar tidak didukung.'));
+    image.onload = () => {
+      const scale = Math.min(1, maxWidth / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) return reject(new Error('Gambar gagal diproses.'));
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      resolve(canvas.toDataURL('image/jpeg', 0.84));
+    };
+    image.src = String(reader.result || '');
+  };
+  reader.readAsDataURL(file);
+});
+
+const CatalogImageField: React.FC<{
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  helper?: string;
+}> = ({ label, value, onChange, helper }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Pilih file gambar.');
+      return;
+    }
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const dataUrl = await readCatalogImage(file);
+      if (dataUrl.length > 1_800_000) throw new Error('Ukuran gambar terlalu besar. Gunakan gambar yang lebih kecil.');
+      onChange(dataUrl);
+    } catch (uploadError) {
+      setError(asText((uploadError as Error)?.message, 'Gambar gagal diproses.'));
+    }
+    setIsProcessing(false);
+  };
+
+  return <div className="space-y-3">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-xs font-semibold text-[var(--muted)]">{label}</p>
+        {helper && <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{helper}</p>}
+      </div>
+      {value && <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus gambar</button>}
+    </div>
+    <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-2">
+      {value ? <img src={value} alt={`Preview ${label}`} className="max-h-48 w-full rounded-lg object-contain" /> : <div className="flex min-h-28 items-center justify-center gap-2 text-sm text-[var(--muted)]"><ImagePlus size={22} /> Belum ada gambar</div>}
+    </div>
+    <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+    <Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing}>Upload gambar</Button>
+    {error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}
+    <Input label="atau URL gambar" icon={LinkIcon} value={value.startsWith('data:') ? '' : value} onChange={event => onChange(event.target.value)} placeholder="https://.../visual.jpg" />
+  </div>;
+};
+
 const CatalogSocialLinksEditor: React.FC<{
   links: CatalogSocialLink[];
   onChange: (links: CatalogSocialLink[]) => void;
@@ -389,7 +548,7 @@ const CatalogSocialLinksEditor: React.FC<{
         <p className="text-xs font-semibold text-[var(--muted)]">Tautan sosial & lainnya</p>
         <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tampilkan Instagram, WhatsApp, website, atau tautan lain di bawah profil katalog.</p>
       </div>
-      <button type="button" onClick={addLink} disabled={links.length >= 10} className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} /> Tambah</button>
+      <button type="button" onClick={addLink} disabled={links.length >= 10} aria-label="Tambah tautan" className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} /> Tambah</button>
     </div>
     {links.length > 0 && <div className="space-y-3">
       {links.map((link, index) => <div key={link.id || `social-link-${index}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
@@ -401,48 +560,83 @@ const CatalogSocialLinksEditor: React.FC<{
   </div>;
 };
 
+const CatalogContentEditor: React.FC<{
+  content: CatalogContent;
+  onChange: (content: CatalogContent) => void;
+}> = ({ content, onChange }) => {
+  const update = (patch: Partial<CatalogContent>) => onChange({ ...content, ...patch });
+  const updateBenefit = (id: string, patch: Partial<CatalogBenefit>) => onChange({ ...content, benefits: content.benefits.map(benefit => benefit.id === id ? { ...benefit, ...patch } : benefit) });
+  const addBenefit = () => {
+    if (content.benefits.length >= 6) return;
+    onChange({ ...content, benefits: [...content.benefits, { id: `catalog-benefit-${Date.now()}-${content.benefits.length}`, title: '', description: '' }] });
+  };
+  const removeBenefit = (id: string) => onChange({ ...content, benefits: content.benefits.filter(benefit => benefit.id !== id) });
+
+  return <div className="space-y-5 border-t border-[var(--border)] pt-5">
+    <div>
+      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Tampilan etalase</p>
+      <h3 className="mt-2 text-lg font-bold">Hero & benefit katalog</h3>
+      <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Buat katalog terasa seperti storefront produk digital dengan banner, ajakan, dan alasan untuk membeli.</p>
+    </div>
+    <Input label="Pengumuman singkat (opsional)" value={content.announcement} onChange={event => update({ announcement: event.target.value })} placeholder="Produk digital baru sudah tersedia" />
+    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+      <div className="flex items-start gap-2"><Sparkles size={17} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div><p className="text-sm font-semibold">Hero katalog</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tampilkan pesan utama dan visual koleksi di bagian paling atas.</p></div></div>
+      <Input label="Eyebrow" value={content.heroEyebrow} onChange={event => update({ heroEyebrow: event.target.value })} placeholder="KOLEKSI PRODUK DIGITAL" />
+      <Input label="Judul hero" value={content.heroTitle} onChange={event => update({ heroTitle: event.target.value })} placeholder="Temukan resource untuk bekerja lebih cerdas" />
+      <Textarea label="Deskripsi hero" value={content.heroDescription} onChange={event => update({ heroDescription: event.target.value })} placeholder="Jelaskan nilai utama koleksi Anda." className="min-h-[92px]" />
+      <CatalogImageField label="Visual hero (opsional)" value={content.heroImageUrl} onChange={heroImageUrl => update({ heroImageUrl })} helper="Gunakan gambar horizontal agar banner terlihat seimbang." />
+      <Input label="Alt visual" value={content.heroImageAlt} onChange={event => update({ heroImageAlt: event.target.value })} placeholder="Koleksi produk digital" />
+      <div className="grid gap-3 sm:grid-cols-2"><Input label="Label CTA" value={content.heroCtaLabel} onChange={event => update({ heroCtaLabel: event.target.value })} placeholder="Lihat koleksi" /><Input label="Link CTA" icon={LinkIcon} value={content.heroCtaUrl} onChange={event => update({ heroCtaUrl: event.target.value })} placeholder="#catalog-products atau https://..." /></div>
+    </div>
+    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+      <div className="flex items-start justify-between gap-3"><div><p className="text-sm font-semibold">Benefit katalog</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tambahkan sampai 6 alasan singkat yang tampil di bawah hero.</p></div><button type="button" onClick={addBenefit} disabled={content.benefits.length >= 6} aria-label="Tambah benefit" className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} /> Tambah</button></div>
+      <Input label="Judul bagian benefit" value={content.benefitsHeading} onChange={event => update({ benefitsHeading: event.target.value })} placeholder="Belanja digital dengan lebih mudah" />
+      {content.benefits.map((benefit, index) => <div key={benefit.id} className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><div className="mb-2 flex items-center justify-between gap-2"><span className="text-[11px] font-semibold text-[var(--muted)]">Benefit {index + 1}</span><button type="button" onClick={() => removeBenefit(benefit.id)} aria-label={`Hapus benefit ${index + 1}`} className="rounded-md p-1 text-[var(--danger-text)] hover:bg-[var(--surface-soft)]"><Trash2 size={14} /></button></div><div className="space-y-2"><Input label="Judul" value={benefit.title} onChange={event => updateBenefit(benefit.id, { title: event.target.value })} placeholder="Siap digunakan" /><Textarea label="Deskripsi" value={benefit.description} onChange={event => updateBenefit(benefit.id, { description: event.target.value })} placeholder="Jelaskan benefit secara singkat." className="min-h-[70px]" /></div></div>)}
+      {content.benefits.length === 0 && <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-3 text-xs leading-relaxed text-[var(--muted)]">Belum ada benefit. Tambahkan jika ingin memberi konteks lebih kuat sebelum daftar produk.</div>}
+    </div>
+  </div>;
+};
+
 const CatalogItemEditor: React.FC<{
   item: CatalogPageItem;
   index: number;
+  itemCount: number;
   options: LandingOption[];
   onChange: (patch: Partial<CatalogPageItem>) => void;
   onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
-}> = ({ item, index, options, onChange, onMove, onRemove }) => {
+}> = ({ item, index, itemCount, options, onChange, onMove, onRemove }) => {
   const [isExpanded, setIsExpanded] = useState(true);
   const selectedLanding = options.find(option => option.id === item.landingPageId);
   const summary = item.title || selectedLanding?.title || 'Pilih landing page';
 
-  return (
-    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
-      <div className="flex items-start gap-3">
-        <span className="mt-2 text-[var(--muted)]" title="Urutan produk"><GripVertical size={18} /></span>
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-start justify-between gap-3">
-            <div className="min-w-0">
-              <p className="text-sm font-bold">Produk {index + 1}</p>
-              {!isExpanded && <p className="mt-1 truncate text-xs text-[var(--muted)]">{summary}</p>}
-            </div>
-            <div className="flex items-center gap-1">
-              <button type="button" onClick={() => setIsExpanded(current => !current)} aria-expanded={isExpanded} aria-label={isExpanded ? 'Lipat detail produk' : 'Buka detail produk'} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--surface)]">
-                {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
-                {isExpanded ? 'Lipat' : 'Edit'}
-              </button>
-              <button type="button" onClick={() => onMove(-1)} disabled={index === 0} aria-label="Naikkan produk" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowUp size={15} /></button>
-              <button type="button" onClick={() => onMove(1)} disabled={index === options.length - 1} aria-label="Turunkan produk" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowDown size={15} /></button>
-              <button type="button" onClick={onRemove} aria-label="Hapus produk dari katalog" className="rounded-lg p-2 text-[var(--danger-text)] hover:bg-[var(--surface)]"><Trash2 size={15} /></button>
-            </div>
+  return <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+    <div className="flex items-start gap-3">
+      <span className="mt-2 text-[var(--muted)]" title="Urutan produk"><GripVertical size={18} /></span>
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div className="min-w-0"><p className="text-sm font-bold">Produk {index + 1}</p>{!isExpanded && <p className="mt-1 truncate text-xs text-[var(--muted)]">{summary}</p>}</div>
+          <div className="flex items-center gap-1">
+            <button type="button" onClick={() => setIsExpanded(current => !current)} aria-expanded={isExpanded} aria-label={isExpanded ? 'Lipat detail produk' : 'Buka detail produk'} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--surface)]">{isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}{isExpanded ? 'Lipat' : 'Edit'}</button>
+            <button type="button" onClick={() => onMove(-1)} disabled={index === 0} aria-label="Naikkan produk" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowUp size={15} /></button>
+            <button type="button" onClick={() => onMove(1)} disabled={index === itemCount - 1} aria-label="Turunkan produk" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowDown size={15} /></button>
+            <button type="button" onClick={onRemove} aria-label="Hapus produk dari katalog" className="rounded-lg p-2 text-[var(--danger-text)] hover:bg-[var(--surface)]"><Trash2 size={15} /></button>
           </div>
-          {isExpanded && <div className="mt-3 space-y-3">
-            <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Landing page tujuan</span><select value={item.landingPageId} onChange={event => onChange({ landingPageId: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page</option>{options.map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select></label>
-            <div className="grid gap-3 md:grid-cols-2"><Input label="Judul kartu (opsional)" value={item.title} onChange={event => onChange({ title: event.target.value })} placeholder="Mengikuti judul landing page" /><Input label="Label tombol" value={item.buttonLabel} onChange={event => onChange({ buttonLabel: event.target.value })} placeholder="Lihat produk" /></div>
-            <Textarea label="Deskripsi kartu (opsional)" value={item.description} onChange={event => onChange({ description: event.target.value })} placeholder="Mengikuti deskripsi landing page" className="min-h-[88px]" />
-            <Input label="URL gambar kartu (opsional)" icon={LinkIcon} value={item.imageUrl.startsWith('data:') ? '' : item.imageUrl} onChange={event => onChange({ imageUrl: event.target.value })} placeholder="https://.../produk.jpg" />
-          </div>}
         </div>
+        {isExpanded && <div className="mt-3 space-y-4">
+          <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Landing page tujuan</span><select value={item.landingPageId} onChange={event => onChange({ landingPageId: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page</option>{options.map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select></label>
+          <div className="grid gap-3 sm:grid-cols-2"><Input label="Judul produk" value={item.title} onChange={event => onChange({ title: event.target.value })} placeholder="Mengikuti judul landing page" /><Input label="Label tombol" value={item.buttonLabel} onChange={event => onChange({ buttonLabel: event.target.value })} placeholder="Lihat produk" /></div>
+          <Textarea label="Deskripsi singkat" value={item.description} onChange={event => onChange({ description: event.target.value })} placeholder="Mengikuti deskripsi landing page" className="min-h-[88px]" />
+          <div className="grid gap-3 sm:grid-cols-2"><Input label="Kategori" value={item.category || ''} onChange={event => onChange({ category: event.target.value })} placeholder="Template, Kelas, E-book" /><Input label="Format produk" value={item.format || ''} onChange={event => onChange({ format: event.target.value })} placeholder="Canva, PDF, Video" /></div>
+          <div className="grid gap-3 sm:grid-cols-2"><Input label="Harga promo" value={item.price || ''} onChange={event => onChange({ price: event.target.value })} placeholder="Rp 150.000" /><Input label="Harga coret (opsional)" value={item.compareAtPrice || ''} onChange={event => onChange({ compareAtPrice: event.target.value })} placeholder="Rp 250.000" /></div>
+          <Input label="Badge (opsional)" value={item.badge || ''} onChange={event => onChange({ badge: event.target.value })} placeholder="Best seller atau Baru" />
+          <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm"><input type="checkbox" checked={item.featured === true} onChange={event => onChange({ featured: event.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" /><span><span className="block font-semibold">Tandai sebagai produk unggulan</span><span className="mt-1 block text-xs leading-relaxed text-[var(--muted)]">Kartu diberi aksen khusus dan muncul lebih menonjol di etalase.</span></span></label>
+          <CatalogImageField label="Gambar produk" value={item.imageUrl} onChange={imageUrl => onChange({ imageUrl })} helper="Upload cover produk digital atau masukkan URL gambar." />
+          <Input label="Alt gambar" value={item.imageAlt || ''} onChange={event => onChange({ imageAlt: event.target.value })} placeholder={summary} />
+        </div>}
       </div>
     </div>
-  );
+  </div>;
 };
 
 export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
@@ -488,7 +682,14 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
       title: '',
       description: '',
       imageUrl: previewImage.length <= 700000 ? previewImage : '',
-      buttonLabel: 'Lihat produk'
+      imageAlt: landing.title,
+      buttonLabel: 'Lihat produk',
+      category: '',
+      format: '',
+      badge: '',
+      price: '',
+      compareAtPrice: '',
+      featured: false
     };
     setPage(current => current ? { ...current, items: [...current.items, item] } : current);
     setSelectedLandingId('');
@@ -521,6 +722,7 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
       slug: slugify(page.slug || page.title),
       customDomain: normalizeCustomDomain(page.customDomain),
       socialLinks: normalizeSocialLinks(page.socialLinks),
+      content: { ...page.content, benefits: normalizeCatalogBenefits(page.content.benefits) },
       items: page.items.filter(item => item.landingPageId)
     };
     setIsSaving(true);
@@ -540,15 +742,29 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
   const dnsLabels = dnsDomain.split('.');
   const dnsRecordName = page.customDomain && dnsLabels.length > 2 ? dnsLabels.slice(0, -2).join('.') : 'subdomain';
 
-  return <main className="mx-auto w-full max-w-[1440px] space-y-6 p-4 pb-28 md:p-8"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/catalog-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {CATALOG_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">Editor Katalog</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(page.status)}</Badge></div><p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">Atur tampilan profil dan susunan produk. Setiap kartu akan mengarah ke landing page produk yang dipilih.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createCatalogShareLink(page.slug, undefined, page.customDomain), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan katalog</Button></div></div><NoticeBanner notice={notice} /><div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"><section className="space-y-5"><Card className="space-y-5"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Produk di katalog</p><h2 className="mt-2 text-xl font-bold">Pilih landing page</h2><p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Hanya landing page berstatus Publik yang bisa ditambahkan agar link pengunjung tidak buntu.</p></div><div className="flex flex-col gap-3 sm:flex-row"><select value={selectedLandingId} onChange={event => setSelectedLandingId(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page untuk ditambahkan</option>{landingOptions.filter(option => !selectedIds.has(option.id)).map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select><Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={!selectedLandingId}>Tambah produk</Button></div>{!landingOptions.length && <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]">Belum ada landing page Publik. Publikasikan minimal satu landing page terlebih dahulu dari menu Landing Page.</div>}{page.items.length ? <div className="space-y-3">{page.items.map((item, index) => <CatalogItemEditor key={item.id} item={item} index={index} options={page.items} onChange={patch => updateItem(item.id, patch)} onMove={direction => moveItem(index, direction)} onRemove={() => removeItem(item.id)} />)}</div> : <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk di katalog. Pilih landing page di atas untuk mulai menambahkan.</div>}</Card></section><aside className="space-y-5"><Card className="space-y-5"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-xl font-bold">Profil katalog</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div><Input label="Judul katalog" value={page.title} onChange={event => updatePage({ title: event.target.value })} /><Input label="Slug link publik" value={page.slug} onChange={event => updatePage({ slug: event.target.value })} onBlur={() => updatePage({ slug: slugify(page.slug || page.title) })} /><Textarea label="Bio / deskripsi singkat" value={page.description} onChange={event => updatePage({ description: event.target.value })} placeholder="Ceritakan produk atau layanan Anda secara singkat." /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status katalog</span><select value={page.status} onChange={event => updatePage({ status: event.target.value as CatalogPageStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]">{CATALOG_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="space-y-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Nuansa warna</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Aksen lembut untuk tombol dan highlight katalog.</p></div><div className="grid grid-cols-2 gap-2">{FORM_THEME_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={page.theme === option.value} onClick={() => updatePage({ theme: option.value })} className={`rounded-xl border p-2 text-left transition-colors ${page.theme === option.value ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><span className="mb-2 block h-6 rounded-lg" style={{ backgroundColor: option.swatch }} /><span className="block text-xs font-semibold">{option.label}</span></button>)}</div></div><CatalogAvatarField value={page.avatarUrl} onChange={avatarUrl => updatePage({ avatarUrl })} /><div className="space-y-3"><Input label="Domain custom (opsional)" value={page.customDomain} onChange={event => updatePage({ customDomain: event.target.value })} onBlur={() => updatePage({ customDomain: normalizeCustomDomain(page.customDomain) })} placeholder="promo.domainanda.com" /><p className="text-xs leading-relaxed text-[var(--muted)]">Arahkan DNS domain ke deployment Arunika terlebih dahulu. Katalog akan dibuka dari alamat utama domain ini.</p>{page.customDomain && !isValidCustomDomain(page.customDomain) && <p className="text-xs text-[var(--danger-text)]">Format domain belum valid. Gunakan subdomain atau domain dengan ekstensi, misalnya promo.domainanda.com.</p>}<button type="button" onClick={() => setShowDnsGuide(current => !current)} aria-expanded={showDnsGuide} className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)] hover:underline">{showDnsGuide ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {showDnsGuide ? 'Sembunyikan panduan DNS' : 'Lihat panduan DNS'}</button>{showDnsGuide && <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-xs leading-relaxed text-[var(--muted)]"><p className="font-semibold text-[var(--text)]">Cara menghubungkan {dnsDomain}</p><ol className="list-decimal space-y-2 pl-4"><li>Simpan domain di atas, lalu publikasikan katalog.</li><li>Di pengelola DNS domain, tambahkan record <strong className="text-[var(--text)]">CNAME</strong>. Untuk contoh <strong className="text-[var(--text)]">{dnsDomain}</strong>, isi nama/host <strong className="text-[var(--text)]">{dnsRecordName}</strong>.</li><li>Isi target CNAME dengan hostname deployment Arunika yang diberikan platform hosting, misalnya <code className="rounded bg-[var(--surface)] px-1 py-0.5 text-[11px] text-[var(--text)]">project.pages.dev</code>. Jangan gunakan slug katalog sebagai target.</li><li>Tambahkan domain yang sama pada menu Custom Domains di platform hosting, aktifkan HTTPS, lalu tunggu propagasi DNS.</li><li>Buka <strong className="text-[var(--text)]">https://{dnsDomain}</strong> untuk memverifikasi katalog.</li></ol><p className="border-t border-[var(--border)] pt-3">Untuk domain utama tanpa subdomain, gunakan fitur CNAME flattening/ALIAS dari penyedia DNS atau arahkan <strong className="text-[var(--text)]">www</strong> sebagai CNAME sesuai dukungan provider.</p></div>}</div><CatalogSocialLinksEditor links={page.socialLinks} onChange={socialLinks => updatePage({ socialLinks })} /></Card><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]"><p className="font-semibold text-[var(--text)]">Link publik katalog</p><p className="mt-2 break-all">{createCatalogShareLink(page.slug, page.updatedAt, page.customDomain)}</p><p className="mt-2">Publikasikan katalog setelah semua produk siap ditampilkan.</p></div></aside></div></main>;
+  return <main className="mx-auto w-full max-w-[1440px] space-y-6 p-4 pb-28 md:p-8">
+    <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/catalog-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {CATALOG_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">Editor Katalog</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(page.status)}</Badge></div><p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">Bangun etalase produk digital dengan hero, kategori, harga promo, benefit, dan CTA yang bisa Anda atur sendiri.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createCatalogShareLink(page.slug, undefined, page.customDomain), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan katalog</Button></div></div>
+    <NoticeBanner notice={notice} />
+    <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
+      <section className="space-y-5"><Card className="space-y-5"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Produk digital</p><h2 className="mt-2 text-xl font-bold">Pilih landing page</h2><p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Setiap produk diarahkan ke landing page publik yang Anda pilih. Lengkapi kategori, harga, badge, dan visual agar terasa seperti katalog marketplace.</p></div><div className="flex flex-col gap-3 sm:flex-row"><select value={selectedLandingId} onChange={event => setSelectedLandingId(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page untuk ditambahkan</option>{landingOptions.filter(option => !selectedIds.has(option.id)).map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select><Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={!selectedLandingId}>Tambah produk</Button></div>{!landingOptions.length && <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]">Belum ada landing page Publik. Publikasikan minimal satu landing page terlebih dahulu dari menu Landing Page.</div>}{page.items.length ? <div className="space-y-3">{page.items.map((item, index) => <CatalogItemEditor key={item.id} item={item} index={index} itemCount={page.items.length} options={landingOptions} onChange={patch => updateItem(item.id, patch)} onMove={direction => moveItem(index, direction)} onRemove={() => removeItem(item.id)} />)}</div> : <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk di katalog. Pilih landing page di atas untuk mulai menambahkan.</div>}</Card></section>
+      <aside className="space-y-5"><Card className="space-y-5"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-xl font-bold">Profil katalog</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div><Input label="Judul katalog" value={page.title} onChange={event => updatePage({ title: event.target.value })} /><Input label="Slug link publik" value={page.slug} onChange={event => updatePage({ slug: event.target.value })} onBlur={() => updatePage({ slug: slugify(page.slug || page.title) })} /><Textarea label="Bio / deskripsi singkat" value={page.description} onChange={event => updatePage({ description: event.target.value })} placeholder="Ceritakan produk atau layanan Anda secara singkat." /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status katalog</span><select value={page.status} onChange={event => updatePage({ status: event.target.value as CatalogPageStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]">{CATALOG_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="space-y-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Nuansa warna</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Aksen lembut untuk tombol dan highlight katalog.</p></div><div className="grid grid-cols-2 gap-2">{FORM_THEME_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={page.theme === option.value} onClick={() => updatePage({ theme: option.value })} className={`rounded-xl border p-2 text-left transition-colors ${page.theme === option.value ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><span className="mb-2 block h-6 rounded-lg" style={{ backgroundColor: option.swatch }} /><span className="block text-xs font-semibold">{option.label}</span></button>)}</div></div><CatalogAvatarField value={page.avatarUrl} onChange={avatarUrl => updatePage({ avatarUrl })} /><CatalogContentEditor content={page.content} onChange={content => updatePage({ content })} /><div className="space-y-3"><Input label="Domain custom (opsional)" value={page.customDomain} onChange={event => updatePage({ customDomain: event.target.value })} onBlur={() => updatePage({ customDomain: normalizeCustomDomain(page.customDomain) })} placeholder="promo.domainanda.com" /><p className="text-xs leading-relaxed text-[var(--muted)]">Arahkan DNS domain ke deployment Arunika terlebih dahulu. Katalog akan dibuka dari alamat utama domain ini.</p>{page.customDomain && !isValidCustomDomain(page.customDomain) && <p className="text-xs text-[var(--danger-text)]">Format domain belum valid. Gunakan subdomain atau domain dengan ekstensi, misalnya promo.domainanda.com.</p>}<button type="button" onClick={() => setShowDnsGuide(current => !current)} aria-expanded={showDnsGuide} className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)] hover:underline">{showDnsGuide ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {showDnsGuide ? 'Sembunyikan panduan DNS' : 'Lihat panduan DNS'}</button>{showDnsGuide && <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-xs leading-relaxed text-[var(--muted)]"><p className="font-semibold text-[var(--text)]">Cara menghubungkan {dnsDomain}</p><ol className="list-decimal space-y-2 pl-4"><li>Simpan domain di atas, lalu publikasikan katalog.</li><li>Di pengelola DNS domain, tambahkan record <strong className="text-[var(--text)]">CNAME</strong>. Untuk contoh <strong className="text-[var(--text)]">{dnsDomain}</strong>, isi nama/host <strong className="text-[var(--text)]">{dnsRecordName}</strong>.</li><li>Isi target CNAME dengan hostname deployment Arunika yang diberikan platform hosting, misalnya <code className="rounded bg-[var(--surface)] px-1 py-0.5 text-[11px] text-[var(--text)]">project.pages.dev</code>. Jangan gunakan slug katalog sebagai target.</li><li>Tambahkan domain yang sama pada menu Custom Domains di platform hosting, aktifkan HTTPS, lalu tunggu propagasi DNS.</li><li>Buka <strong className="text-[var(--text)]">https://{dnsDomain}</strong> untuk memverifikasi katalog.</li></ol><p className="border-t border-[var(--border)] pt-3">Untuk domain utama tanpa subdomain, gunakan fitur CNAME flattening/ALIAS dari penyedia DNS atau arahkan <strong className="text-[var(--text)]">www</strong> sebagai CNAME sesuai dukungan provider.</p></div>}</div><CatalogSocialLinksEditor links={page.socialLinks} onChange={socialLinks => updatePage({ socialLinks })} /></Card><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]"><p className="font-semibold text-[var(--text)]">Link publik katalog</p><p className="mt-2 break-all">{createCatalogShareLink(page.slug, page.updatedAt, page.customDomain)}</p><p className="mt-2">Publikasikan katalog setelah semua produk siap ditampilkan.</p></div></aside>
+    </div>
+  </main>;
 };
 
-const CatalogPublicCard: React.FC<{ item: CatalogPageItem; index: number }> = ({ item, index }) => (
-  <a href={item.slug ? landingHref(item.slug) : '#'} onClick={event => { if (!item.slug) event.preventDefault(); }} className="group flex items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--accent)] hover:shadow-md">
-    <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">{item.imageUrl ? <img src={item.imageUrl} alt="" className="h-full w-full object-cover" /> : <span className="text-lg font-bold">{String(index + 1).padStart(2, '0')}</span>}</div>
-    <div className="min-w-0 flex-1"><h2 className="truncate text-base font-semibold text-[var(--text)]">{item.title || 'Lihat produk'}</h2><p className="mt-1 line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{item.description || 'Pelajari detail produk dan penawaran selengkapnya.'}</p><span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent-strong)]">{item.buttonLabel || 'Lihat produk'} <ExternalLink size={13} className="transition-transform group-hover:translate-x-0.5" /></span></div>
-  </a>
-);
+const safeCatalogCtaHref = (value: unknown) => {
+  const raw = asText(value).trim();
+  if (/^#/.test(raw) || /^\/(?!\/)/.test(raw)) return raw;
+  return safeExternalHref(raw);
+};
+
+const CatalogPublicCard: React.FC<{ item: CatalogPageItem; index: number }> = ({ item, index }) => {
+  const href = item.slug ? landingHref(item.slug) : '#catalog-products';
+  return <a href={href} onClick={event => { if (!item.slug) event.preventDefault(); }} className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-[var(--surface)] text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ${item.featured ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--accent)]'}`}>
+    <div className="relative aspect-[16/10] w-full overflow-hidden bg-[var(--surface-soft)]">{item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || item.title || `Produk ${index + 1}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" /> : <div className="flex h-full items-center justify-center text-[var(--accent-strong)]"><Package size={42} strokeWidth={1.5} /></div>}{item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--surface)]/95 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)] shadow-sm"><BadgeCheck size={13} />{item.badge}</span>}{item.featured && !item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)]"><Star size={13} fill="currentColor" /> Unggulan</span>}</div>
+    <div className="flex flex-1 flex-col p-4"><div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{item.category && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2 py-1 text-[var(--accent-strong)]"><Tag size={12} />{item.category}</span>}{item.format && <span className="inline-flex items-center gap-1"><Package size={12} />{item.format}</span>}</div><h2 className="mt-3 line-clamp-2 text-base font-bold leading-snug text-[var(--text)]">{item.title || 'Lihat produk'}</h2><p className="mt-2 line-clamp-3 text-sm leading-relaxed text-[var(--muted)]">{item.description || 'Pelajari detail produk dan penawaran selengkapnya.'}</p><div className="mt-auto flex items-end justify-between gap-3 pt-5"><div>{item.price && <p className="text-base font-bold text-[var(--text)]">{item.price}</p>}{item.compareAtPrice && <p className="mt-0.5 text-xs text-[var(--muted)] line-through">{item.compareAtPrice}</p>}{!item.price && !item.compareAtPrice && <p className="text-xs font-semibold text-[var(--muted)]">Detail produk</p>}</div><span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--accent-strong)]">{item.buttonLabel || 'Lihat produk'} <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" /></span></div></div>
+  </a>;
+};
 
 export const PublicCatalogPageView: React.FC<{ client: any; slugOverride?: string; domainOverride?: string }> = ({ client, slugOverride, domainOverride }) => {
   const { slug: routeSlug } = useParams<{ slug: string }>();
@@ -557,6 +773,7 @@ export const PublicCatalogPageView: React.FC<{ client: any; slugOverride?: strin
   const [page, setPage] = useState<CatalogPage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [activeCategory, setActiveCategory] = useState('all');
 
   const fetchPage = useCallback(async () => {
     if (!client || (!slug && !domain)) {
@@ -581,14 +798,28 @@ export const PublicCatalogPageView: React.FC<{ client: any; slugOverride?: strin
     if (!page) return;
     setPublicMetadata({
       title: page.title,
-      description: page.description || `Katalog produk ${page.title}`,
-      image: page.avatarUrl || page.items.find(item => item.imageUrl)?.imageUrl || '',
-      imageAlt: page.title
+      description: page.description || page.content.heroDescription || `Katalog produk ${page.title}`,
+      image: page.content.heroImageUrl || page.avatarUrl || page.items.find(item => item.imageUrl)?.imageUrl || '',
+      imageAlt: page.content.heroImageAlt || page.title
     });
   }, [page]);
+
+  const categories = useMemo(() => page ? Array.from(new Set(page.items.map(item => asText(item.category).trim()).filter(Boolean))) : [], [page]);
+  const visibleItems = useMemo(() => page ? page.items.filter(item => activeCategory === 'all' || asText(item.category).trim() === activeCategory) : [], [activeCategory, page]);
+  useEffect(() => {
+    if (activeCategory !== 'all' && !categories.includes(activeCategory)) setActiveCategory('all');
+  }, [activeCategory, categories]);
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat katalog...</div>;
   if (loadError || !page) return <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md space-y-5 py-10 text-center"><XCircle size={34} className="mx-auto text-[var(--danger-text)]" /><div><h1 className="text-xl font-bold">Katalog tidak dapat dibuka</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{loadError}</p></div><Button onClick={() => void fetchPage()} className="mx-auto w-full">Coba lagi</Button></Card></div>;
 
-  return <div className="min-h-screen bg-[var(--app-bg)] px-4 py-8 text-[var(--text)] sm:px-6" style={formThemeStyle(page.theme)}><main className="mx-auto flex w-full max-w-xl flex-col items-center"><header className="flex w-full flex-col items-center text-center"><div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-[var(--surface)] bg-[var(--accent-soft)] p-1 shadow-sm">{page.avatarUrl ? <img src={page.avatarUrl} alt={page.title} className="h-full w-full rounded-full object-cover" /> : <img src={logoUtama} alt="Arunika" className="max-h-16 max-w-16 object-contain" />}</div><h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{page.title}</h1>{page.description && <p className="mt-3 max-w-md text-sm leading-relaxed text-[var(--muted)] sm:text-base">{page.description}</p>}<div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]"><LinkIcon size={13} /> Katalog produk</div>{page.socialLinks.length > 0 && <nav className="mt-4 flex flex-wrap justify-center gap-2" aria-label="Tautan sosial dan lainnya">{page.socialLinks.map(link => { const href = safeExternalHref(link.url); return href ? <a key={link.id} href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-soft)]"><LinkIcon size={13} className="text-[var(--accent-strong)]" />{link.label || 'Link'}<ExternalLink size={12} className="text-[var(--muted)]" /></a> : null; })}</nav>}</header><section className="mt-8 flex w-full flex-col gap-3" aria-label="Daftar produk">{page.items.length ? page.items.map((item, index) => <CatalogPublicCard key={item.id || `${item.landingPageId}-${index}`} item={item} index={index} />) : <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk yang ditampilkan.</div>}</section><footer className="mt-10 flex items-center gap-2 text-xs text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" /> Dibuat dengan Arunika</footer></main></div>;
+  const content = page.content;
+  const heroCtaHref = safeCatalogCtaHref(content.heroCtaUrl);
+  const hasHero = Boolean(content.heroEyebrow || content.heroTitle || content.heroDescription || content.heroImageUrl || content.heroCtaLabel);
+
+  return <div className="min-h-screen bg-[var(--app-bg)] px-4 py-8 text-[var(--text)] sm:px-6" style={formThemeStyle(page.theme)}><main className="mx-auto flex w-full max-w-5xl flex-col items-center"><header className="flex w-full flex-col items-center text-center"><div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-[var(--surface)] bg-[var(--accent-soft)] p-1 shadow-sm">{page.avatarUrl ? <img src={page.avatarUrl} alt={page.title} className="h-full w-full rounded-full object-cover" /> : <img src={logoUtama} alt="Arunika" className="max-h-16 max-w-16 object-contain" />}</div><h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{page.title}</h1>{page.description && <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--muted)] sm:text-base">{page.description}</p>}<div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]"><LinkIcon size={13} /> Katalog produk digital</div>{content.announcement && <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--success-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--success-text)]"><Sparkles size={13} /> {content.announcement}</div>}{page.socialLinks.length > 0 && <nav className="mt-4 flex flex-wrap justify-center gap-2" aria-label="Tautan sosial dan lainnya">{page.socialLinks.map(link => { const href = safeExternalHref(link.url); return href ? <a key={link.id} href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-soft)]"><LinkIcon size={13} className="text-[var(--accent-strong)]" />{link.label || 'Link'}<ExternalLink size={12} className="text-[var(--muted)]" /></a> : null; })}</nav>}</header>
+    {hasHero && <section className="relative mt-8 w-full overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-sm"><div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[var(--accent-soft)] opacity-70" /><div className="relative grid items-center gap-6 p-6 sm:p-10 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.78fr)]"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent-strong)]">{content.heroEyebrow || 'PRODUK DIGITAL'}</p><h2 className="mt-3 max-w-2xl text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{content.heroTitle || page.title}</h2>{content.heroDescription && <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--muted)] sm:text-base">{content.heroDescription}</p>}{content.heroCtaLabel && heroCtaHref && <a href={heroCtaHref} target={heroCtaHref.startsWith('http') ? '_blank' : undefined} rel={heroCtaHref.startsWith('http') ? 'noreferrer' : undefined} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--accent-hover)]">{content.heroCtaLabel}<ArrowRight size={16} /></a>}</div><div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)]">{content.heroImageUrl ? <img src={content.heroImageUrl} alt={content.heroImageAlt || 'Visual katalog produk'} className="h-full w-full object-cover" /> : <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-[var(--muted)]"><Package size={42} strokeWidth={1.5} className="text-[var(--accent-strong)]" /><span className="text-xs font-semibold">Koleksi produk digital</span></div>}</div></div></section>}
+    {content.benefits.length > 0 && <section className="mt-10 w-full"><div className="mb-4 flex items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)]">Keunggulan</p><h2 className="mt-2 text-2xl font-bold tracking-tight">{content.benefitsHeading || 'Belanja digital dengan lebih mudah'}</h2></div><Badge color="var(--surface)"><BadgeCheck size={13} className="mr-1.5" /> Terpilih</Badge></div><div className="grid gap-3 md:grid-cols-3">{content.benefits.map((benefit, index) => <article key={benefit.id || `benefit-${index}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-strong)]">{String(index + 1).padStart(2, '0')}</span><h3 className="mt-4 text-sm font-bold">{benefit.title || 'Benefit produk'}</h3>{benefit.description && <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{benefit.description}</p>}</article>)}</div></section>}
+    <section id="catalog-products" className="mt-10 w-full"><div className="mb-4 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)]">Etalase digital</p><h2 className="mt-2 text-2xl font-bold tracking-tight">Pilih produk yang Anda butuhkan</h2><p className="mt-1 text-sm text-[var(--muted)]">{visibleItems.length} dari {page.items.length} produk ditampilkan</p></div>{categories.length > 1 && <label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><span className="sr-only">Filter kategori</span><select value={activeCategory} onChange={event => setActiveCategory(event.target.value)} className="min-h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-semibold text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="all">Semua kategori</option>{categories.map(category => <option key={category} value={category}>{category}</option>)}</select></label>}</div>{visibleItems.length ? <div className="grid gap-4 sm:grid-cols-2">{visibleItems.map((item, index) => <CatalogPublicCard key={item.id || `${item.landingPageId}-${index}`} item={item} index={index} />)}</div> : <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk pada kategori ini.</div>}</section>
+    <footer className="mt-12 flex items-center gap-2 text-xs text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" /> Dibuat dengan Arunika</footer></main></div>;
 };

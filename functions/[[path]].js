@@ -102,6 +102,8 @@ const getLandingImage = (row) => {
 const getPublicImage = (kind, row) => {
   if (kind === 'landing') return getLandingImage(row);
   if (kind === 'catalog') {
+    const content = row?.content && typeof row.content === 'object' ? row.content : {};
+    if (content.heroImageUrl) return content.heroImageUrl;
     if (row?.avatarUrl || row?.avatar_url) return row.avatarUrl || row.avatar_url;
     const firstImage = Array.isArray(row?.items) ? row.items.find((item) => item?.imageUrl || item?.image_url) : null;
     return firstImage?.imageUrl || firstImage?.image_url || '';
@@ -230,7 +232,7 @@ const getMetadata = async (env, route) => {
       const image = getPublicImage(route.kind, row);
       return row ? {
         title: cleanText(row.title, 'Katalog Produk'),
-        description: truncate(row.description, 300),
+        description: truncate(row.description || row.content?.heroDescription, 300),
         image,
         imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
       } : null;
