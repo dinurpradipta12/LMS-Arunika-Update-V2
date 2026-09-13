@@ -157,6 +157,8 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
     },
     payment: {
       heading: 'Informasi pembayaran',
+      ctaBeforePrice: '',
+      originalAmount: '',
       amount: 'Rp 0',
       instructions: 'Silakan lakukan pembayaran melalui QR Code atau rekening yang tersedia. Setelah itu, kirim bukti pembayaran melalui WhatsApp.',
       qrCode: '',
@@ -701,12 +703,15 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
       );
     case 'payment': {
       const confirmationHref = whatsappHref(data.whatsapp, pageTitle) || safeHref(data.buttonUrl);
+      const ctaBeforePrice = asText(data.ctaBeforePrice).trim();
+      const originalAmount = asText(data.originalAmount).trim();
       return (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-6 shadow-sm md:p-8">
           <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_230px] md:items-center">
             <div>
+              {ctaBeforePrice && <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{ctaBeforePrice}</p>}
               <h2 className="text-2xl font-bold">{asText(data.heading, 'Informasi pembayaran')}</h2>
-              {asText(data.amount) && <p className="mt-3 text-2xl font-bold text-[var(--accent-strong)]">{asText(data.amount)}</p>}
+              {(originalAmount || asText(data.amount)) && <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">{originalAmount && <span className="text-base font-semibold text-[var(--muted)] line-through">{originalAmount}</span>}{asText(data.amount) && <p className="text-2xl font-bold text-[var(--accent-strong)]">{asText(data.amount)}</p>}</div>}
               <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{asText(data.instructions, 'Tambahkan instruksi pembayaran.')}</p>
               {asText(data.accountNumber) && <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Nomor rekening</p><p className="mt-1 break-words text-sm font-semibold">{asText(data.accountNumber)}</p></div>}
               {confirmationHref && <a href={confirmationHref} className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-5 py-3 text-sm font-semibold text-white hover:brightness-95">{asText(data.buttonLabel, 'Konfirmasi melalui WhatsApp')} <ExternalLink size={15} /></a>}
@@ -982,7 +987,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
     case 'faq':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Textarea label="FAQ (satu per baris, format: Pertanyaan | Jawaban)" value={faqItemsToText(normalizeFaqItems(data.items, []))} onChange={event => patch({ items: textToFaqItems(event.target.value) })} className="min-h-[200px]" /></div>;
     case 'payment':
-      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Input label="Nominal pembayaran" value={asText(data.amount)} onChange={event => patch({ amount: event.target.value })} placeholder="Contoh: Rp 250.000" /><Textarea label="Instruksi pembayaran" value={asText(data.instructions)} onChange={event => patch({ instructions: event.target.value })} /><Input label="Nomor rekening (opsional)" value={asText(data.accountNumber)} onChange={event => patch({ accountNumber: event.target.value })} /><Input label="WhatsApp konfirmasi (opsional)" value={asText(data.whatsapp)} onChange={event => patch({ whatsapp: event.target.value })} placeholder="62812xxxxxxx" /><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} /><ImageUploader label="QR Code pembayaran" value={asText(data.qrCode)} onChange={value => patch({ qrCode: value })} preservePng /><Input label="URL QR Code (opsional)" value={asText(data.qrCode).startsWith('data:') ? '' : asText(data.qrCode)} onChange={event => patch({ qrCode: event.target.value })} placeholder="https://.../qr.png" /></div>;
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Input label="CTA sebelum harga (opsional)" value={asText(data.ctaBeforePrice)} onChange={event => patch({ ctaBeforePrice: event.target.value })} placeholder="Contoh: Dapatkan harga promo hari ini" /><Input label="Harga coret (opsional)" value={asText(data.originalAmount)} onChange={event => patch({ originalAmount: event.target.value })} placeholder="Contoh: Rp 350.000" /><Input label="Nominal pembayaran" value={asText(data.amount)} onChange={event => patch({ amount: event.target.value })} placeholder="Contoh: Rp 250.000" /><Textarea label="Instruksi pembayaran" value={asText(data.instructions)} onChange={event => patch({ instructions: event.target.value })} /><Input label="Nomor rekening (opsional)" value={asText(data.accountNumber)} onChange={event => patch({ accountNumber: event.target.value })} /><Input label="WhatsApp konfirmasi (opsional)" value={asText(data.whatsapp)} onChange={event => patch({ whatsapp: event.target.value })} placeholder="62812xxxxxxx" /><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} /><ImageUploader label="QR Code pembayaran" value={asText(data.qrCode)} onChange={value => patch({ qrCode: value })} preservePng /><Input label="URL QR Code (opsional)" value={asText(data.qrCode).startsWith('data:') ? '' : asText(data.qrCode)} onChange={event => patch({ qrCode: event.target.value })} placeholder="https://.../qr.png" /></div>;
     case 'cta':
       return <div className="space-y-4"><Input label="Judul CTA" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Textarea label="Deskripsi CTA" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} />{commonButtonFields}</div>;
     case 'spacer':
