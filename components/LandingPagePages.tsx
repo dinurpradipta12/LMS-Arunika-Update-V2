@@ -96,6 +96,11 @@ const LANDING_IMAGE_LAYOUT_OPTIONS: Array<{ value: LandingImageLayout; label: st
 
 const asText = (value: unknown, fallback = '') => typeof value === 'string' ? value : value == null ? fallback : String(value);
 
+const DEFAULT_HEADING_COLOR = '#17283a';
+const isHexColor = (value: unknown) => /^#[0-9a-f]{6}$/i.test(asText(value).trim());
+const headingColorValue = (value: unknown) => isHexColor(value) ? asText(value).trim() : 'var(--text)';
+const headingColorInputValue = (value: unknown) => isHexColor(value) ? asText(value).trim() : DEFAULT_HEADING_COLOR;
+
 const slugify = (value: string) => value
   .toLowerCase()
   .trim()
@@ -112,6 +117,7 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       eyebrow: 'Produk pilihan untuk Anda',
       headline: 'Tampilkan produk Anda dengan lebih meyakinkan',
       body: 'Jelaskan manfaat utama produk Anda dengan kalimat singkat yang mudah dipahami.',
+      imageBoxScale: 1,
       imageScale: 1.15,
       imagePositionX: 50,
       imagePositionY: 50,
@@ -249,6 +255,7 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   const data = { ...fallback.data, ...rawData };
   if (type === 'features') data.items = normalizeLineItems(rawData.items, fallback.data.items);
   if (type === 'hero') {
+    data.imageBoxScale = normalizeHeroImageScale(rawData.imageBoxScale, fallback.data.imageBoxScale);
     data.imageScale = normalizeHeroImageScale(rawData.imageScale, fallback.data.imageScale);
     data.imagePositionX = normalizeHeroImagePosition(rawData.imagePositionX);
     data.imagePositionY = normalizeHeroImagePosition(rawData.imagePositionY);
@@ -646,8 +653,10 @@ const LandingTestimonialGridBlock: React.FC<{ data: Record<string, any> }> = ({ 
 export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: string }> = ({ block, pageTitle = 'produk ini' }) => {
   const data = block.data || {};
   const textBody = asText(data.body);
+  const sectionHeadingColor = headingColorValue(data.headingColor);
   switch (block.type) {
     case 'hero':
+      const heroImageBoxScale = normalizeHeroImageScale(data.imageBoxScale, 1);
       const heroImageScale = normalizeHeroImageScale(data.imageScale);
       const heroImagePositionX = normalizeHeroImagePosition(data.imagePositionX);
       const heroImagePositionY = normalizeHeroImagePosition(data.imagePositionY);
@@ -657,12 +666,12 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
           <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-center">
             <div>
               {asText(data.eyebrow) && <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent-strong)]">{asText(data.eyebrow)}</p>}
-              <h2 className="mt-3 max-w-3xl text-3xl font-bold leading-tight text-[var(--text)] md:text-5xl">{asText(data.headline, 'Judul produk Anda')}</h2>
+              <h2 className="mt-3 max-w-3xl text-3xl font-bold leading-tight md:text-5xl" style={{ color: sectionHeadingColor }}>{asText(data.headline, 'Judul produk Anda')}</h2>
               {textBody && <p className="mt-4 max-w-2xl whitespace-pre-wrap text-base leading-relaxed text-[var(--muted)]">{textBody}</p>}
               <ActionLink label={asText(data.buttonLabel, 'Pelajari lebih lanjut')} href={asText(data.buttonUrl)} className="mt-6" />
             </div>
             {asText(data.imageUrl) ? (
-              <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm">
+              <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm transition-transform duration-200 ease-out" style={{ transform: `scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
                 <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="absolute inset-0 h-full w-full object-cover transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `scale(${heroImageScale})` }} />
               </div>
             ) : (
@@ -674,7 +683,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
     case 'text':
       return (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm md:p-8">
-          <h2 className="text-2xl font-bold">{asText(data.heading, 'Tentang produk')}</h2>
+          <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Tentang produk')}</h2>
           <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{textBody || 'Tambahkan penjelasan produk Anda.'}</p>
         </section>
       );
@@ -692,7 +701,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
     case 'features':
       return (
         <section className="space-y-4">
-          <h2 className="text-2xl font-bold">{asText(data.heading, 'Manfaat produk')}</h2>
+          <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Manfaat produk')}</h2>
           <div className="grid gap-4 md:grid-cols-3">
             {normalizeLineItems(data.items, []).map((item, index) => (
               <div key={`${item.title}-${index}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
@@ -709,7 +718,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm md:p-8">
           <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_240px] md:items-center">
             <div>
-              <h2 className="text-2xl font-bold">{asText(data.heading, 'Pilihan paket')}</h2>
+              <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Pilihan paket')}</h2>
               <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{textBody}</p>
               <ul className="mt-4 space-y-2 text-sm text-[var(--muted)]">
                 {(Array.isArray(data.features) ? data.features : []).map((feature: unknown, index: number) => <li key={`${asText(feature)}-${index}`} className="flex items-start gap-2"><Check size={16} className="mt-0.5 shrink-0 text-[var(--success-text)]" /> {asText(feature)}</li>)}
@@ -728,7 +737,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
     case 'faq':
       return (
         <section className="space-y-4">
-          <h2 className="text-2xl font-bold">{asText(data.heading, 'Pertanyaan umum')}</h2>
+          <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Pertanyaan umum')}</h2>
           <div className="space-y-3">
             {normalizeFaqItems(data.items, []).map((item, index) => <details key={`${item.question}-${index}`} className="group rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm"><summary className="cursor-pointer list-none pr-6 font-semibold marker:hidden">{item.question || 'Pertanyaan umum'}</summary><p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.answer}</p></details>)}
           </div>
@@ -743,7 +752,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
           <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_230px] md:items-center">
             <div>
               {ctaBeforePrice && <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{ctaBeforePrice}</p>}
-              <h2 className="text-2xl font-bold">{asText(data.heading, 'Informasi pembayaran')}</h2>
+              <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Informasi pembayaran')}</h2>
               {(originalAmount || asText(data.amount)) && <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">{originalAmount && <span className="text-base font-semibold text-[var(--muted)] line-through">{originalAmount}</span>}{asText(data.amount) && <p className="text-2xl font-bold text-[var(--accent-strong)]">{asText(data.amount)}</p>}</div>}
               <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{asText(data.instructions, 'Tambahkan instruksi pembayaran.')}</p>
               {asText(data.accountNumber) && <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Nomor rekening</p><p className="mt-1 break-words text-sm font-semibold">{asText(data.accountNumber)}</p></div>}
@@ -760,7 +769,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
     case 'cta':
       return (
         <section className="rounded-2xl bg-[var(--accent)] p-7 text-white shadow-sm md:flex md:items-center md:justify-between md:gap-8 md:p-9">
-          <div><h2 className="text-2xl font-bold">{asText(data.heading, 'Siap mulai?')}</h2><p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-white/80">{asText(data.body)}</p></div>
+          <div><h2 className="text-2xl font-bold" style={{ color: isHexColor(data.headingColor) ? asText(data.headingColor).trim() : 'white' }}>{asText(data.heading, 'Siap mulai?')}</h2><p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-white/80">{asText(data.body)}</p></div>
           <ActionLink label={asText(data.buttonLabel, 'Hubungi kami')} href={asText(data.buttonUrl)} className="mt-5 shrink-0 bg-white text-[var(--accent-strong)] hover:bg-white/90 md:mt-0" />
         </section>
       );
@@ -825,11 +834,13 @@ const ImageUploader: React.FC<{ label: string; value: string; onChange: (value: 
 
 const HeroImageControls: React.FC<{
   imageUrl: string;
+  boxScale: number;
   scale: number;
   positionX: number;
   positionY: number;
   onChange: (values: Record<string, number>) => void;
-}> = ({ imageUrl, scale, positionX, positionY, onChange }) => {
+}> = ({ imageUrl, boxScale, scale, positionX, positionY, onChange }) => {
+  const boxSizePercent = Math.round(normalizeHeroImageScale(boxScale, 1) * 100);
   const sizePercent = Math.round(normalizeHeroImageScale(scale) * 100);
   const horizontalPosition = normalizeHeroImagePosition(positionX);
   const verticalPosition = normalizeHeroImagePosition(positionY);
@@ -842,6 +853,11 @@ const HeroImageControls: React.FC<{
         <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Geser posisi dan ubah ukuran gambar yang tampil di Hero.</p>
       </div>
       {imageUrl ? <>
+        <label className="flex flex-col gap-2">
+          <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Ukuran box media</span><span className="text-[var(--text)]">{boxSizePercent}%</span></span>
+          <input type="range" min="75" max="150" step="5" value={boxSizePercent} onChange={event => onChange({ imageBoxScale: Number(event.target.value) / 100 })} className={rangeClass} aria-label="Ukuran box media Hero" />
+          <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Kecil</span><span>Besar</span></span>
+        </label>
         <label className="flex flex-col gap-2">
           <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Ukuran gambar</span><span className="text-[var(--text)]">{sizePercent}%</span></span>
           <input type="range" min="70" max="170" step="5" value={sizePercent} onChange={event => onChange({ imageScale: Number(event.target.value) / 100 })} className={rangeClass} aria-label="Ukuran gambar Hero" />
@@ -1003,11 +1019,13 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const data = block.data || {};
   const patch = (values: Record<string, any>) => onChange({ ...data, ...values });
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
+  const hasHeadingColor = ['hero', 'text', 'features', 'pricing', 'faq', 'payment', 'cta'].includes(block.type);
+  const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero':
-      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} /><Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><HeroImageControls imageUrl={asText(data.imageUrl)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
+      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} />{headingColorField}<Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><HeroImageControls imageUrl={asText(data.imageUrl)} boxScale={normalizeHeroImageScale(data.imageBoxScale, 1)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
     case 'text':
-      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Textarea label="Isi teks" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} className="min-h-[180px]" /></div>;
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Isi teks" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} className="min-h-[180px]" /></div>;
     case 'image': {
       const items = normalizeImageItems(data.images, data);
       const layout = (['slider', 'marquee', 'row'].includes(data.layout) ? data.layout : 'row') as LandingImageLayout;
@@ -1041,9 +1059,9 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
     case 'video':
       return <div className="space-y-4"><Input label="Link YouTube" value={asText(data.url)} onChange={event => patch({ url: event.target.value })} icon={LinkIcon} placeholder="https://youtube.com/watch?v=..." /><Textarea label="Keterangan video" value={asText(data.caption)} onChange={event => patch({ caption: event.target.value })} /></div>;
     case 'features':
-      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Textarea label="Manfaat (satu per baris, format: Judul | Deskripsi)" value={pipeItemsToText(normalizeLineItems(data.items, []))} onChange={event => patch({ items: textToPipeItems(event.target.value) })} className="min-h-[180px]" /></div>;
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Manfaat (satu per baris, format: Judul | Deskripsi)" value={pipeItemsToText(normalizeLineItems(data.items, []))} onChange={event => patch({ items: textToPipeItems(event.target.value) })} className="min-h-[180px]" /></div>;
     case 'pricing':
-      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Input label="Nominal / harga" value={asText(data.price)} onChange={event => patch({ price: event.target.value })} /><Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><Textarea label="Isi paket (satu per baris)" value={Array.isArray(data.features) ? data.features.join('\n') : ''} onChange={event => patch({ features: event.target.value.split('\n').map(value => value.trim()).filter(Boolean) })} />{commonButtonFields}</div>;
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Input label="Nominal / harga" value={asText(data.price)} onChange={event => patch({ price: event.target.value })} /><Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><Textarea label="Isi paket (satu per baris)" value={Array.isArray(data.features) ? data.features.join('\n') : ''} onChange={event => patch({ features: event.target.value.split('\n').map(value => value.trim()).filter(Boolean) })} />{commonButtonFields}</div>;
     case 'testimonial': {
       const items = normalizeTestimonialItems(data.items, data);
       const updateItems = (nextItems: LandingTestimonialItem[]) => {
@@ -1059,11 +1077,11 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
       return <LandingTestimonialEditor items={items} onChange={updateItems} />;
     }
     case 'faq':
-      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Textarea label="FAQ (satu per baris, format: Pertanyaan | Jawaban)" value={faqItemsToText(normalizeFaqItems(data.items, []))} onChange={event => patch({ items: textToFaqItems(event.target.value) })} className="min-h-[200px]" /></div>;
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="FAQ (satu per baris, format: Pertanyaan | Jawaban)" value={faqItemsToText(normalizeFaqItems(data.items, []))} onChange={event => patch({ items: textToFaqItems(event.target.value) })} className="min-h-[200px]" /></div>;
     case 'payment':
-      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Input label="CTA sebelum harga (opsional)" value={asText(data.ctaBeforePrice)} onChange={event => patch({ ctaBeforePrice: event.target.value })} placeholder="Contoh: Dapatkan harga promo hari ini" /><Input label="Harga coret (opsional)" value={asText(data.originalAmount)} onChange={event => patch({ originalAmount: event.target.value })} placeholder="Contoh: Rp 350.000" /><Input label="Nominal pembayaran" value={asText(data.amount)} onChange={event => patch({ amount: event.target.value })} placeholder="Contoh: Rp 250.000" /><Textarea label="Instruksi pembayaran" value={asText(data.instructions)} onChange={event => patch({ instructions: event.target.value })} /><Input label="Nomor rekening (opsional)" value={asText(data.accountNumber)} onChange={event => patch({ accountNumber: event.target.value })} /><Input label="WhatsApp konfirmasi (opsional)" value={asText(data.whatsapp)} onChange={event => patch({ whatsapp: event.target.value })} placeholder="62812xxxxxxx" /><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} /><ImageUploader label="QR Code pembayaran" value={asText(data.qrCode)} onChange={value => patch({ qrCode: value })} preservePng /><Input label="URL QR Code (opsional)" value={asText(data.qrCode).startsWith('data:') ? '' : asText(data.qrCode)} onChange={event => patch({ qrCode: event.target.value })} placeholder="https://.../qr.png" /></div>;
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Input label="CTA sebelum harga (opsional)" value={asText(data.ctaBeforePrice)} onChange={event => patch({ ctaBeforePrice: event.target.value })} placeholder="Contoh: Dapatkan harga promo hari ini" /><Input label="Harga coret (opsional)" value={asText(data.originalAmount)} onChange={event => patch({ originalAmount: event.target.value })} placeholder="Contoh: Rp 350.000" /><Input label="Nominal pembayaran" value={asText(data.amount)} onChange={event => patch({ amount: event.target.value })} placeholder="Contoh: Rp 250.000" /><Textarea label="Instruksi pembayaran" value={asText(data.instructions)} onChange={event => patch({ instructions: event.target.value })} /><Input label="Nomor rekening (opsional)" value={asText(data.accountNumber)} onChange={event => patch({ accountNumber: event.target.value })} /><Input label="WhatsApp konfirmasi (opsional)" value={asText(data.whatsapp)} onChange={event => patch({ whatsapp: event.target.value })} placeholder="62812xxxxxxx" /><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} /><ImageUploader label="QR Code pembayaran" value={asText(data.qrCode)} onChange={value => patch({ qrCode: value })} preservePng /><Input label="URL QR Code (opsional)" value={asText(data.qrCode).startsWith('data:') ? '' : asText(data.qrCode)} onChange={event => patch({ qrCode: event.target.value })} placeholder="https://.../qr.png" /></div>;
     case 'cta':
-      return <div className="space-y-4"><Input label="Judul CTA" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Textarea label="Deskripsi CTA" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} />{commonButtonFields}</div>;
+      return <div className="space-y-4"><Input label="Judul CTA" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Deskripsi CTA" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} />{commonButtonFields}</div>;
     case 'spacer':
       return <div className="space-y-4"><Input label="Tinggi jarak (px)" type="number" min="8" max="240" value={asText(data.height, '48')} onChange={event => patch({ height: event.target.value })} /></div>;
     default:
