@@ -38,6 +38,7 @@ import logoUtama from '../src/logo-utama.png';
 
 export const LANDING_PAGE_SPACE_LABEL = 'Landing Page';
 export const LANDING_PAGE_PUBLIC_LABEL = 'Arunika Landing Page';
+const DEFAULT_LANDING_DESCRIPTION = 'Landing page untuk memperkenalkan produk Anda.';
 
 type Notice = { tone: 'success' | 'error'; message: string };
 
@@ -189,7 +190,7 @@ const mapLandingRow = (row: any): LandingPage => ({
   id: asText(row?.id),
   slug: asText(row?.slug),
   title: asText(row?.title, 'Landing Page Baru'),
-  description: asText(row?.description),
+  description: asText(row?.description) === DEFAULT_LANDING_DESCRIPTION ? '' : asText(row?.description),
   theme: (['navy', 'emerald', 'coral', 'violet', 'amber'].includes(row?.theme) ? row.theme : 'navy') as FormThemeKey,
   status: (['published', 'archived'].includes(row?.status) ? row.status : 'draft') as LandingPageStatus,
   blocks: Array.isArray(row?.blocks) ? row.blocks.map(normalizeLandingBlock) : [],
@@ -201,7 +202,7 @@ const createDefaultLandingPage = (): LandingPage => ({
   id: '',
   slug: `landing-${Date.now()}`,
   title: 'Produk Baru',
-  description: 'Landing page untuk memperkenalkan produk Anda.',
+  description: '',
   theme: 'navy',
   status: 'draft',
   blocks: ['hero', 'features', 'payment', 'cta'].map((type, index) => createLandingBlock(type as LandingBlockType, index))
