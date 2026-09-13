@@ -132,6 +132,7 @@ const LANDING_BLOCK_TYPES = new Set<LandingBlockType>(LANDING_BLOCK_OPTIONS.map(
 type LandingImageLayout = 'slider' | 'marquee' | 'row';
 type LandingImageItem = { url: string; alt: string; caption: string };
 type LandingTestimonialItem = { quote: string; name: string; role: string; rating: number };
+type LandingBonusItem = { title: string; body: string; imageUrl: string; imageAlt: string; caption: string };
 
 const normalizeHeroImageScale = (value: unknown, fallback = 1.15) => {
   const numericValue = Number(value);
@@ -251,7 +252,14 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       body: 'Jelaskan bonus yang akan diterima pelanggan setelah melakukan pembelian.',
       imageUrl: '',
       imageAlt: 'Visual bonus',
-      caption: ''
+      caption: '',
+      items: [{
+        title: 'Dapatkan bonus tambahan',
+        body: 'Jelaskan bonus yang akan diterima pelanggan setelah melakukan pembelian.',
+        imageUrl: '',
+        imageAlt: 'Visual bonus',
+        caption: ''
+      }]
     },
     cta: {
       heading: 'Siap mulai bersama kami?',
@@ -315,6 +323,26 @@ const normalizeTestimonialItems = (value: unknown, legacyData: Record<string, an
   return legacyItem.quote || legacyItem.name || legacyItem.role ? [legacyItem] : [];
 };
 
+const normalizeBonusItems = (value: unknown, legacyData: Record<string, any> = {}): LandingBonusItem[] => {
+  if (Array.isArray(value)) {
+    return value.slice(0, 12).map(item => ({
+      title: asText(item?.title),
+      body: asText(item?.body),
+      imageUrl: asText(item?.imageUrl || item?.image_url),
+      imageAlt: asText(item?.imageAlt || item?.image_alt, 'Visual bonus'),
+      caption: asText(item?.caption)
+    }));
+  }
+  const legacyItem = {
+    title: asText(legacyData.title),
+    body: asText(legacyData.body),
+    imageUrl: asText(legacyData.imageUrl || legacyData.image_url),
+    imageAlt: asText(legacyData.imageAlt || legacyData.image_alt, 'Visual bonus'),
+    caption: asText(legacyData.caption)
+  };
+  return legacyItem.title || legacyItem.body || legacyItem.imageUrl ? [legacyItem] : [];
+};
+
 const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   const type = LANDING_BLOCK_TYPES.has(value?.type) ? value.type as LandingBlockType : 'text';
   const fallback = createLandingBlock(type, index);
@@ -335,6 +363,7 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
     data.layout = (['slider', 'marquee', 'row'].includes(rawData.layout) ? rawData.layout : fallback.data.layout) as LandingImageLayout;
   }
   if (type === 'testimonial') data.items = normalizeTestimonialItems(rawData.items, rawData);
+  if (type === 'bonus') data.items = normalizeBonusItems(rawData.items, rawData);
   return {
     id: asText(value?.id, fallback.id),
     type,
@@ -850,23 +879,32 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
         </section>
       );
     }
-    case 'bonus':
+    case 'bonus': {
+      const bonusItems = normalizeBonusItems(data.items, data);
       return (
         <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-6 shadow-sm md:p-8">
-          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_280px] md:items-center">
-            <div>
-              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">Bonus</p>
-              <h2 className="mt-3 text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Bonus spesial untuk Anda')}</h2>
-              {asText(data.title) && <h3 className="mt-3 text-lg font-semibold">{asText(data.title)}</h3>}
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{asText(data.body, 'Jelaskan bonus yang akan diterima pelanggan setelah melakukan pembelian.')}</p>
-            </div>
-            <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
-              {asText(data.imageUrl) ? <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual bonus')} className="aspect-[4/3] w-full object-cover" /> : <div className="flex aspect-[4/3] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Upload foto bonus dari pengaturan blok.</div>}
-              {asText(data.caption).trim() && <p className="px-3 py-2 text-xs leading-relaxed text-[var(--muted)]">{asText(data.caption)}</p>}
-            </div>
+          <div className="mb-6">
+            <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">Bonus</p>
+            <h2 className="mt-3 text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Bonus spesial untuk Anda')}</h2>
           </div>
+          {bonusItems.length ? (
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {bonusItems.map((item, index) => (
+                <article key={`${item.title}-${index}`} className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+                  {item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || `Visual bonus ${index + 1}`} className="aspect-[4/3] w-full object-cover" /> : <div className="flex aspect-[4/3] items-center justify-center bg-[var(--accent-soft)] px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto bonus dari pengaturan blok.</div>}
+                  <div className="space-y-2 p-4">
+                    <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Bonus {index + 1}</p>
+                    <h3 className="text-base font-semibold">{item.title || `Bonus tambahan ${index + 1}`}</h3>
+                    {item.body && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.body}</p>}
+                    {item.caption && <p className="border-t border-[var(--border)] pt-2 text-xs leading-relaxed text-[var(--muted)]">{item.caption}</p>}
+                  </div>
+                </article>
+              ))}
+            </div>
+          ) : <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-6 text-center text-sm text-[var(--muted)]">Belum ada bonus yang ditampilkan.</div>}
         </section>
       );
+    }
     case 'cta':
       return (
         <section className="rounded-2xl bg-[var(--accent)] p-7 text-white shadow-sm md:flex md:items-center md:justify-between md:gap-8 md:p-9">
@@ -1118,6 +1156,39 @@ const LandingTestimonialEditor: React.FC<{ items: LandingTestimonialItem[]; onCh
   );
 };
 
+const LandingBonusEditor: React.FC<{ items: LandingBonusItem[]; onChange: (items: LandingBonusItem[]) => void }> = ({ items, onChange }) => {
+  const maxBonuses = 12;
+  const updateItem = (index: number, patch: Partial<LandingBonusItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const addItem = () => {
+    if (items.length >= maxBonuses) return;
+    onChange([...items, { title: '', body: '', imageUrl: '', imageAlt: 'Visual bonus', caption: '' }]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-[var(--muted)]">Daftar bonus</p>
+        <span className="text-[11px] text-[var(--muted)]">{items.length}/{maxBonuses} bonus</span>
+      </div>
+      {items.length ? items.map((item, index) => (
+        <div key={`bonus-editor-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Bonus {index + 1}</p>
+            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus bonus ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+          </div>
+          <Input label="Judul bonus" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Template tambahan gratis" />
+          <Textarea label="Keterangan bonus" value={item.body} onChange={event => updateItem(index, { body: event.target.value })} placeholder="Jelaskan isi dan manfaat bonus untuk pelanggan." />
+          <ImageUploader label="Foto bonus (opsional)" value={item.imageUrl} onChange={value => updateItem(index, { imageUrl: value })} />
+          <Input label="Alt foto" value={item.imageAlt} onChange={event => updateItem(index, { imageAlt: event.target.value })} placeholder="Visual bonus" />
+          <Textarea label="Caption foto (opsional)" value={item.caption} onChange={event => updateItem(index, { caption: event.target.value })} className="min-h-[90px]" />
+        </div>
+      )) : <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 py-6 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada bonus. Tambahkan bonus pertama untuk ditampilkan di halaman publik.</div>}
+      <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxBonuses}>Tambah bonus</Button>
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Setiap bonus akan tampil sebagai card. Gunakan beberapa card untuk menjelaskan isi bonus dengan lebih jelas.</p>
+    </div>
+  );
+};
+
 const pipeItemsToText = (items: Array<{ title: string; description: string }>) => items.map(item => `${item.title} | ${item.description}`).join('\n');
 const textToPipeItems = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean).map(line => { const [title, ...description] = line.split('|'); return { title: title.trim(), description: description.join('|').trim() }; });
 const faqItemsToText = (items: Array<{ question: string; answer: string }>) => items.map(item => `${item.question} | ${item.answer}`).join('\n');
@@ -1188,8 +1259,21 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="FAQ (satu per baris, format: Pertanyaan | Jawaban)" value={faqItemsToText(normalizeFaqItems(data.items, []))} onChange={event => patch({ items: textToFaqItems(event.target.value) })} className="min-h-[200px]" /></div>;
     case 'payment':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Input label="CTA sebelum harga (opsional)" value={asText(data.ctaBeforePrice)} onChange={event => patch({ ctaBeforePrice: event.target.value })} placeholder="Contoh: Dapatkan harga promo hari ini" /><Input label="Harga coret (opsional)" value={asText(data.originalAmount)} onChange={event => patch({ originalAmount: event.target.value })} placeholder="Contoh: Rp 350.000" /><Input label="Nominal pembayaran" value={asText(data.amount)} onChange={event => patch({ amount: event.target.value })} placeholder="Contoh: Rp 250.000" /><Textarea label="Instruksi pembayaran" value={asText(data.instructions)} onChange={event => patch({ instructions: event.target.value })} /><Input label="Nomor rekening (opsional)" value={asText(data.accountNumber)} onChange={event => patch({ accountNumber: event.target.value })} /><Input label="WhatsApp konfirmasi (opsional)" value={asText(data.whatsapp)} onChange={event => patch({ whatsapp: event.target.value })} placeholder="62812xxxxxxx" /><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} /><ImageUploader label="QR Code pembayaran" value={asText(data.qrCode)} onChange={value => patch({ qrCode: value })} preservePng /><Input label="URL QR Code (opsional)" value={asText(data.qrCode).startsWith('data:') ? '' : asText(data.qrCode)} onChange={event => patch({ qrCode: event.target.value })} placeholder="https://.../qr.png" /></div>;
-    case 'bonus':
-      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Input label="Judul bonus" value={asText(data.title)} onChange={event => patch({ title: event.target.value })} placeholder="Contoh: Template tambahan gratis" /><Textarea label="Keterangan bonus" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} placeholder="Jelaskan isi dan manfaat bonus untuk pelanggan." /><ImageUploader label="Foto bonus (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><Input label="Alt foto" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} /><Textarea label="Caption foto (opsional)" value={asText(data.caption)} onChange={event => patch({ caption: event.target.value })} className="min-h-[90px]" /></div>;
+    case 'bonus': {
+      const items = normalizeBonusItems(data.items, data);
+      const updateItems = (nextItems: LandingBonusItem[]) => {
+        const first = nextItems[0];
+        patch({
+          items: nextItems,
+          title: first?.title || '',
+          body: first?.body || '',
+          imageUrl: first?.imageUrl || '',
+          imageAlt: first?.imageAlt || 'Visual bonus',
+          caption: first?.caption || ''
+        });
+      };
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<LandingBonusEditor items={items} onChange={updateItems} /></div>;
+    }
     case 'cta':
       return <div className="space-y-4"><Input label="Judul CTA" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Deskripsi CTA" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} />{commonButtonFields}</div>;
     case 'spacer':
