@@ -1,7 +1,7 @@
 const DEFAULT_SUPABASE_URL = 'https://drezwxfgykkdnnwjrnnt.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyZXp3eGZneWtrZG5ud2pybm50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NTUwNTksImV4cCI6MjEwNDMzMTA1OX0.nZ3OGNXEFN82CqA1-KXUQ9IWvhp7Gl0U1xyUVjKcdFY';
 
-const PUBLIC_KINDS = new Set(['landing', 'form', 'qna']);
+const PUBLIC_KINDS = new Set(['landing', 'form', 'qna', 'catalog']);
 const NOT_FOUND_DESCRIPTION = 'Halaman yang Anda tuju tidak diberikan akses atau tidak ditemukan.';
 
 const escapeHtml = (value) => String(value || '')
@@ -83,6 +83,11 @@ const getLandingImage = (row) => {
 
 const getPublicImage = (kind, row) => {
   if (kind === 'landing') return getLandingImage(row);
+  if (kind === 'catalog') {
+    if (row?.avatarUrl || row?.avatar_url) return row.avatarUrl || row.avatar_url;
+    const firstImage = Array.isArray(row?.items) ? row.items.find((item) => item?.imageUrl || item?.image_url) : null;
+    return firstImage?.imageUrl || firstImage?.image_url || '';
+  }
   return row?.headerImage || '';
 };
 
@@ -99,6 +104,9 @@ const getPublicRow = async (env, route) => {
   }
   if (route.kind === 'form') {
     return callPublicRpc(env, 'get_public_form', { p_slug: route.slug });
+  }
+  if (route.kind === 'catalog') {
+    return callPublicRpc(env, 'get_public_catalog_page', { p_slug: route.slug });
   }
   return callPublicRpc(env, 'get_public_qna_session', { p_slug: route.slug, p_presenter_token: '' });
 };
@@ -187,6 +195,17 @@ const getMetadata = async (env, route) => {
       return row ? {
         title: cleanText(row.title, 'Form Maker'),
         description: truncate(row.description || row.eventName, 300),
+        image,
+        imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
+      } : null;
+    }
+
+    if (route.kind === 'catalog') {
+      const row = await getPublicRow(env, route);
+      const image = getPublicImage(route.kind, row);
+      return row ? {
+        title: cleanText(row.title, 'Katalog Produk'),
+        description: truncate(row.description, 300),
         image,
         imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
       } : null;

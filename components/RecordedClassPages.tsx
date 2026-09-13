@@ -16,6 +16,7 @@ import {
   GraduationCap,
   HelpCircle,
   Layout,
+  LayoutGrid,
   Link as LinkIcon,
   Loader2,
   LockKeyhole,
@@ -648,6 +649,23 @@ export const SpacesDashboard: React.FC<{ courses: Course[] }> = ({ courses }) =>
             </div>
             <p className="text-sm text-[var(--muted)] mt-4 leading-relaxed">Susun halaman promosi produk dengan blok drag-and-drop, CTA, dan informasi pembayaran QR Code.</p>
             <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-strong)] mt-7">Buka ruang <ChevronRight size={16} /></span>
+          </Card>
+        </Link>
+
+        <Link to="/admin/catalog-pages" className="group block">
+          <Card className="h-full p-7 md:p-8 group-hover:border-[var(--border-strong)]">
+            <div className="w-12 h-12 rounded-2xl bg-[var(--success-soft)] text-[var(--success-text)] flex items-center justify-center mb-6">
+              <LayoutGrid size={23} />
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 06</p>
+                <h2 className="text-xl font-bold mt-2">Katalog Produk</h2>
+              </div>
+              <Badge color="var(--success-soft)">Link-in-bio</Badge>
+            </div>
+            <p className="text-sm text-[var(--muted)] mt-4 leading-relaxed">Satukan beberapa landing page dalam satu katalog produk yang mudah dibagikan.</p>
+            <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--success-text)] mt-7">Buka ruang <ChevronRight size={16} /></span>
           </Card>
         </Link>
       </div>

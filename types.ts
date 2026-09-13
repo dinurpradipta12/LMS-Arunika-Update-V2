@@ -234,6 +234,30 @@ export interface LandingPage {
   updatedAt?: string;
 }
 
+export type CatalogPageStatus = 'draft' | 'published' | 'archived';
+
+export interface CatalogPageItem {
+  id: string;
+  landingPageId: string;
+  title: string;
+  description: string;
+  imageUrl: string;
+  buttonLabel: string;
+}
+
+export interface CatalogPage {
+  id: string;
+  slug: string;
+  title: string;
+  description: string;
+  theme: FormThemeKey;
+  status: CatalogPageStatus;
+  avatarUrl: string;
+  items: CatalogPageItem[];
+  createdAt?: string;
+  updatedAt?: string;
+}
+
 export type QnaSessionStatus = 'draft' | 'live' | 'paused' | 'closed' | 'archived';
 export type QnaQuestionStatus = 'pending' | 'approved' | 'answered' | 'hidden' | 'archived';
 export const QNA_CATEGORY_OPTIONS = ['Umum', 'Materi', 'Teknis', 'Studi kasus', 'Administratif', 'Lainnya'] as const;

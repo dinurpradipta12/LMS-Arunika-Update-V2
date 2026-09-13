@@ -6,7 +6,9 @@
     "/form",
     "/form/*",
     "/qna",
-    "/qna/*"
+    "/qna/*",
+    "/catalog",
+    "/catalog/*"
   ],
   "exclude": []
 }

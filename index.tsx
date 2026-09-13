@@ -95,6 +95,12 @@ import {
   PublicLandingPageView,
   LANDING_PAGE_SPACE_LABEL
 } from './components/LandingPagePages';
+import {
+  CatalogPageEditor,
+  CatalogPagesPage,
+  PublicCatalogPageView,
+  CATALOG_PAGE_SPACE_LABEL
+} from './components/CatalogPagePages';
 import { PublicQnaPage, QNA_SPACE_LABEL } from './components/QnaPages';
 import { QnaAdminCreatePage, QnaAdminDetailPage, QnaAdminListPage } from './components/QnaAdminPages';
 import logoUtama from './src/logo-utama.png';
@@ -751,6 +757,9 @@ const Sidebar: React.FC<{
           </Link>
           <Link to="/admin/landing-pages" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/landing-pages'))} title={LANDING_PAGE_SPACE_LABEL}>
             <Layout size={18} /><span className={labelClassName}>{LANDING_PAGE_SPACE_LABEL}</span>
+          </Link>
+          <Link to="/admin/catalog-pages" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/catalog-pages'))} title={CATALOG_PAGE_SPACE_LABEL}>
+            <LayoutGrid size={18} /><span className={labelClassName}>{CATALOG_PAGE_SPACE_LABEL}</span>
           </Link>
           <Link to="/admin/qna" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/qna'))} title={QNA_SPACE_LABEL}>
             <MessageCircle size={18} /><span className={labelClassName}>{QNA_SPACE_LABEL}</span>
@@ -1807,7 +1816,7 @@ const App: React.FC = () => {
   const isSyncingRef = useRef(false);
   const lastLocalUpdateRef = useRef<number>(0);
   const isAdmin = authStatus === 'admin';
-  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing)(?:\/|$)/.test(location.pathname);
+  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing|catalog)(?:\/|$)/.test(location.pathname);
 
   useEffect(() => {
     // Hapus otorisasi dan cache data lama yang sebelumnya dipercaya dari localStorage.
@@ -2135,6 +2144,8 @@ const App: React.FC = () => {
         <Route path="/admin/forms/:id" element={renderAdminPage(<FormEditorPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/landing-pages" element={renderAdminPage(<LandingPagesPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/landing-pages/:id" element={renderAdminPage(<LandingPageEditor client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/catalog-pages" element={renderAdminPage(<CatalogPagesPage client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/catalog-pages/:id" element={renderAdminPage(<CatalogPageEditor client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna/new" element={renderAdminPage(<QnaAdminCreatePage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna/:id" element={renderAdminPage(<QnaAdminDetailPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna" element={renderAdminPage(<QnaAdminListPage client={getAdminSupabaseClient()} />)} />
@@ -2150,6 +2161,8 @@ const App: React.FC = () => {
         <Route path="/form/:slug" element={<PublicFormView client={getPublicSupabaseClient()} />} />
         <Route path="/landing" element={<PublicNotFoundPage />} />
         <Route path="/landing/:slug" element={<PublicLandingPageView client={getPublicSupabaseClient()} />} />
+        <Route path="/catalog" element={<PublicNotFoundPage />} />
+        <Route path="/catalog/:slug" element={<PublicCatalogPageView client={getPublicSupabaseClient()} />} />
         <Route path="/qna" element={<PublicNotFoundPage />} />
         <Route path="/qna/present" element={<PublicNotFoundPage />} />
         <Route path="/qna/:slug/present" element={<PublicQnaPage client={getPublicSupabaseClient()} presenterMode />} />
@@ -2166,11 +2179,13 @@ const root = rootRegistry.__arunikaRoot
 rootRegistry.__arunikaRoot = root;
 const directPublicNotFoundPathMatch = window.location.hash
   ? null
-  : window.location.pathname.match(/^\/(?:c|course|class|form|landing|qna)(?:\/present)?\/?$/);
+  : window.location.pathname.match(/^\/(?:c|course|class|form|landing|catalog|qna)(?:\/present)?\/?$/);
 const directFormPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/form\/([^/]+)\/?$/);
 const directFormSlug = directFormPathMatch ? decodeURIComponent(directFormPathMatch[1]) : null;
 const directLandingPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/landing\/([^/]+)\/?$/);
 const directLandingSlug = directLandingPathMatch ? decodeURIComponent(directLandingPathMatch[1]) : null;
+const directCatalogPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/catalog\/([^/]+)\/?$/);
+const directCatalogSlug = directCatalogPathMatch ? decodeURIComponent(directCatalogPathMatch[1]) : null;
 const directQnaPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/qna\/([^/]+)(\/present)?\/?$/);
 const directQnaSlug = directQnaPathMatch ? decodeURIComponent(directQnaPathMatch[1]) : null;
 const directQnaPresenter = Boolean(directQnaPathMatch?.[2]);
@@ -2183,6 +2198,8 @@ root.render(directPublicNotFoundPathMatch
     ? <MemoryRouter initialEntries={[`/form/${directFormSlug}`]}><PublicFormView client={getPublicSupabaseClient()} slugOverride={directFormSlug} /></MemoryRouter>
   : directLandingSlug
     ? <MemoryRouter initialEntries={[`/landing/${directLandingSlug}`]}><PublicLandingPageView client={getPublicSupabaseClient()} slugOverride={directLandingSlug} /></MemoryRouter>
+  : directCatalogSlug
+    ? <MemoryRouter initialEntries={[`/catalog/${directCatalogSlug}${window.location.search}`]}><PublicCatalogPageView client={getPublicSupabaseClient()} slugOverride={directCatalogSlug} /></MemoryRouter>
   : directQnaSlug
     ? <MemoryRouter initialEntries={[directQnaEntry || `/qna/${directQnaSlug}`]}><PublicQnaPage client={getPublicSupabaseClient()} presenterMode={directQnaPresenter} slugOverride={directQnaSlug} /></MemoryRouter>
   : <Router><App /></Router>);
