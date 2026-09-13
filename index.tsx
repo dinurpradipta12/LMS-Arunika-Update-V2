@@ -72,6 +72,7 @@ import { createClient } from '@supabase/supabase-js';
 
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset, Category } from './types';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
+import { setPublicMetadata } from './components/PublicMetadata';
 import {
   ClassResultsPage,
   PublicRecordedClassView,
@@ -1619,6 +1620,16 @@ const PublicCourseView: React.FC<{
     return () => { requestIdRef.current += 1; };
   }, [fetchLatest]);
 
+  useEffect(() => {
+    if (!course) return;
+    setPublicMetadata({
+      title: course.title,
+      description: course.description,
+      image: course.coverImage,
+      imageAlt: `Cover ${course.title}`
+    });
+  }, [course]);
+
   if (isLoading) return <div className="h-screen flex items-center justify-center text-sm text-[var(--muted)] bg-[var(--app-bg)]">Mencari materi kursus...</div>;
 
   if (loadError || !course) {
@@ -1784,7 +1795,10 @@ const AuthLoading: React.FC = () => (
 
 const PublicNotFoundPage: React.FC = () => {
   useEffect(() => {
-    document.title = 'Halaman tidak tersedia | Arunika';
+    setPublicMetadata({
+      title: 'Halaman tidak tersedia | Arunika',
+      description: 'Halaman yang Anda tuju tidak diberikan akses atau tidak ditemukan.'
+    });
   }, []);
 
   return (
@@ -1819,7 +1833,6 @@ const App: React.FC = () => {
   const lastLocalUpdateRef = useRef<number>(0);
   const isAdmin = authStatus === 'admin';
   const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing)(?:\/|$)/.test(location.pathname);
-  const isPublicNotFoundRoute = /^\/(?:c|course|class|form|qna|landing)(?:\/present)?\/?$/.test(location.pathname);
 
   useEffect(() => {
     // Hapus otorisasi dan cache data lama yang sebelumnya dipercaya dari localStorage.
@@ -1895,8 +1908,9 @@ const App: React.FC = () => {
       document.head.appendChild(link);
     }
     link.href = faviconLogo;
-    document.title = isPublicNotFoundRoute ? 'Halaman tidak tersedia | Arunika' : (branding.siteName || 'Platform Arunika');
-  }, [branding.siteName, isPublicNotFoundRoute]);
+    if (isPublicCourseRoute) return;
+    document.title = branding.siteName || 'Platform Arunika';
+  }, [branding.siteName, isPublicCourseRoute]);
 
   const getReadClient = useCallback(() => (
     isAdmin && !isPublicCourseRoute

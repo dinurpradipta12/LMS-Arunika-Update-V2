@@ -44,6 +44,7 @@ import {
   QuizSubmissionResult
 } from '../types';
 import { Badge, Button, Card, Input, Textarea } from './UI';
+import { setPublicMetadata } from './PublicMetadata';
 import logoUtama from '../src/logo-utama.png';
 
 const DEFAULT_QUIZ_TITLE = 'Post-Test Kelas';
@@ -1447,6 +1448,16 @@ export const PublicRecordedClassView: React.FC<{
   }, [client, courseId]);
 
   useEffect(() => { void fetchClass(); }, [fetchClass]);
+
+  useEffect(() => {
+    if (!course) return;
+    setPublicMetadata({
+      title: course.title,
+      description: course.description,
+      image: course.coverImage,
+      imageAlt: `Cover ${course.title}`
+    });
+  }, [course]);
 
   useEffect(() => {
     if (!courseId || typeof window === 'undefined') return;

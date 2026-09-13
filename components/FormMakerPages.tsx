@@ -13,6 +13,7 @@ import {
   FormThemeKey
 } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
+import { setPublicMetadata } from './PublicMetadata';
 import logoUtama from '../src/logo-utama.png';
 
 export const FORM_MAKER_SPACE_LABEL = 'Form Maker';
@@ -949,6 +950,16 @@ export const PublicFormView: React.FC<{ client: any; slugOverride?: string }> = 
     }, () => { void fetchForm(); }).subscribe();
     return () => { void client.removeChannel(channel); };
   }, [client, fetchForm]);
+
+  useEffect(() => {
+    if (!form) return;
+    setPublicMetadata({
+      title: form.title,
+      description: form.description || form.eventName,
+      image: form.headerImage,
+      imageAlt: `Header ${form.title}`
+    });
+  }, [form]);
 
   const setValue = (fieldId: string, value: string | string[]) => setValues(current => ({ ...current, [fieldId]: value }));
 

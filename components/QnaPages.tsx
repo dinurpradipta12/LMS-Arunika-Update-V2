@@ -12,6 +12,7 @@ import {
 } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_MAKER_PUBLIC_LABEL, FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
+import { setPublicMetadata } from './PublicMetadata';
 import logoUtama from '../src/logo-utama.png';
 
 export const QNA_SPACE_LABEL = 'Q&A Audience';
@@ -696,6 +697,16 @@ export const PublicQnaPage: React.FC<{ client: any; presenterMode?: boolean; slu
   }, [client, presenterMode, presenterToken, slug]);
 
   useEffect(() => { void fetchSession(); }, [fetchSession]);
+
+  useEffect(() => {
+    if (!session) return;
+    setPublicMetadata({
+      title: session.title,
+      description: session.description || session.eventName || session.welcomeMessage,
+      image: session.headerImage,
+      imageAlt: `Header ${session.title}`
+    });
+  }, [session]);
 
   useEffect(() => {
     if (!client || !slug) return;

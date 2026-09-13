@@ -39,6 +39,7 @@ import {
 } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
+import { setPublicMetadata } from './PublicMetadata';
 import logoUtama from '../src/logo-utama.png';
 
 export const LANDING_PAGE_SPACE_LABEL = 'Landing Page';
@@ -328,6 +329,18 @@ const createLandingShareLink = (slug: string) => {
   const url = new URL(window.location.origin);
   url.pathname = `/landing/${encodeURIComponent(slug)}`;
   return url.toString();
+};
+
+const getLandingPreviewImage = (page: LandingPage) => {
+  for (const block of page.blocks) {
+    const imageUrl = asText(block.data?.imageUrl).trim();
+    if (imageUrl) return imageUrl;
+    if (block.type === 'image' && Array.isArray(block.data?.images)) {
+      const firstImage = block.data.images.find((item: any) => asText(item?.url).trim());
+      if (firstImage) return asText(firstImage.url).trim();
+    }
+  }
+  return '';
 };
 
 const safeHref = (value: unknown) => {
@@ -1318,7 +1331,15 @@ export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: strin
   }, [client, slug]);
 
   useEffect(() => { void fetchPage(); }, [fetchPage]);
-  useEffect(() => { if (page?.title) document.title = page.title; }, [page?.title]);
+  useEffect(() => {
+    if (!page) return;
+    setPublicMetadata({
+      title: page.title,
+      description: page.description || asText(page.blocks.find(block => block.type === 'hero')?.data?.body),
+      image: getLandingPreviewImage(page),
+      imageAlt: page.title
+    });
+  }, [page]);
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat landing page...</div>;
   if (loadError || !page) return <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md space-y-5 py-10 text-center"><XCircle size={34} className="mx-auto text-[var(--danger-text)]" /><div><h1 className="text-xl font-bold">Landing page tidak dapat dibuka</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{loadError}</p></div><Button icon={Loader2} onClick={() => void fetchPage()} className="mx-auto w-full">Coba Lagi</Button></Card></div>;
