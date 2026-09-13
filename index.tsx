@@ -73,6 +73,7 @@ import { createClient } from '@supabase/supabase-js';
 import { Course, Mentor, Branding, SupabaseConfig, Module, Asset, Category } from './types';
 import { Button, Card, Input, Textarea, Badge } from './components/UI';
 import { getPublicBaseUrl, setPublicMetadata } from './components/PublicMetadata';
+import { getDeviceType, getVisitorId } from './components/PublicAnalytics';
 import {
   ClassResultsPage,
   PublicRecordedClassView,
@@ -357,32 +358,6 @@ const withTimeout = <T,>(request: PromiseLike<T>, timeoutMs: number): Promise<T>
       }
     );
   });
-};
-
-const getVisitorId = () => {
-  const storedValue = localStorage.getItem('arunika_visitor_id');
-  if (storedValue) {
-    try {
-      const parsedValue = JSON.parse(storedValue);
-      if (typeof parsedValue === 'string' && parsedValue.startsWith('vis_')) {
-        localStorage.setItem('arunika_visitor_id', parsedValue);
-        return parsedValue;
-      }
-    } catch {
-      if (storedValue.startsWith('vis_')) return storedValue;
-    }
-  }
-
-  const id = `vis_${Math.random().toString(36).slice(2, 11)}_${Date.now()}`;
-  localStorage.setItem('arunika_visitor_id', id);
-  return id;
-};
-
-const getDeviceType = () => {
-  const ua = navigator.userAgent;
-  if (/(tablet|ipad|playbook|silk)|(android(?!.*mobi))/i.test(ua)) return "tablet";
-  if (/Mobile|Android|iP(hone|od)|IEMobile|BlackBerry|Kindle|Silk-Accelerated|(hpw|web)OS|Opera M(obi|ini)/.test(ua)) return "mobile";
-  return "desktop";
 };
 
 // --- Tracking Component ---

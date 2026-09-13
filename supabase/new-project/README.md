@@ -18,8 +18,10 @@ SQL tidak dapat dijalankan dengan anon key. Buka target project di Supabase Dash
 10. Jalankan `../migrations/20260909020000_form_branding.sql` seluruhnya untuk header banner publik dan pilihan tema warna form.
 11. Jalankan `../migrations/20260911000000_qna_audience.sql` seluruhnya untuk sesi Q&A publik, moderasi, voting, dan layar presenter realtime.
 12. Jalankan `../migrations/20260911010000_qna_rate_limit_fix.sql` untuk mengizinkan beberapa pertanyaan berbeda dari perangkat yang sama.
-13. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
-14. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
+13. Jalankan `../migrations/20260913000000_landing_page_maker.sql` seluruhnya untuk landing page publik dan editor drag-and-drop.
+14. Jalankan `../migrations/20260914000000_landing_page_analytics.sql` seluruhnya untuk views, pengunjung unik, dan klik CTA landing page.
+15. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
+16. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
 
 `01_schema.sql` sekarang fail-closed: semua tabel langsung memakai RLS tanpa policy terbuka. Halaman publik baru aktif setelah migration keamanan pada langkah 4 membuat policy yang hanya membaca konten `published`.
 
@@ -36,11 +38,13 @@ Untuk project `drezwxfgykkdnnwjrnnt` yang tabelnya sudah berisi data, tidak perl
 7. Jalankan migration `20260909020000_form_branding.sql` seluruhnya.
 8. Jalankan migration `20260911000000_qna_audience.sql` seluruhnya.
 9. Jalankan migration `20260911010000_qna_rate_limit_fix.sql` seluruhnya.
-10. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
+10. Jalankan migration `20260913000000_landing_page_maker.sql` seluruhnya.
+11. Jalankan migration `20260914000000_landing_page_analytics.sql` seluruhnya.
+12. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
 
 Migration keamanan idempotent dan tidak menghapus kursus, analytics, quiz, ataupun hasil peserta. Begitu migration selesai, login lokal lama tidak berlaku lagi; gunakan email/password Supabase Auth yang dibuat pada langkah 1.
 
-File analytics sengaja tidak disimpan di Git karena memuat visitor ID, user-agent, dan referrer. File tersebut tersedia hanya di workspace lokal tempat proses recovery dilakukan. Parameter `cfg` lama yang pernah membawa konfigurasi database di URL sudah dibuang dari kolom `full_path`.
+Snapshot analytics lama sengaja tidak disimpan di Git karena memuat visitor ID, user-agent, dan referrer. Migration analytics landing page pada langkah di atas hanya membuat tabel dan RPC tervalidasi; event baru tersimpan di database tujuan. Parameter `cfg` lama yang pernah membawa konfigurasi database di URL sudah dibuang dari kolom `full_path`.
 
 ## Pemeriksaan setelah migrasi
 
@@ -67,7 +71,11 @@ select 'form_responses', count(*) from public.form_responses
 union all
 select 'qna_sessions', count(*) from public.qna_sessions
 union all
-select 'qna_questions', count(*) from public.qna_questions;
+select 'qna_questions', count(*) from public.qna_questions
+union all
+select 'landing_pages', count(*) from public.landing_pages
+union all
+select 'landing_page_events', count(*) from public.landing_page_events;
 ```
 
 Hasil minimum setelah langkah 1 dan 2:
@@ -82,6 +90,8 @@ Hasil minimum setelah langkah 1 dan 2:
 - `form_responses`: 0 sebelum form publik menerima responder
 - `qna_sessions`: 0 sebelum sesi Q&A pertama dibuat dari dashboard
 - `qna_questions`: 0 sebelum audience mengirim pertanyaan
+- `landing_pages`: 0 sebelum landing page pertama dibuat dari dashboard
+- `landing_page_events`: 0 sebelum landing page publik dikunjungi
 
 Kelas Recording dan post-test baru dapat dibuat dari dashboard Arunika setelah schema keamanan dan akun admin tersedia.
 

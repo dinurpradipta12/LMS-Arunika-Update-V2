@@ -2,9 +2,11 @@ import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
+  BarChart3,
   Check,
   Copy,
   CreditCard,
+  Eye,
   ExternalLink,
   Gift,
   GripVertical,
@@ -16,6 +18,7 @@ import {
   ChevronRight,
   MoveDown,
   MoveUp,
+  MousePointerClick,
   Palette,
   Plus,
   Quote,
@@ -24,6 +27,7 @@ import {
   Star,
   Trash2,
   Upload,
+  Users,
   Video,
   X,
   XCircle
@@ -40,6 +44,7 @@ import {
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
 import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
+import { trackPublicLandingEvent } from './PublicAnalytics';
 import logoUtama from '../src/logo-utama.png';
 
 export const LANDING_PAGE_SPACE_LABEL = 'Landing Page';
@@ -47,6 +52,53 @@ export const LANDING_PAGE_PUBLIC_LABEL = 'Arunika Landing Page';
 const DEFAULT_LANDING_DESCRIPTION = 'Landing page untuk memperkenalkan produk Anda.';
 
 type Notice = { tone: 'success' | 'error'; message: string };
+
+const asText = (value: unknown, fallback = '') => typeof value === 'string' ? value : value == null ? fallback : String(value);
+
+type LandingInsightSummary = {
+  landing_page_id: string;
+  total_views: number;
+  unique_visitors: number;
+  cta_clicks: number;
+  conversion_rate: number;
+  last_viewed_at?: string | null;
+};
+
+type LandingInsightDetail = {
+  landingPageId: string;
+  totalViews: number;
+  uniqueVisitors: number;
+  ctaClicks: number;
+  conversionRate: number;
+  daily: Array<{ date: string; views: number; ctaClicks: number }>;
+  devices: Array<{ device: string; count: number }>;
+  sources: Array<{ source: string; count: number }>;
+};
+
+const insightCount = (value: unknown) => {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) && parsed >= 0 ? parsed : 0;
+};
+
+const formatInsightCount = (value: unknown) => new Intl.NumberFormat('id-ID').format(insightCount(value));
+
+const formatInsightDate = (value: unknown) => {
+  const dateText = asText(value);
+  if (!dateText) return '-';
+  const date = new Date(`${dateText.slice(0, 10)}T00:00:00`);
+  return Number.isNaN(date.getTime()) ? dateText : date.toLocaleDateString('id-ID', { day: 'numeric', month: 'short' });
+};
+
+const emptyLandingInsight = (landingPageId = ''): LandingInsightDetail => ({
+  landingPageId,
+  totalViews: 0,
+  uniqueVisitors: 0,
+  ctaClicks: 0,
+  conversionRate: 0,
+  daily: [],
+  devices: [],
+  sources: []
+});
 
 const LANDING_STATUS_OPTIONS: Array<{ value: LandingPageStatus; label: string }> = [
   { value: 'draft', label: 'Draft' },
@@ -101,8 +153,6 @@ const LANDING_IMAGE_LAYOUT_OPTIONS: Array<{ value: LandingImageLayout; label: st
   { value: 'marquee', label: 'Gallery otomatis', description: 'Bergerak dari kanan ke kiri dan berulang.' },
   { value: 'row', label: 'Gallery satu baris', description: 'Semua foto tampil statis dalam satu baris.' }
 ];
-
-const asText = (value: unknown, fallback = '') => typeof value === 'string' ? value : value == null ? fallback : String(value);
 
 const DEFAULT_HEADING_COLOR = '#17283a';
 const isHexColor = (value: unknown) => /^#[0-9a-f]{6}$/i.test(asText(value).trim());
@@ -379,6 +429,7 @@ const errorMessage = (error: any) => {
   const message = asText(error?.message || error, 'Terjadi kesalahan.');
   if (message.includes('duplicate key') && message.includes('slug')) return 'Slug landing page sudah digunakan. Pilih slug yang berbeda.';
   if (message.includes('landing_pages') || message.includes('get_public_landing_page')) return 'Database landing page belum siap. Jalankan migration Landing Page Maker terbaru.';
+  if (message.includes('landing_page_events') || message.includes('track_public_landing_event') || message.includes('get_landing_page_insight')) return 'Analytics landing page belum siap. Jalankan migration analytics landing page terbaru.';
   if (message.includes('Landing page tidak ditemukan')) return message;
   return message;
 };
@@ -423,8 +474,8 @@ const NoticeBanner: React.FC<{ notice: Notice | null }> = ({ notice }) => notice
   </div>
 ) : null;
 
-const ActionLink: React.FC<{ label: string; href?: string; className?: string }> = ({ label, href, className = '' }) => href ? (
-  <a href={safeHref(href) || '#'} className={`inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-hover)] ${className}`}>
+const ActionLink: React.FC<{ label: string; href?: string; className?: string; onClick?: () => void }> = ({ label, href, className = '', onClick }) => href ? (
+  <a href={safeHref(href) || '#'} onClick={onClick} className={`inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-hover)] ${className}`}>
     {label} <ExternalLink size={15} />
   </a>
 ) : null;
@@ -682,7 +733,7 @@ const LandingTestimonialGridBlock: React.FC<{ data: Record<string, any> }> = ({ 
   );
 };
 
-export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: string }> = ({ block, pageTitle = 'produk ini' }) => {
+export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: string; onCtaClick?: (label: string) => void }> = ({ block, pageTitle = 'produk ini', onCtaClick }) => {
   const data = block.data || {};
   const textBody = asText(data.body);
   const sectionHeadingColor = headingColorValue(data.headingColor);
@@ -701,7 +752,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
               {asText(data.eyebrow) && <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent-strong)]">{asText(data.eyebrow)}</p>}
               <h2 className="mt-3 max-w-3xl text-3xl font-bold leading-tight md:text-5xl" style={{ color: sectionHeadingColor }}>{asText(data.headline, 'Judul produk Anda')}</h2>
               {textBody && <p className="mt-4 max-w-2xl whitespace-pre-wrap text-base leading-relaxed text-[var(--muted)]">{textBody}</p>}
-              <ActionLink label={asText(data.buttonLabel, 'Pelajari lebih lanjut')} href={asText(data.buttonUrl)} className="mt-6" />
+              <ActionLink label={asText(data.buttonLabel, 'Pelajari lebih lanjut')} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('hero')} className="mt-6" />
             </div>
             {asText(data.imageUrl) ? (
               <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm transition-transform duration-200 ease-out" style={{ transform: `translateX(${heroImageBoxOffsetX}%) scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
@@ -760,7 +811,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
             <div className="rounded-2xl bg-[var(--accent-soft)] p-5 text-center">
               <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Mulai dari</p>
               <p className="mt-2 text-2xl font-bold text-[var(--accent-strong)]">{asText(data.price, 'Hubungi kami')}</p>
-              <ActionLink label={asText(data.buttonLabel, 'Daftar sekarang')} href={asText(data.buttonUrl)} className="mt-5 w-full" />
+              <ActionLink label={asText(data.buttonLabel, 'Daftar sekarang')} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('pricing')} className="mt-5 w-full" />
             </div>
           </div>
         </section>
@@ -789,7 +840,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
               {(originalAmount || asText(data.amount)) && <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">{originalAmount && <span className="text-base font-semibold text-[var(--muted)] line-through">{originalAmount}</span>}{asText(data.amount) && <p className="text-2xl font-bold text-[var(--accent-strong)]">{asText(data.amount)}</p>}</div>}
               <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{asText(data.instructions, 'Tambahkan instruksi pembayaran.')}</p>
               {asText(data.accountNumber) && <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Nomor rekening</p><p className="mt-1 break-words text-sm font-semibold">{asText(data.accountNumber)}</p></div>}
-              {confirmationHref && <a href={confirmationHref} className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-5 py-3 text-sm font-semibold text-white hover:brightness-95">{asText(data.buttonLabel, 'Konfirmasi melalui WhatsApp')} <ExternalLink size={15} /></a>}
+              {confirmationHref && <a href={confirmationHref} onClick={() => onCtaClick?.('payment')} className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-5 py-3 text-sm font-semibold text-white hover:brightness-95">{asText(data.buttonLabel, 'Konfirmasi melalui WhatsApp')} <ExternalLink size={15} /></a>}
             </div>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-center">
               <p className="mb-3 text-xs font-semibold text-[var(--muted)]">QR Code pembayaran</p>
@@ -820,7 +871,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
       return (
         <section className="rounded-2xl bg-[var(--accent)] p-7 text-white shadow-sm md:flex md:items-center md:justify-between md:gap-8 md:p-9">
           <div><h2 className="text-2xl font-bold" style={{ color: isHexColor(data.headingColor) ? asText(data.headingColor).trim() : 'white' }}>{asText(data.heading, 'Siap mulai?')}</h2><p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-white/80">{asText(data.body)}</p></div>
-          <ActionLink label={asText(data.buttonLabel, 'Hubungi kami')} href={asText(data.buttonUrl)} className="mt-5 shrink-0 bg-white text-[var(--accent-strong)] hover:bg-white/90 md:mt-0" />
+          <ActionLink label={asText(data.buttonLabel, 'Hubungi kami')} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('cta')} className="mt-5 shrink-0 bg-white text-[var(--accent-strong)] hover:bg-white/90 md:mt-0" />
         </section>
       );
     case 'spacer':
@@ -1152,6 +1203,245 @@ const PageSettingsPanel: React.FC<{ page: LandingPage; onChange: (patch: Partial
   <div className="space-y-4"><Input label="Judul landing page" value={page.title} onChange={event => onChange({ title: event.target.value })} /><Input label="Slug link publik" value={page.slug} onChange={event => onChange({ slug: event.target.value })} onBlur={() => onChange({ slug: slugify(page.slug || page.title) })} /><Textarea label="Deskripsi singkat" value={page.description} onChange={event => onChange({ description: event.target.value })} /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status halaman</span><select value={page.status} onChange={event => onChange({ status: event.target.value as LandingPageStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">{LANDING_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="space-y-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Nuansa warna</p><p className="mt-1 text-xs text-[var(--muted)]">Pilih aksen lembut untuk tombol dan elemen penting.</p></div><div className="grid grid-cols-2 gap-2">{FORM_THEME_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={page.theme === option.value} onClick={() => onChange({ theme: option.value })} className={`rounded-xl border p-2 text-left transition-colors ${page.theme === option.value ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><span className="mb-2 block h-6 rounded-lg" style={{ backgroundColor: option.swatch }} /><span className="block text-xs font-semibold">{option.label}</span></button>)}</div></div></div>
 );
 
+const LandingInsightModal: React.FC<{
+  page: LandingPage | null;
+  client: any;
+  onClose: () => void;
+}> = ({ page, client, onClose }) => {
+  const [days, setDays] = useState(30);
+  const [detail, setDetail] = useState<LandingInsightDetail | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!page || !client) {
+      setDetail(null);
+      setError(null);
+      return undefined;
+    }
+
+    let isActive = true;
+    setIsLoading(true);
+    setDetail(null);
+    setError(null);
+    client.rpc('get_landing_page_insight', { p_landing_page_id: page.id, p_days: days }).then((response: any) => {
+      if (!isActive) return;
+      if (response?.error) {
+        setError(errorMessage(response.error));
+        return;
+      }
+      const value = response?.data;
+      if (!value || typeof value !== 'object') {
+        setDetail(emptyLandingInsight(page.id));
+        return;
+      }
+      setDetail({
+        landingPageId: asText(value.landingPageId, page.id),
+        totalViews: insightCount(value.totalViews),
+        uniqueVisitors: insightCount(value.uniqueVisitors),
+        ctaClicks: insightCount(value.ctaClicks),
+        conversionRate: insightCount(value.conversionRate),
+        daily: Array.isArray(value.daily) ? value.daily.map((item: any) => ({
+          date: asText(item?.date),
+          views: insightCount(item?.views),
+          ctaClicks: insightCount(item?.ctaClicks)
+        })) : [],
+        devices: Array.isArray(value.devices) ? value.devices.map((item: any) => ({
+          device: asText(item?.device, 'Lainnya'),
+          count: insightCount(item?.count)
+        })) : [],
+        sources: Array.isArray(value.sources) ? value.sources.map((item: any) => ({
+          source: asText(item?.source, 'direct'),
+          count: insightCount(item?.count)
+        })) : []
+      });
+    }).catch((requestError: any) => {
+      if (isActive) setError(errorMessage(requestError));
+    }).finally(() => {
+      if (isActive) setIsLoading(false);
+    });
+
+    return () => { isActive = false; };
+  }, [client, days, page?.id]);
+
+  useEffect(() => {
+    if (!page) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [onClose, page]);
+
+  if (!page || typeof document === 'undefined') return null;
+
+  const insight = detail || emptyLandingInsight(page.id);
+  const metricItems: Array<{ label: string; value: string; icon: React.ComponentType<any> }> = [
+    { label: 'Views', value: formatInsightCount(insight.totalViews), icon: Eye },
+    { label: 'Pengunjung unik', value: formatInsightCount(insight.uniqueVisitors), icon: Users },
+    { label: 'Klik CTA', value: formatInsightCount(insight.ctaClicks), icon: MousePointerClick },
+    { label: 'Konversi CTA', value: `${insight.conversionRate.toLocaleString('id-ID', { maximumFractionDigits: 2 })}%`, icon: BarChart3 }
+  ];
+
+  return createPortal(
+    <div
+      className="fixed inset-0 z-[100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="landing-insight-title"
+      onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      <div className="flex max-h-[min(90vh,780px)] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl" onMouseDown={event => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-5 py-4 md:px-6">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Insight landing page</p>
+            <h2 id="landing-insight-title" className="mt-1 truncate text-xl font-bold">{page.title}</h2>
+            <p className="mt-1 break-all text-xs text-[var(--muted)]">/landing/{page.slug} · {days} hari terakhir</p>
+          </div>
+          <div className="flex shrink-0 items-center gap-2">
+            <select value={days} onChange={event => setDays(Number(event.target.value))} aria-label="Periode insight" className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs font-semibold outline-none focus:border-[var(--accent)]">
+              <option value={7}>7 hari</option>
+              <option value={30}>30 hari</option>
+              <option value={90}>90 hari</option>
+            </select>
+            <button type="button" onClick={onClose} aria-label="Tutup insight" title="Tutup" className="rounded-lg p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"><X size={18} /></button>
+          </div>
+        </div>
+        <div className="min-h-0 flex-1 space-y-5 overflow-y-auto p-5 md:p-6">
+          {isLoading && <div className="flex items-center justify-center gap-2 rounded-xl border border-dashed border-[var(--border-strong)] py-10 text-sm text-[var(--muted)]"><Loader2 size={17} className="animate-spin" /> Memuat insight...</div>}
+          {error && !isLoading && <div className="rounded-xl border border-[var(--border)] bg-[var(--danger-soft)] p-4 text-sm text-[var(--danger-text)]">{error}</div>}
+          {!error && !isLoading && <>
+            <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              {metricItems.map(item => { const Icon = item.icon; return <div key={item.label} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4"><div className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><Icon size={15} /> {item.label}</div><p className="mt-2 text-2xl font-bold text-[var(--text)]">{item.value}</p></div>; })}
+            </div>
+            <div className="grid gap-5 lg:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+              <section className="min-w-0 rounded-xl border border-[var(--border)]">
+                <div className="flex items-center justify-between gap-3 border-b border-[var(--border)] px-4 py-3"><h3 className="text-sm font-bold">Tren harian</h3><span className="text-[11px] text-[var(--muted)]">Views · CTA</span></div>
+                {insight.daily.length ? <div className="max-h-64 overflow-y-auto"><table className="w-full text-left text-xs"><thead className="sticky top-0 bg-[var(--surface-soft)] text-[var(--muted)]"><tr><th className="px-4 py-2 font-semibold">Tanggal</th><th className="px-4 py-2 text-right font-semibold">Views</th><th className="px-4 py-2 text-right font-semibold">CTA</th></tr></thead><tbody>{insight.daily.map(day => <tr key={day.date} className="border-t border-[var(--border)]"><td className="px-4 py-2.5 text-[var(--muted)]">{formatInsightDate(day.date)}</td><td className="px-4 py-2.5 text-right font-semibold">{formatInsightCount(day.views)}</td><td className="px-4 py-2.5 text-right font-semibold">{formatInsightCount(day.ctaClicks)}</td></tr>)}</tbody></table></div> : <p className="px-4 py-8 text-center text-xs text-[var(--muted)]">Belum ada kunjungan pada periode ini.</p>}
+              </section>
+              <div className="grid gap-5 sm:grid-cols-2 lg:grid-cols-1">
+                <InsightBreakdown title="Perangkat" items={insight.devices.map(item => ({ label: item.device, count: item.count }))} emptyLabel="Belum ada data perangkat." />
+                <InsightBreakdown title="Sumber kunjungan" items={insight.sources.map(item => ({ label: item.source, count: item.count }))} emptyLabel="Belum ada data sumber." />
+              </div>
+            </div>
+            <p className="text-[11px] leading-relaxed text-[var(--muted)]">Views dihitung satu kali per pengunjung dalam jeda singkat. Pengunjung unik memakai ID anonim di browser, sedangkan konversi CTA menunjukkan persentase klik CTA dibanding views.</p>
+          </>}
+        </div>
+      </div>
+    </div>,
+    document.body
+  );
+};
+
+const InsightBreakdown: React.FC<{
+  title: string;
+  items: Array<{ label: string; count: number }>;
+  emptyLabel: string;
+}> = ({ title, items, emptyLabel }) => (
+  <section className="rounded-xl border border-[var(--border)] p-4">
+    <h3 className="text-sm font-bold">{title}</h3>
+    {items.length ? <div className="mt-3 space-y-2">{items.map(item => <div key={item.label} className="flex items-center justify-between gap-3 text-xs"><span className="truncate text-[var(--muted)]">{item.label}</span><span className="font-semibold">{formatInsightCount(item.count)}</span></div>)}</div> : <p className="mt-3 text-xs text-[var(--muted)]">{emptyLabel}</p>}
+  </section>
+);
+
+type LandingPagesPageViewProps = {
+  client: any;
+  navigate: (to: string) => void;
+  pages: LandingPage[];
+  insights: Record<string, LandingInsightSummary>;
+  isLoading: boolean;
+  isCreating: boolean;
+  notice: Notice | null;
+  loadError: string | null;
+  copiedSlug: string | null;
+  deleteTarget: LandingPage | null;
+  isDeleting: boolean;
+  insightTarget: LandingPage | null;
+  onCreate: () => void | Promise<void>;
+  onRefresh: () => void | Promise<void>;
+  onCopy: (page: LandingPage) => void | Promise<void>;
+  onOpenInsight: (page: LandingPage) => void;
+  onDeleteTarget: (page: LandingPage) => void;
+  onCancelDelete: () => void;
+  onConfirmDelete: () => void | Promise<void>;
+  onCloseInsight: () => void;
+};
+
+const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
+  client,
+  navigate,
+  pages,
+  insights,
+  isLoading,
+  isCreating,
+  notice,
+  loadError,
+  copiedSlug,
+  deleteTarget,
+  isDeleting,
+  insightTarget,
+  onCreate,
+  onRefresh,
+  onCopy,
+  onOpenInsight,
+  onDeleteTarget,
+  onCancelDelete,
+  onConfirmDelete,
+  onCloseInsight
+}) => (
+  <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-8">
+    <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
+      <div>
+        <Link to="/admin" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> Semua Space</Link>
+        <h1 className="text-3xl font-bold">{LANDING_PAGE_SPACE_LABEL}</h1>
+        <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">Buat halaman promosi produk dengan blok drag-and-drop, CTA pendaftaran, dan informasi pembayaran.</p>
+      </div>
+      <Button icon={Plus} onClick={() => void onCreate()} isLoading={isCreating}>Buat Landing Page</Button>
+    </div>
+    <NoticeBanner notice={notice} />
+    {isLoading ? (
+      <Card className="flex items-center justify-center gap-3 py-14 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat landing page...</Card>
+    ) : loadError ? (
+      <Card className="space-y-4 py-12 text-center"><XCircle size={30} className="mx-auto text-[var(--danger-text)]" /><p className="text-sm text-[var(--danger-text)]">{loadError}</p><Button variant="secondary" onClick={() => void onRefresh()}>Coba Lagi</Button></Card>
+    ) : pages.length === 0 ? (
+      <Card className="space-y-4 py-14 text-center"><Layout size={34} className="mx-auto text-[var(--muted)]" /><p className="font-semibold">Belum ada landing page</p><p className="text-sm text-[var(--muted)]">Buat halaman pertama untuk mempromosikan produk Anda.</p><Button onClick={() => void onCreate()} icon={Plus} className="mx-auto">Buat Landing Page Pertama</Button></Card>
+    ) : (
+      <div className="grid gap-5 md:grid-cols-2">
+        {pages.map(page => {
+          const insight = insights[page.id];
+          return <Card key={page.id} className="flex h-full flex-col gap-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="min-w-0">
+                <div className="flex flex-wrap items-center gap-2"><Badge color="var(--accent-soft)">{LANDING_PAGE_SPACE_LABEL}</Badge><span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${page.status === 'published' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : page.status === 'archived' ? 'bg-[var(--danger-soft)] text-[var(--danger-text)]' : 'bg-[var(--surface-soft)] text-[var(--muted)]'}`}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</span></div>
+                <h2 className="mt-3 truncate text-xl font-bold">{page.title}</h2>
+                <p className="mt-1 break-all text-xs text-[var(--muted)]">/landing/{page.slug}</p>
+              </div>
+              <Layout className="shrink-0 text-[var(--accent-strong)]" size={24} />
+            </div>
+            <p className="line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{page.description || 'Belum ada deskripsi landing page.'}</p>
+            <div className="grid grid-cols-3 gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><Eye size={13} /> Views</span><strong className="mt-1 block text-sm">{formatInsightCount(insight?.total_views)}</strong></div>
+              <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><Users size={13} /> Unik</span><strong className="mt-1 block text-sm">{formatInsightCount(insight?.unique_visitors)}</strong></div>
+              <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><MousePointerClick size={13} /> CTA</span><strong className="mt-1 block text-sm">{formatInsightCount(insight?.cta_clicks)}</strong></div>
+            </div>
+            <p className="-mt-3 text-[10px] text-[var(--muted)]">Ringkasan 30 hari terakhir</p>
+            <div className="grid grid-cols-2 gap-3 text-xs text-[var(--muted)]"><span>{page.blocks.length} blok konten</span><span className="text-right">Tema {FORM_THEME_OPTIONS.find(option => option.value === page.theme)?.label || 'Navy'}</span></div>
+            <div className="mt-auto grid grid-cols-2 gap-2 pt-2 sm:grid-cols-3">
+              <Button variant="secondary" className="px-2 text-xs" onClick={() => navigate(`/admin/landing-pages/${page.id}`)}>Edit Page</Button>
+              <Button variant="secondary" className="px-2 text-xs" icon={BarChart3} onClick={() => onOpenInsight(page)}>Lihat insight</Button>
+              <Button variant={copiedSlug === page.slug ? 'green' : 'secondary'} className="px-2 text-xs" icon={copiedSlug === page.slug ? Check : Copy} onClick={() => void onCopy(page)}>{copiedSlug === page.slug ? 'Tersalin' : 'Copy Link'}</Button>
+              <Button className="px-2 text-xs" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Buka Publik</Button>
+              <Button type="button" variant="danger" className="px-2 text-xs" icon={Trash2} onClick={() => onDeleteTarget(page)}>Hapus</Button>
+            </div>
+          </Card>;
+        })}
+      </div>
+    )}
+    <LandingInsightModal page={insightTarget} client={client} onClose={onCloseInsight} />
+    <ConfirmModal open={Boolean(deleteTarget)} title="Hapus landing page ini?" description={deleteTarget ? <>Landing page <strong className="text-[var(--text)]">{deleteTarget.title}</strong> akan dihapus permanen.</> : null} confirmLabel="Hapus Page" isLoading={isDeleting} onCancel={onCancelDelete} onConfirm={() => void onConfirmDelete()} />
+  </div>
+);
+
 export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
   const navigate = useNavigate();
   const [pages, setPages] = useState<LandingPage[]>([]);
@@ -1162,6 +1452,38 @@ export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<LandingPage | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [insights, setInsights] = useState<Record<string, LandingInsightSummary>>({});
+  const [insightTarget, setInsightTarget] = useState<LandingPage | null>(null);
+
+  const fetchInsights = useCallback(async () => {
+    if (!client) return;
+    let response: any;
+    try {
+      response = await client.rpc('get_landing_page_insights', { p_days: 30 });
+    } catch {
+      setInsights({});
+      return;
+    }
+    const { data, error } = response || {};
+    if (error || !Array.isArray(data)) {
+      setInsights({});
+      return;
+    }
+    const nextInsights: Record<string, LandingInsightSummary> = {};
+    data.forEach((row: any) => {
+      const landingPageId = asText(row?.landing_page_id);
+      if (!landingPageId) return;
+      nextInsights[landingPageId] = {
+        landing_page_id: landingPageId,
+        total_views: insightCount(row?.total_views),
+        unique_visitors: insightCount(row?.unique_visitors),
+        cta_clicks: insightCount(row?.cta_clicks),
+        conversion_rate: insightCount(row?.conversion_rate),
+        last_viewed_at: row?.last_viewed_at || null
+      };
+    });
+    setInsights(nextInsights);
+  }, [client]);
 
   const fetchPages = useCallback(async () => {
     if (!client) {
@@ -1173,12 +1495,15 @@ export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
     const { data, error } = await client.from('landing_pages').select('*').order('created_at', { ascending: false });
     if (error) {
       setLoadError(errorMessage(error));
+      setPages([]);
+      setInsights({});
     } else {
       setPages((data || []).map(mapLandingRow));
       setLoadError(null);
+      void fetchInsights();
     }
     setIsLoading(false);
-  }, [client]);
+  }, [client, fetchInsights]);
 
   useEffect(() => { void fetchPages(); }, [fetchPages]);
 
@@ -1212,13 +1537,39 @@ export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
     else if (!data?.length) setNotice({ tone: 'error', message: 'Landing page tidak ditemukan atau sudah dihapus.' });
     else {
       setPages(current => current.filter(page => page.id !== target.id));
+      setInsights(current => {
+        const next = { ...current };
+        delete next[target.id];
+        return next;
+      });
       setDeleteTarget(null);
       setNotice({ tone: 'success', message: `Landing page “${target.title}” berhasil dihapus.` });
     }
     setIsDeleting(false);
   };
 
-  return <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-8"><div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center"><div><Link to="/admin" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> Semua Space</Link><h1 className="text-3xl font-bold">{LANDING_PAGE_SPACE_LABEL}</h1><p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">Buat halaman promosi produk dengan blok drag-and-drop, CTA pendaftaran, dan informasi pembayaran.</p></div><Button icon={Plus} onClick={() => void handleCreate()} isLoading={isCreating}>Buat Landing Page</Button></div><NoticeBanner notice={notice} />{isLoading ? <Card className="flex items-center justify-center gap-3 py-14 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat landing page...</Card> : loadError ? <Card className="space-y-4 py-12 text-center"><XCircle size={30} className="mx-auto text-[var(--danger-text)]" /><p className="text-sm text-[var(--danger-text)]">{loadError}</p><Button variant="secondary" onClick={() => void fetchPages()}>Coba Lagi</Button></Card> : pages.length === 0 ? <Card className="space-y-4 py-14 text-center"><Layout size={34} className="mx-auto text-[var(--muted)]" /><p className="font-semibold">Belum ada landing page</p><p className="text-sm text-[var(--muted)]">Buat halaman pertama untuk mempromosikan produk Anda.</p><Button onClick={() => void handleCreate()} icon={Plus} className="mx-auto">Buat Landing Page Pertama</Button></Card> : <div className="grid gap-5 md:grid-cols-2">{pages.map(page => <Card key={page.id} className="flex h-full flex-col gap-5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge color="var(--accent-soft)">{LANDING_PAGE_SPACE_LABEL}</Badge><span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${page.status === 'published' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : page.status === 'archived' ? 'bg-[var(--danger-soft)] text-[var(--danger-text)]' : 'bg-[var(--surface-soft)] text-[var(--muted)]'}`}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</span></div><h2 className="mt-3 truncate text-xl font-bold">{page.title}</h2><p className="mt-1 break-all text-xs text-[var(--muted)]">/landing/{page.slug}</p></div><Layout className="shrink-0 text-[var(--accent-strong)]" size={24} /></div><p className="line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{page.description || 'Belum ada deskripsi landing page.'}</p><div className="grid grid-cols-2 gap-3 text-xs text-[var(--muted)]"><span>{page.blocks.length} blok konten</span><span className="text-right">Tema {FORM_THEME_OPTIONS.find(option => option.value === page.theme)?.label || 'Navy'}</span></div><div className="mt-auto grid grid-cols-2 gap-2 pt-2"><Button variant="secondary" className="px-2 text-xs" onClick={() => navigate(`/admin/landing-pages/${page.id}`)}>Edit Page</Button><Button variant={copiedSlug === page.slug ? 'green' : 'secondary'} className="px-2 text-xs" icon={copiedSlug === page.slug ? Check : Copy} onClick={() => void handleCopy(page)}>{copiedSlug === page.slug ? 'Tersalin' : 'Copy Link'}</Button><Button className="px-2 text-xs" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Buka Publik</Button><Button type="button" variant="danger" className="px-2 text-xs" icon={Trash2} onClick={() => setDeleteTarget(page)}>Hapus</Button></div></Card>)}</div>}<ConfirmModal open={Boolean(deleteTarget)} title="Hapus landing page ini?" description={deleteTarget ? <>Landing page <strong className="text-[var(--text)]">{deleteTarget.title}</strong> akan dihapus permanen.</> : null} confirmLabel="Hapus Page" isLoading={isDeleting} onCancel={() => { if (!isDeleting) setDeleteTarget(null); }} onConfirm={() => void handleDelete()} /></div>;
+  return <LandingPagesPageView
+    client={client}
+    navigate={navigate}
+    pages={pages}
+    insights={insights}
+    isLoading={isLoading}
+    isCreating={isCreating}
+    notice={notice}
+    loadError={loadError}
+    copiedSlug={copiedSlug}
+    deleteTarget={deleteTarget}
+    isDeleting={isDeleting}
+    insightTarget={insightTarget}
+    onCreate={handleCreate}
+    onRefresh={fetchPages}
+    onCopy={handleCopy}
+    onOpenInsight={setInsightTarget}
+    onDeleteTarget={setDeleteTarget}
+    onCancelDelete={() => { if (!isDeleting) setDeleteTarget(null); }}
+    onConfirmDelete={handleDelete}
+    onCloseInsight={() => setInsightTarget(null)}
+  />;
 };
 
 export const LandingPageEditor: React.FC<{ client: any }> = ({ client }) => {
@@ -1315,6 +1666,7 @@ export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: strin
   const [page, setPage] = useState<LandingPage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
+  const trackedViewRef = useRef<string | null>(null);
 
   const fetchPage = useCallback(async () => {
     if (!client || !slug) {
@@ -1343,9 +1695,20 @@ export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: strin
     });
   }, [page]);
 
+  useEffect(() => {
+    if (!page || trackedViewRef.current === page.id) return;
+    trackedViewRef.current = page.id;
+    void trackPublicLandingEvent(client, page.slug, 'view');
+  }, [client, page]);
+
+  const handleCtaClick = useCallback((label: string) => {
+    if (!page) return;
+    void trackPublicLandingEvent(client, page.slug, 'cta_click', label);
+  }, [client, page]);
+
   if (isLoading) return <div className="flex min-h-screen items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat landing page...</div>;
   if (loadError || !page) return <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md space-y-5 py-10 text-center"><XCircle size={34} className="mx-auto text-[var(--danger-text)]" /><div><h1 className="text-xl font-bold">Landing page tidak dapat dibuka</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{loadError}</p></div><Button icon={Loader2} onClick={() => void fetchPage()} className="mx-auto w-full">Coba Lagi</Button></Card></div>;
-  return <LandingPageShell page={page}><>{page.blocks.map(block => <LandingBlockRenderer key={block.id} block={block} pageTitle={page.title} />)}</></LandingPageShell>;
+  return <LandingPageShell page={page}><>{page.blocks.map(block => <LandingBlockRenderer key={block.id} block={block} pageTitle={page.title} onCtaClick={handleCtaClick} />)}</></LandingPageShell>;
 };
 
 export { createLandingShareLink };
