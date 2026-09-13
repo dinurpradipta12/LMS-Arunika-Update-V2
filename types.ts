@@ -239,10 +239,17 @@ export type CatalogPageStatus = 'draft' | 'published' | 'archived';
 export interface CatalogPageItem {
   id: string;
   landingPageId: string;
+  slug?: string;
   title: string;
   description: string;
   imageUrl: string;
   buttonLabel: string;
+}
+
+export interface CatalogSocialLink {
+  id: string;
+  label: string;
+  url: string;
 }
 
 export interface CatalogPage {
@@ -253,6 +260,8 @@ export interface CatalogPage {
   theme: FormThemeKey;
   status: CatalogPageStatus;
   avatarUrl: string;
+  customDomain: string;
+  socialLinks: CatalogSocialLink[];
   items: CatalogPageItem[];
   createdAt?: string;
   updatedAt?: string;

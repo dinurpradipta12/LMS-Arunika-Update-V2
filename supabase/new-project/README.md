@@ -21,8 +21,9 @@ SQL tidak dapat dijalankan dengan anon key. Buka target project di Supabase Dash
 13. Jalankan `../migrations/20260913000000_landing_page_maker.sql` seluruhnya untuk landing page publik dan editor drag-and-drop.
 14. Jalankan `../migrations/20260914000000_landing_page_analytics.sql` seluruhnya untuk views, pengunjung unik, dan klik CTA landing page.
 15. Jalankan `../migrations/20260915000000_catalog_hub.sql` seluruhnya untuk katalog produk yang mengumpulkan landing page dalam satu link.
-16. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
-17. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
+16. Jalankan `../migrations/20260916000000_catalog_profile_links_and_domains.sql` seluruhnya untuk tautan sosial katalog dan domain custom.
+17. Buka **Authentication > Users > Add user** dan buat akun memakai email serta password admin Anda sendiri.
+18. Buka `04_create_admin.sql`, ganti `GANTI_DENGAN_EMAIL_ADMIN`, lalu jalankan seluruh file.
 
 `01_schema.sql` sekarang fail-closed: semua tabel langsung memakai RLS tanpa policy terbuka. Halaman publik baru aktif setelah migration keamanan pada langkah 4 membuat policy yang hanya membaca konten `published`.
 
@@ -42,7 +43,8 @@ Untuk project `drezwxfgykkdnnwjrnnt` yang tabelnya sudah berisi data, tidak perl
 10. Jalankan migration `20260913000000_landing_page_maker.sql` seluruhnya.
 11. Jalankan migration `20260914000000_landing_page_analytics.sql` seluruhnya.
 12. Jalankan migration `20260915000000_catalog_hub.sql` seluruhnya.
-13. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
+13. Jalankan migration `20260916000000_catalog_profile_links_and_domains.sql` seluruhnya.
+14. Jalankan `04_create_admin.sql` setelah email placeholder diganti.
 
 Migration keamanan idempotent dan tidak menghapus kursus, analytics, quiz, ataupun hasil peserta. Begitu migration selesai, login lokal lama tidak berlaku lagi; gunakan email/password Supabase Auth yang dibuat pada langkah 1.
 

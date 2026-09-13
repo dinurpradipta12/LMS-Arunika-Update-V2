@@ -2,7 +2,15 @@ const DEFAULT_SUPABASE_URL = 'https://drezwxfgykkdnnwjrnnt.supabase.co';
 const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImRyZXp3eGZneWtrZG5ud2pybm50Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODg3NTUwNTksImV4cCI6MjEwNDMzMTA1OX0.nZ3OGNXEFN82CqA1-KXUQ9IWvhp7Gl0U1xyUVjKcdFY';
 
 const PUBLIC_KINDS = new Set(['landing', 'form', 'qna', 'catalog']);
+const PLATFORM_HOSTS = new Set(['arunika.space', 'www.arunika.space', 'localhost', '127.0.0.1', '0.0.0.0']);
 const NOT_FOUND_DESCRIPTION = 'Halaman yang Anda tuju tidak diberikan akses atau tidak ditemukan.';
+
+const isPlatformHost = (hostname) => {
+  const value = String(hostname || '').toLowerCase();
+  return PLATFORM_HOSTS.has(value) || value.endsWith('.pages.dev');
+};
+
+const normalizeDomain = (value) => String(value || '').trim().toLowerCase().replace(/^www\./, '').replace(/\.$/, '');
 
 const escapeHtml = (value) => String(value || '')
   .replace(/&/g, '&amp;')
@@ -22,7 +30,17 @@ const getPublicRoute = (request) => {
   const url = new URL(request.url);
   const segments = url.pathname.split('/').filter(Boolean);
   const kind = segments[0];
-  if (!PUBLIC_KINDS.has(kind)) return null;
+  if (!PUBLIC_KINDS.has(kind)) {
+    if (!segments.length && !isPlatformHost(url.hostname)) {
+      return { kind: 'catalog', slug: '', domain: normalizeDomain(url.hostname), action: 'page', url };
+    }
+    return null;
+  }
+
+  if (kind === 'catalog' && segments[1] === '_domain' && segments[2] === 'og-image') {
+    const domain = normalizeDomain(url.searchParams.get('domain'));
+    return domain ? { kind, slug: '', domain, action: 'image', url } : null;
+  }
 
   let slug = '';
   if (segments[1]) {
@@ -106,7 +124,9 @@ const getPublicRow = async (env, route) => {
     return callPublicRpc(env, 'get_public_form', { p_slug: route.slug });
   }
   if (route.kind === 'catalog') {
-    return callPublicRpc(env, 'get_public_catalog_page', { p_slug: route.slug });
+    return route.domain
+      ? callPublicRpc(env, 'get_public_catalog_page_by_domain', { p_domain: route.domain })
+      : callPublicRpc(env, 'get_public_catalog_page', { p_slug: route.slug });
   }
   return callPublicRpc(env, 'get_public_qna_session', { p_slug: route.slug, p_presenter_token: '' });
 };
@@ -114,6 +134,11 @@ const getPublicRow = async (env, route) => {
 const isDataImage = (value) => /^data:image\//i.test(String(value || '').trim());
 
 const getImageProxyUrl = (route) => {
+  if (route.domain) {
+    const url = new URL('/catalog/_domain/og-image', route.url);
+    url.searchParams.set('domain', route.domain);
+    return url.toString();
+  }
   const url = new URL(`/${route.kind}/${encodeURIComponent(route.slug)}/og-image`, route.url);
   url.search = '';
   url.hash = '';
@@ -169,7 +194,7 @@ const toPublicAssetUrl = (value, requestUrl) => {
 };
 
 const getMetadata = async (env, route) => {
-  if (!route.slug) {
+  if (!route.slug && !route.domain) {
     return {
       title: 'Halaman tidak tersedia | Arunika',
       description: NOT_FOUND_DESCRIPTION,

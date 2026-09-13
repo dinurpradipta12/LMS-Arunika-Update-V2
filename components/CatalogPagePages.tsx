@@ -4,6 +4,8 @@ import {
   ArrowLeft,
   ArrowUp,
   Check,
+  ChevronDown,
+  ChevronUp,
   Copy,
   ExternalLink,
   GripVertical,
@@ -21,7 +23,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { CatalogPage, CatalogPageItem, CatalogPageStatus, FormThemeKey } from '../types';
+import { CatalogPage, CatalogPageItem, CatalogPageStatus, CatalogSocialLink, FormThemeKey } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
 import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
@@ -43,6 +45,45 @@ const slugify = (value: string) => value
   .slice(0, 100) || `catalog-${Date.now()}`;
 
 const isTheme = (value: unknown): value is FormThemeKey => FORM_THEME_OPTIONS.some(option => option.value === value);
+
+const normalizeCustomDomain = (value: unknown) => {
+  let raw = asText(value).trim().toLowerCase();
+  if (!raw) return '';
+  try {
+    const parsed = new URL(raw.includes('://') ? raw : `https://${raw}`);
+    raw = parsed.hostname.toLowerCase();
+  } catch {
+    raw = raw.replace(/^https?:\/\//, '').split('/')[0].split(':')[0];
+  }
+  return raw.replace(/^www\./, '').replace(/\.$/, '');
+};
+
+const isValidCustomDomain = (value: unknown) => {
+  const domain = normalizeCustomDomain(value);
+  return !domain || (domain.length <= 253 && domain.includes('.') && !domain.includes('..') && /^(?=.{1,253}$)(?:[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?\.)+[a-z]{2,63}$/i.test(domain));
+};
+
+const normalizeSocialLinks = (value: unknown): CatalogSocialLink[] => {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 10).map((item, index) => ({
+    id: asText(item?.id, `social-link-${Date.now()}-${index}`),
+    label: asText(item?.label),
+    url: asText(item?.url)
+  })).filter(item => item.label || item.url);
+};
+
+const safeExternalHref = (value: unknown) => {
+  let raw = asText(value).trim();
+  if (!raw) return '';
+  if (!/^(https?:\/\/|mailto:|tel:)/i.test(raw) && /^[^\s/]+\.[^\s/]+/.test(raw)) raw = `https://${raw}`;
+  if (!/^(https?:\/\/|mailto:|tel:)/i.test(raw)) return '';
+  try {
+    const parsed = new URL(raw);
+    return ['http:', 'https:', 'mailto:', 'tel:'].includes(parsed.protocol) ? parsed.toString() : '';
+  } catch {
+    return '';
+  }
+};
 
 const CATALOG_STATUS_OPTIONS: Array<{ value: CatalogPageStatus; label: string }> = [
   { value: 'draft', label: 'Draft' },
@@ -70,6 +111,7 @@ const getLandingPreviewImage = (landing: LandingOption | any) => {
 const normalizeItem = (value: any, index: number): CatalogPageItem => ({
   id: asText(value?.id, `catalog-item-${Date.now()}-${index}`),
   landingPageId: asText(value?.landingPageId || value?.landing_page_id),
+  slug: asText(value?.slug),
   title: asText(value?.title),
   description: asText(value?.description),
   imageUrl: asText(value?.imageUrl || value?.image_url),
@@ -84,6 +126,8 @@ const mapCatalogRow = (row: any): CatalogPage => ({
   theme: isTheme(row?.theme) ? row.theme : 'navy',
   status: row?.status === 'published' || row?.status === 'archived' ? row.status : 'draft',
   avatarUrl: asText(row?.avatar_url || row?.avatarUrl),
+  customDomain: normalizeCustomDomain(row?.custom_domain || row?.customDomain),
+  socialLinks: normalizeSocialLinks(row?.social_links || row?.socialLinks),
   items: Array.isArray(row?.items) ? row.items.map(normalizeItem).filter((item: CatalogPageItem) => item.landingPageId) : [],
   createdAt: row?.created_at ?? row?.createdAt,
   updatedAt: row?.updated_at ?? row?.updatedAt
@@ -97,6 +141,8 @@ const createDefaultCatalogPage = (): CatalogPage => ({
   theme: 'navy',
   status: 'draft',
   avatarUrl: '',
+  customDomain: '',
+  socialLinks: [],
   items: []
 });
 
@@ -108,6 +154,8 @@ const catalogWriteRow = (page: CatalogPage) => ({
   theme: page.theme,
   status: page.status,
   avatar_url: page.avatarUrl || '',
+  custom_domain: normalizeCustomDomain(page.customDomain),
+  social_links: page.socialLinks.map(link => ({ id: link.id, label: link.label, url: link.url })),
   items: page.items.map((item, index) => ({
     id: item.id,
     landingPageId: item.landingPageId,
@@ -120,9 +168,10 @@ const catalogWriteRow = (page: CatalogPage) => ({
   updated_at: new Date().toISOString()
 });
 
-const createCatalogShareLink = (slug: string, updatedAt?: string) => {
-  const url = new URL(getPublicBaseUrl());
-  url.pathname = `/catalog/${encodeURIComponent(slug)}`;
+const createCatalogShareLink = (slug: string, updatedAt?: string, customDomain?: string) => {
+  const domain = normalizeCustomDomain(customDomain);
+  const url = new URL(domain ? `https://${domain}` : getPublicBaseUrl());
+  url.pathname = domain ? '/' : `/catalog/${encodeURIComponent(slug)}`;
   const version = updatedAt ? Date.parse(updatedAt) : NaN;
   if (Number.isFinite(version)) url.searchParams.set('v', String(version));
   return url.toString();
@@ -137,6 +186,7 @@ const landingHref = (slug: string) => {
 const errorMessage = (error: any) => {
   const message = asText(error?.message || error, 'Terjadi kesalahan.');
   if (message.includes('duplicate key') && message.includes('slug')) return 'Slug katalog sudah digunakan. Pilih slug yang berbeda.';
+  if (message.includes('custom_domain') || message.includes('catalog_pages_custom_domain')) return 'Domain custom sudah dipakai katalog lain atau format domain belum valid.';
   if (message.includes('catalog_pages') || message.includes('get_public_catalog_page')) return 'Database katalog belum siap. Jalankan migration Catalog Hub terbaru.';
   return message;
 };
@@ -169,7 +219,7 @@ const CatalogPageCard: React.FC<{
       </div>
       <Palette size={18} className="shrink-0 text-[var(--muted)]" />
     </div>
-    <p className="text-sm text-[var(--muted)]">/catalog/{page.slug}</p>
+    <p className="break-all text-sm text-[var(--muted)]">{page.customDomain ? `https://${page.customDomain}` : `/catalog/${page.slug}`}</p>
     <p className="line-clamp-2 min-h-10 text-sm leading-relaxed text-[var(--muted)]">{page.description || 'Belum ada deskripsi katalog.'}</p>
     <div className="grid grid-cols-2 gap-3 text-xs text-[var(--muted)]">
       <span>{page.items.length} produk</span>
@@ -178,7 +228,7 @@ const CatalogPageCard: React.FC<{
     <div className="mt-auto grid grid-cols-2 gap-2">
       <Link to={`/admin/catalog-pages/${page.id}`} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:bg-[var(--surface-soft)]">Edit katalog</Link>
       <button type="button" onClick={() => void onCopy(page)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:bg-[var(--surface-soft)]">{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? 'Tersalin' : 'Salin link'}</button>
-      <a href={page.status === 'published' ? createCatalogShareLink(page.slug) : undefined} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition-colors ${page.status === 'published' ? 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]' : 'cursor-not-allowed bg-[var(--surface-soft)] text-[var(--muted)]'}`} onClick={event => { if (page.status !== 'published') event.preventDefault(); }}>{page.status === 'published' ? 'Buka publik' : 'Belum publik'}{page.status === 'published' && <ExternalLink size={15} />}</a>
+      <a href={page.status === 'published' ? createCatalogShareLink(page.slug, page.updatedAt, page.customDomain) : undefined} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition-colors ${page.status === 'published' ? 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]' : 'cursor-not-allowed bg-[var(--surface-soft)] text-[var(--muted)]'}`} onClick={event => { if (page.status !== 'published') event.preventDefault(); }}>{page.status === 'published' ? 'Buka publik' : 'Belum publik'}{page.status === 'published' && <ExternalLink size={15} />}</a>
       <button type="button" onClick={() => onDelete(page)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--danger-text)] px-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"><Trash2 size={15} />Hapus</button>
     </div>
   </Card>
@@ -226,7 +276,7 @@ export const CatalogPagesPage: React.FC<{ client: any }> = ({ client }) => {
   };
 
   const handleCopy = async (page: CatalogPage) => {
-    const url = createCatalogShareLink(page.slug, page.updatedAt);
+    const url = createCatalogShareLink(page.slug, page.updatedAt, page.customDomain);
     try {
       await navigator.clipboard.writeText(url);
       setCopiedSlug(page.slug);
@@ -318,6 +368,39 @@ const CatalogAvatarField: React.FC<{ value: string; onChange: (value: string) =>
   return <div className="space-y-3"><div className="flex items-center justify-between gap-3"><span className="text-xs font-semibold text-[var(--muted)]">Foto profil / avatar katalog (opsional)</span>{value && <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus foto</button>}</div><div className="flex items-center gap-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">{value ? <img src={value} alt="Preview avatar katalog" className="h-16 w-16 rounded-full object-cover" /> : <span className="flex h-16 w-16 items-center justify-center rounded-full bg-[var(--accent-soft)] text-[var(--accent-strong)]"><LayoutGrid size={24} /></span>}<div className="min-w-0 flex-1"><p className="text-xs leading-relaxed text-[var(--muted)]">Gunakan foto/logo persegi agar header katalog terlihat lebih personal.</p><input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} /><Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing} className="mt-3">Upload foto</Button></div></div>{error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}<Input label="atau URL avatar" value={value.startsWith('data:') ? '' : value} onChange={event => onChange(event.target.value)} placeholder="https://.../avatar.jpg" /></div>;
 };
 
+const CatalogSocialLinksEditor: React.FC<{
+  links: CatalogSocialLink[];
+  onChange: (links: CatalogSocialLink[]) => void;
+}> = ({ links, onChange }) => {
+  const updateLink = (id: string, patch: Partial<CatalogSocialLink>) => {
+    onChange(links.map(link => link.id === id ? { ...link, ...patch } : link));
+  };
+
+  const addLink = () => {
+    if (links.length >= 10) return;
+    onChange([...links, { id: `social-link-${Date.now()}-${links.length}`, label: '', url: '' }]);
+  };
+
+  const removeLink = (id: string) => onChange(links.filter(link => link.id !== id));
+
+  return <div className="space-y-3">
+    <div className="flex items-start justify-between gap-3">
+      <div>
+        <p className="text-xs font-semibold text-[var(--muted)]">Tautan sosial & lainnya</p>
+        <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tampilkan Instagram, WhatsApp, website, atau tautan lain di bawah profil katalog.</p>
+      </div>
+      <button type="button" onClick={addLink} disabled={links.length >= 10} className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-50"><Plus size={14} /> Tambah</button>
+    </div>
+    {links.length > 0 && <div className="space-y-3">
+      {links.map((link, index) => <div key={link.id || `social-link-${index}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+        <div className="mb-2 flex items-center justify-between gap-2"><span className="text-[11px] font-semibold text-[var(--muted)]">Tautan {index + 1}</span><button type="button" onClick={() => removeLink(link.id)} aria-label={`Hapus tautan ${index + 1}`} className="rounded-md p-1 text-[var(--danger-text)] hover:bg-[var(--surface)]"><Trash2 size={14} /></button></div>
+        <div className="space-y-2"><Input label="Label" value={link.label} onChange={event => updateLink(link.id, { label: event.target.value })} placeholder="Instagram" /><Input label="URL" icon={LinkIcon} value={link.url} onChange={event => updateLink(link.id, { url: event.target.value })} placeholder="https://instagram.com/username" /></div>
+      </div>)}
+    </div>}
+    {links.length === 0 && <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-3 text-xs leading-relaxed text-[var(--muted)]">Belum ada tautan. Tambahkan link agar pengunjung dapat menemukan kanal Anda.</div>}
+  </div>;
+};
+
 const CatalogItemEditor: React.FC<{
   item: CatalogPageItem;
   index: number;
@@ -325,20 +408,42 @@ const CatalogItemEditor: React.FC<{
   onChange: (patch: Partial<CatalogPageItem>) => void;
   onMove: (direction: -1 | 1) => void;
   onRemove: () => void;
-}> = ({ item, index, options, onChange, onMove, onRemove }) => (
-  <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
-    <div className="flex items-start gap-3">
-      <span className="mt-2 text-[var(--muted)]" title="Urutan produk"><GripVertical size={18} /></span>
-      <div className="min-w-0 flex-1 space-y-3">
-        <div className="flex flex-wrap items-center justify-between gap-3"><p className="text-sm font-bold">Produk {index + 1}</p><div className="flex items-center gap-1"><button type="button" onClick={() => onMove(-1)} disabled={index === 0} aria-label="Naikkan produk" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowUp size={15} /></button><button type="button" onClick={() => onMove(1)} disabled={index === options.length - 1} aria-label="Turunkan produk" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowDown size={15} /></button><button type="button" onClick={onRemove} aria-label="Hapus produk dari katalog" className="rounded-lg p-2 text-[var(--danger-text)] hover:bg-[var(--surface)]"><Trash2 size={15} /></button></div></div>
-        <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Landing page tujuan</span><select value={item.landingPageId} onChange={event => onChange({ landingPageId: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page</option>{options.map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select></label>
-        <div className="grid gap-3 md:grid-cols-2"><Input label="Judul kartu (opsional)" value={item.title} onChange={event => onChange({ title: event.target.value })} placeholder="Mengikuti judul landing page" /><Input label="Label tombol" value={item.buttonLabel} onChange={event => onChange({ buttonLabel: event.target.value })} placeholder="Lihat produk" /></div>
-        <Textarea label="Deskripsi kartu (opsional)" value={item.description} onChange={event => onChange({ description: event.target.value })} placeholder="Mengikuti deskripsi landing page" className="min-h-[88px]" />
-        <Input label="URL gambar kartu (opsional)" icon={LinkIcon} value={item.imageUrl.startsWith('data:') ? '' : item.imageUrl} onChange={event => onChange({ imageUrl: event.target.value })} placeholder="https://.../produk.jpg" />
+}> = ({ item, index, options, onChange, onMove, onRemove }) => {
+  const [isExpanded, setIsExpanded] = useState(true);
+  const selectedLanding = options.find(option => option.id === item.landingPageId);
+  const summary = item.title || selectedLanding?.title || 'Pilih landing page';
+
+  return (
+    <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+      <div className="flex items-start gap-3">
+        <span className="mt-2 text-[var(--muted)]" title="Urutan produk"><GripVertical size={18} /></span>
+        <div className="min-w-0 flex-1">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-sm font-bold">Produk {index + 1}</p>
+              {!isExpanded && <p className="mt-1 truncate text-xs text-[var(--muted)]">{summary}</p>}
+            </div>
+            <div className="flex items-center gap-1">
+              <button type="button" onClick={() => setIsExpanded(current => !current)} aria-expanded={isExpanded} aria-label={isExpanded ? 'Lipat detail produk' : 'Buka detail produk'} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--surface)]">
+                {isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}
+                {isExpanded ? 'Lipat' : 'Edit'}
+              </button>
+              <button type="button" onClick={() => onMove(-1)} disabled={index === 0} aria-label="Naikkan produk" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowUp size={15} /></button>
+              <button type="button" onClick={() => onMove(1)} disabled={index === options.length - 1} aria-label="Turunkan produk" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowDown size={15} /></button>
+              <button type="button" onClick={onRemove} aria-label="Hapus produk dari katalog" className="rounded-lg p-2 text-[var(--danger-text)] hover:bg-[var(--surface)]"><Trash2 size={15} /></button>
+            </div>
+          </div>
+          {isExpanded && <div className="mt-3 space-y-3">
+            <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Landing page tujuan</span><select value={item.landingPageId} onChange={event => onChange({ landingPageId: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page</option>{options.map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select></label>
+            <div className="grid gap-3 md:grid-cols-2"><Input label="Judul kartu (opsional)" value={item.title} onChange={event => onChange({ title: event.target.value })} placeholder="Mengikuti judul landing page" /><Input label="Label tombol" value={item.buttonLabel} onChange={event => onChange({ buttonLabel: event.target.value })} placeholder="Lihat produk" /></div>
+            <Textarea label="Deskripsi kartu (opsional)" value={item.description} onChange={event => onChange({ description: event.target.value })} placeholder="Mengikuti deskripsi landing page" className="min-h-[88px]" />
+            <Input label="URL gambar kartu (opsional)" icon={LinkIcon} value={item.imageUrl.startsWith('data:') ? '' : item.imageUrl} onChange={event => onChange({ imageUrl: event.target.value })} placeholder="https://.../produk.jpg" />
+          </div>}
+        </div>
       </div>
     </div>
-  </div>
-);
+  );
+};
 
 export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
   const { id } = useParams<{ id: string }>();
@@ -406,7 +511,17 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
       setNotice({ tone: 'error', message: 'Judul katalog wajib diisi.' });
       return;
     }
-    const normalized = { ...page, slug: slugify(page.slug || page.title), items: page.items.filter(item => item.landingPageId) };
+    if (!isValidCustomDomain(page.customDomain)) {
+      setNotice({ tone: 'error', message: 'Format domain custom belum valid. Gunakan contoh promo.domainanda.com.' });
+      return;
+    }
+    const normalized = {
+      ...page,
+      slug: slugify(page.slug || page.title),
+      customDomain: normalizeCustomDomain(page.customDomain),
+      socialLinks: normalizeSocialLinks(page.socialLinks),
+      items: page.items.filter(item => item.landingPageId)
+    };
     setIsSaving(true);
     const { data, error } = await client.from('catalog_pages').update(catalogWriteRow(normalized)).eq('id', page.id).select('*').single();
     if (error) setNotice({ tone: 'error', message: errorMessage(error) });
@@ -420,38 +535,41 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
   if (isLoading) return <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat editor katalog...</div>;
   if (!page) return <div className="mx-auto max-w-xl p-8"><Card className="space-y-4 text-center"><XCircle className="mx-auto text-[var(--danger-text)]" /><p>Katalog tidak ditemukan.</p><Button variant="secondary" onClick={() => navigate('/admin/catalog-pages')}>Kembali</Button></Card></div>;
 
-  return <main className="mx-auto w-full max-w-[1440px] space-y-6 p-4 pb-28 md:p-8"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/catalog-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {CATALOG_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">Editor Katalog</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(page.status)}</Badge></div><p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">Atur tampilan profil dan susunan produk. Setiap kartu akan mengarah ke landing page produk yang dipilih.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createCatalogShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan katalog</Button></div></div><NoticeBanner notice={notice} /><div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"><section className="space-y-5"><Card className="space-y-5"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Produk di katalog</p><h2 className="mt-2 text-xl font-bold">Pilih landing page</h2><p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Hanya landing page berstatus Publik yang bisa ditambahkan agar link pengunjung tidak buntu.</p></div><div className="flex flex-col gap-3 sm:flex-row"><select value={selectedLandingId} onChange={event => setSelectedLandingId(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page untuk ditambahkan</option>{landingOptions.filter(option => !selectedIds.has(option.id)).map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select><Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={!selectedLandingId}>Tambah produk</Button></div>{!landingOptions.length && <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]">Belum ada landing page Publik. Publikasikan minimal satu landing page terlebih dahulu dari menu Landing Page.</div>}{page.items.length ? <div className="space-y-3">{page.items.map((item, index) => <CatalogItemEditor key={item.id} item={item} index={index} options={page.items} onChange={patch => updateItem(item.id, patch)} onMove={direction => moveItem(index, direction)} onRemove={() => removeItem(item.id)} />)}</div> : <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk di katalog. Pilih landing page di atas untuk mulai menambahkan.</div>}</Card></section><aside className="space-y-5"><Card className="space-y-5"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-xl font-bold">Profil katalog</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div><Input label="Judul katalog" value={page.title} onChange={event => updatePage({ title: event.target.value })} /><Input label="Slug link publik" value={page.slug} onChange={event => updatePage({ slug: event.target.value })} onBlur={() => updatePage({ slug: slugify(page.slug || page.title) })} /><Textarea label="Bio / deskripsi singkat" value={page.description} onChange={event => updatePage({ description: event.target.value })} placeholder="Ceritakan produk atau layanan Anda secara singkat." /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status katalog</span><select value={page.status} onChange={event => updatePage({ status: event.target.value as CatalogPageStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]">{CATALOG_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="space-y-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Nuansa warna</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Aksen lembut untuk tombol dan highlight katalog.</p></div><div className="grid grid-cols-2 gap-2">{FORM_THEME_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={page.theme === option.value} onClick={() => updatePage({ theme: option.value })} className={`rounded-xl border p-2 text-left transition-colors ${page.theme === option.value ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><span className="mb-2 block h-6 rounded-lg" style={{ backgroundColor: option.swatch }} /><span className="block text-xs font-semibold">{option.label}</span></button>)}</div></div><CatalogAvatarField value={page.avatarUrl} onChange={avatarUrl => updatePage({ avatarUrl })} /></Card><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]"><p className="font-semibold text-[var(--text)]">Link publik katalog</p><p className="mt-2 break-all">{createCatalogShareLink(page.slug)}</p><p className="mt-2">Publikasikan katalog setelah semua produk siap ditampilkan.</p></div></aside></div></main>;
+  return <main className="mx-auto w-full max-w-[1440px] space-y-6 p-4 pb-28 md:p-8"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/catalog-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {CATALOG_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">Editor Katalog</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(page.status)}</Badge></div><p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">Atur tampilan profil dan susunan produk. Setiap kartu akan mengarah ke landing page produk yang dipilih.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createCatalogShareLink(page.slug, undefined, page.customDomain), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan katalog</Button></div></div><NoticeBanner notice={notice} /><div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_360px]"><section className="space-y-5"><Card className="space-y-5"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Produk di katalog</p><h2 className="mt-2 text-xl font-bold">Pilih landing page</h2><p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Hanya landing page berstatus Publik yang bisa ditambahkan agar link pengunjung tidak buntu.</p></div><div className="flex flex-col gap-3 sm:flex-row"><select value={selectedLandingId} onChange={event => setSelectedLandingId(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page untuk ditambahkan</option>{landingOptions.filter(option => !selectedIds.has(option.id)).map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select><Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={!selectedLandingId}>Tambah produk</Button></div>{!landingOptions.length && <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]">Belum ada landing page Publik. Publikasikan minimal satu landing page terlebih dahulu dari menu Landing Page.</div>}{page.items.length ? <div className="space-y-3">{page.items.map((item, index) => <CatalogItemEditor key={item.id} item={item} index={index} options={page.items} onChange={patch => updateItem(item.id, patch)} onMove={direction => moveItem(index, direction)} onRemove={() => removeItem(item.id)} />)}</div> : <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk di katalog. Pilih landing page di atas untuk mulai menambahkan.</div>}</Card></section><aside className="space-y-5"><Card className="space-y-5"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-xl font-bold">Profil katalog</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div><Input label="Judul katalog" value={page.title} onChange={event => updatePage({ title: event.target.value })} /><Input label="Slug link publik" value={page.slug} onChange={event => updatePage({ slug: event.target.value })} onBlur={() => updatePage({ slug: slugify(page.slug || page.title) })} /><Textarea label="Bio / deskripsi singkat" value={page.description} onChange={event => updatePage({ description: event.target.value })} placeholder="Ceritakan produk atau layanan Anda secara singkat." /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status katalog</span><select value={page.status} onChange={event => updatePage({ status: event.target.value as CatalogPageStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]">{CATALOG_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="space-y-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Nuansa warna</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Aksen lembut untuk tombol dan highlight katalog.</p></div><div className="grid grid-cols-2 gap-2">{FORM_THEME_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={page.theme === option.value} onClick={() => updatePage({ theme: option.value })} className={`rounded-xl border p-2 text-left transition-colors ${page.theme === option.value ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><span className="mb-2 block h-6 rounded-lg" style={{ backgroundColor: option.swatch }} /><span className="block text-xs font-semibold">{option.label}</span></button>)}</div></div><CatalogAvatarField value={page.avatarUrl} onChange={avatarUrl => updatePage({ avatarUrl })} /><div className="space-y-3"><Input label="Domain custom (opsional)" value={page.customDomain} onChange={event => updatePage({ customDomain: event.target.value })} onBlur={() => updatePage({ customDomain: normalizeCustomDomain(page.customDomain) })} placeholder="promo.domainanda.com" /><p className="text-xs leading-relaxed text-[var(--muted)]">Arahkan DNS domain ke deployment Arunika terlebih dahulu. Katalog akan dibuka dari alamat utama domain ini.</p>{page.customDomain && !isValidCustomDomain(page.customDomain) && <p className="text-xs text-[var(--danger-text)]">Format domain belum valid. Gunakan subdomain atau domain dengan ekstensi, misalnya promo.domainanda.com.</p>}</div><CatalogSocialLinksEditor links={page.socialLinks} onChange={socialLinks => updatePage({ socialLinks })} /></Card><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]"><p className="font-semibold text-[var(--text)]">Link publik katalog</p><p className="mt-2 break-all">{createCatalogShareLink(page.slug, page.updatedAt, page.customDomain)}</p><p className="mt-2">Publikasikan katalog setelah semua produk siap ditampilkan.</p></div></aside></div></main>;
 };
 
 const CatalogPublicCard: React.FC<{ item: CatalogPageItem; index: number }> = ({ item, index }) => (
-  <a href={landingHref(item.slug)} className="group flex items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--accent)] hover:shadow-md">
+  <a href={item.slug ? landingHref(item.slug) : '#'} onClick={event => { if (!item.slug) event.preventDefault(); }} className="group flex items-center gap-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--accent)] hover:shadow-md">
     <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">{item.imageUrl ? <img src={item.imageUrl} alt="" className="h-full w-full object-cover" /> : <span className="text-lg font-bold">{String(index + 1).padStart(2, '0')}</span>}</div>
     <div className="min-w-0 flex-1"><h2 className="truncate text-base font-semibold text-[var(--text)]">{item.title || 'Lihat produk'}</h2><p className="mt-1 line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{item.description || 'Pelajari detail produk dan penawaran selengkapnya.'}</p><span className="mt-2 inline-flex items-center gap-1 text-xs font-semibold text-[var(--accent-strong)]">{item.buttonLabel || 'Lihat produk'} <ExternalLink size={13} className="transition-transform group-hover:translate-x-0.5" /></span></div>
   </a>
 );
 
-export const PublicCatalogPageView: React.FC<{ client: any; slugOverride?: string }> = ({ client, slugOverride }) => {
+export const PublicCatalogPageView: React.FC<{ client: any; slugOverride?: string; domainOverride?: string }> = ({ client, slugOverride, domainOverride }) => {
   const { slug: routeSlug } = useParams<{ slug: string }>();
   const slug = slugOverride || routeSlug;
+  const domain = normalizeCustomDomain(domainOverride);
   const [page, setPage] = useState<CatalogPage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
   const fetchPage = useCallback(async () => {
-    if (!client || !slug) {
+    if (!client || (!slug && !domain)) {
       setLoadError('Link katalog tidak valid.');
       setIsLoading(false);
       return;
     }
     setIsLoading(true);
-    const { data, error } = await client.rpc('get_public_catalog_page', { p_slug: decodeURIComponent(slug) });
+    const { data, error } = domain
+      ? await client.rpc('get_public_catalog_page_by_domain', { p_domain: domain })
+      : await client.rpc('get_public_catalog_page', { p_slug: decodeURIComponent(slug || '') });
     if (error || !data) setLoadError(errorMessage(error || 'Katalog tidak ditemukan.'));
     else {
       setPage(mapCatalogRow(data));
       setLoadError(null);
     }
     setIsLoading(false);
-  }, [client, slug]);
+  }, [client, domain, slug]);
 
   useEffect(() => { void fetchPage(); }, [fetchPage]);
   useEffect(() => {
@@ -467,5 +585,5 @@ export const PublicCatalogPageView: React.FC<{ client: any; slugOverride?: strin
   if (isLoading) return <div className="flex min-h-screen items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat katalog...</div>;
   if (loadError || !page) return <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md space-y-5 py-10 text-center"><XCircle size={34} className="mx-auto text-[var(--danger-text)]" /><div><h1 className="text-xl font-bold">Katalog tidak dapat dibuka</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{loadError}</p></div><Button onClick={() => void fetchPage()} className="mx-auto w-full">Coba lagi</Button></Card></div>;
 
-  return <div className="min-h-screen bg-[var(--app-bg)] px-4 py-8 text-[var(--text)] sm:px-6" style={formThemeStyle(page.theme)}><main className="mx-auto flex w-full max-w-xl flex-col items-center"><header className="flex w-full flex-col items-center text-center"><div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-[var(--surface)] bg-[var(--accent-soft)] p-1 shadow-sm">{page.avatarUrl ? <img src={page.avatarUrl} alt={page.title} className="h-full w-full rounded-full object-cover" /> : <img src={logoUtama} alt="Arunika" className="max-h-16 max-w-16 object-contain" />}</div><h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{page.title}</h1>{page.description && <p className="mt-3 max-w-md text-sm leading-relaxed text-[var(--muted)] sm:text-base">{page.description}</p>}<div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]"><LinkIcon size={13} /> Katalog produk</div></header><section className="mt-8 flex w-full flex-col gap-3" aria-label="Daftar produk">{page.items.length ? page.items.map((item, index) => <CatalogPublicCard key={item.id || `${item.landingPageId}-${index}`} item={item} index={index} />) : <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk yang ditampilkan.</div>}</section><footer className="mt-10 flex items-center gap-2 text-xs text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" /> Dibuat dengan Arunika</footer></main></div>;
+  return <div className="min-h-screen bg-[var(--app-bg)] px-4 py-8 text-[var(--text)] sm:px-6" style={formThemeStyle(page.theme)}><main className="mx-auto flex w-full max-w-xl flex-col items-center"><header className="flex w-full flex-col items-center text-center"><div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-[var(--surface)] bg-[var(--accent-soft)] p-1 shadow-sm">{page.avatarUrl ? <img src={page.avatarUrl} alt={page.title} className="h-full w-full rounded-full object-cover" /> : <img src={logoUtama} alt="Arunika" className="max-h-16 max-w-16 object-contain" />}</div><h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{page.title}</h1>{page.description && <p className="mt-3 max-w-md text-sm leading-relaxed text-[var(--muted)] sm:text-base">{page.description}</p>}<div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]"><LinkIcon size={13} /> Katalog produk</div>{page.socialLinks.length > 0 && <nav className="mt-4 flex flex-wrap justify-center gap-2" aria-label="Tautan sosial dan lainnya">{page.socialLinks.map(link => { const href = safeExternalHref(link.url); return href ? <a key={link.id} href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-soft)]"><LinkIcon size={13} className="text-[var(--accent-strong)]" />{link.label || 'Link'}<ExternalLink size={12} className="text-[var(--muted)]" /></a> : null; })}</nav>}</header><section className="mt-8 flex w-full flex-col gap-3" aria-label="Daftar produk">{page.items.length ? page.items.map((item, index) => <CatalogPublicCard key={item.id || `${item.landingPageId}-${index}`} item={item} index={index} />) : <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk yang ditampilkan.</div>}</section><footer className="mt-10 flex items-center gap-2 text-xs text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" /> Dibuat dengan Arunika</footer></main></div>;
 };

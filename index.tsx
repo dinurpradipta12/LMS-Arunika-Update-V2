@@ -205,6 +205,13 @@ const PUBLIC_SUPABASE_CONFIG: SupabaseConfig = configuredPublicSupabaseUrl && co
   ? { url: configuredPublicSupabaseUrl, anonKey: configuredPublicSupabaseAnonKey }
   : { url: EMBEDDED_PUBLIC_SUPABASE_URL, anonKey: EMBEDDED_PUBLIC_SUPABASE_ANON_KEY };
 
+const PLATFORM_HOSTS = new Set(['arunika.space', 'www.arunika.space', 'localhost', '127.0.0.1', '0.0.0.0']);
+const isCustomCatalogHost = () => {
+  if (typeof window === 'undefined') return false;
+  const hostname = window.location.hostname.toLowerCase();
+  return Boolean(hostname && !PLATFORM_HOSTS.has(hostname) && !hostname.endsWith('.pages.dev'));
+};
+
 let publicSupabaseInstance: any = null;
 let publicSupabaseConfig: SupabaseConfig | null = null;
 let adminSupabaseInstance: any = null;
@@ -1816,7 +1823,8 @@ const App: React.FC = () => {
   const isSyncingRef = useRef(false);
   const lastLocalUpdateRef = useRef<number>(0);
   const isAdmin = authStatus === 'admin';
-  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing|catalog)(?:\/|$)/.test(location.pathname);
+  const isCustomCatalogHostRoute = isCustomCatalogHost() && (location.pathname === '/' || location.pathname === '');
+  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing|catalog)(?:\/|$)/.test(location.pathname) || isCustomCatalogHostRoute;
 
   useEffect(() => {
     // Hapus otorisasi dan cache data lama yang sebelumnya dipercaya dari localStorage.
@@ -2167,7 +2175,7 @@ const App: React.FC = () => {
         <Route path="/qna/present" element={<PublicNotFoundPage />} />
         <Route path="/qna/:slug/present" element={<PublicQnaPage client={getPublicSupabaseClient()} presenterMode />} />
         <Route path="/qna/:slug" element={<PublicQnaPage client={getPublicSupabaseClient()} />} />
-        <Route path="/" element={authStatus === 'loading' ? <AuthLoading /> : <Navigate to={isAdmin ? '/admin' : '/login'} replace />} />
+        <Route path="/" element={isCustomCatalogHostRoute ? <PublicCatalogPageView client={getPublicSupabaseClient()} domainOverride={window.location.hostname} /> : authStatus === 'loading' ? <AuthLoading /> : <Navigate to={isAdmin ? '/admin' : '/login'} replace />} />
       </Routes>
     </div>
   );
