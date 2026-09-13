@@ -88,6 +88,11 @@ const normalizeHeroImagePosition = (value: unknown) => {
   return Number.isFinite(numericValue) ? Math.min(100, Math.max(0, numericValue)) : 50;
 };
 
+const normalizeHeroImageBoxOffset = (value: unknown) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? Math.min(50, Math.max(-50, numericValue)) : 0;
+};
+
 const LANDING_IMAGE_LAYOUT_OPTIONS: Array<{ value: LandingImageLayout; label: string; description: string }> = [
   { value: 'slider', label: 'Foto slider', description: 'Satu foto utama dengan navigasi dan indikator.' },
   { value: 'marquee', label: 'Gallery otomatis', description: 'Bergerak dari kanan ke kiri dan berulang.' },
@@ -118,6 +123,7 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       headline: 'Tampilkan produk Anda dengan lebih meyakinkan',
       body: 'Jelaskan manfaat utama produk Anda dengan kalimat singkat yang mudah dipahami.',
       imageBoxScale: 1,
+      imageBoxOffsetX: 0,
       imageScale: 1.15,
       imagePositionX: 50,
       imagePositionY: 50,
@@ -256,6 +262,7 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   if (type === 'features') data.items = normalizeLineItems(rawData.items, fallback.data.items);
   if (type === 'hero') {
     data.imageBoxScale = normalizeHeroImageScale(rawData.imageBoxScale, fallback.data.imageBoxScale);
+    data.imageBoxOffsetX = normalizeHeroImageBoxOffset(rawData.imageBoxOffsetX);
     data.imageScale = normalizeHeroImageScale(rawData.imageScale, fallback.data.imageScale);
     data.imagePositionX = normalizeHeroImagePosition(rawData.imagePositionX);
     data.imagePositionY = normalizeHeroImagePosition(rawData.imagePositionY);
@@ -657,6 +664,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
   switch (block.type) {
     case 'hero':
       const heroImageBoxScale = normalizeHeroImageScale(data.imageBoxScale, 1);
+      const heroImageBoxOffsetX = normalizeHeroImageBoxOffset(data.imageBoxOffsetX);
       const heroImageScale = normalizeHeroImageScale(data.imageScale);
       const heroImagePositionX = normalizeHeroImagePosition(data.imagePositionX);
       const heroImagePositionY = normalizeHeroImagePosition(data.imagePositionY);
@@ -671,7 +679,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
               <ActionLink label={asText(data.buttonLabel, 'Pelajari lebih lanjut')} href={asText(data.buttonUrl)} className="mt-6" />
             </div>
             {asText(data.imageUrl) ? (
-              <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm transition-transform duration-200 ease-out" style={{ transform: `scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
+              <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm transition-transform duration-200 ease-out" style={{ transform: `translateX(${heroImageBoxOffsetX}%) scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
                 <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="absolute inset-0 h-full w-full object-cover transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `scale(${heroImageScale})` }} />
               </div>
             ) : (
@@ -835,12 +843,14 @@ const ImageUploader: React.FC<{ label: string; value: string; onChange: (value: 
 const HeroImageControls: React.FC<{
   imageUrl: string;
   boxScale: number;
+  boxOffsetX: number;
   scale: number;
   positionX: number;
   positionY: number;
   onChange: (values: Record<string, number>) => void;
-}> = ({ imageUrl, boxScale, scale, positionX, positionY, onChange }) => {
+}> = ({ imageUrl, boxScale, boxOffsetX, scale, positionX, positionY, onChange }) => {
   const boxSizePercent = Math.round(normalizeHeroImageScale(boxScale, 1) * 100);
+  const boxOffsetPercent = Math.round(normalizeHeroImageBoxOffset(boxOffsetX));
   const sizePercent = Math.round(normalizeHeroImageScale(scale) * 100);
   const horizontalPosition = normalizeHeroImagePosition(positionX);
   const verticalPosition = normalizeHeroImagePosition(positionY);
@@ -857,6 +867,11 @@ const HeroImageControls: React.FC<{
           <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Ukuran box media</span><span className="text-[var(--text)]">{boxSizePercent}%</span></span>
           <input type="range" min="75" max="150" step="5" value={boxSizePercent} onChange={event => onChange({ imageBoxScale: Number(event.target.value) / 100 })} className={rangeClass} aria-label="Ukuran box media Hero" />
           <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Kecil</span><span>Besar</span></span>
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Geser box media</span><span className="text-[var(--text)]">{boxOffsetPercent > 0 ? `+${boxOffsetPercent}` : boxOffsetPercent}%</span></span>
+          <input type="range" min="-50" max="50" step="5" value={boxOffsetPercent} onChange={event => onChange({ imageBoxOffsetX: Number(event.target.value) })} className={rangeClass} aria-label="Posisi horizontal box media Hero" />
+          <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Kiri</span><span>Tengah</span><span>Kanan</span></span>
         </label>
         <label className="flex flex-col gap-2">
           <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Ukuran gambar</span><span className="text-[var(--text)]">{sizePercent}%</span></span>
@@ -1023,7 +1038,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero':
-      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} />{headingColorField}<Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><HeroImageControls imageUrl={asText(data.imageUrl)} boxScale={normalizeHeroImageScale(data.imageBoxScale, 1)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
+      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} />{headingColorField}<Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><HeroImageControls imageUrl={asText(data.imageUrl)} boxScale={normalizeHeroImageScale(data.imageBoxScale, 1)} boxOffsetX={normalizeHeroImageBoxOffset(data.imageBoxOffsetX)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
     case 'text':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Isi teks" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} className="min-h-[180px]" /></div>;
     case 'image': {
