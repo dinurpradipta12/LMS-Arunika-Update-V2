@@ -888,13 +888,15 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
             <h2 className="mt-3 text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Bonus spesial untuk Anda')}</h2>
           </div>
           {bonusItems.length ? (
-            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+            <div className="space-y-4">
               {bonusItems.map((item, index) => (
-                <article key={`${item.title}-${index}`} className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-                  {item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || `Visual bonus ${index + 1}`} className="aspect-[4/3] w-full object-cover" /> : <div className="flex aspect-[4/3] items-center justify-center bg-[var(--accent-soft)] px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto bonus dari pengaturan blok.</div>}
-                  <div className="space-y-2 p-4">
+                <article key={`${item.title}-${index}`} className="grid overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:grid-cols-[minmax(150px,220px)_minmax(0,1fr)]">
+                  <div className="min-h-[180px] bg-[var(--accent-soft)] sm:min-h-full">
+                    {item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || `Visual bonus ${index + 1}`} className="h-full w-full object-cover" /> : <div className="flex h-full min-h-[180px] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto bonus dari pengaturan blok.</div>}
+                  </div>
+                  <div className="flex min-w-0 flex-col justify-center space-y-2 p-5 sm:py-6 sm:pr-6">
                     <p className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Bonus {index + 1}</p>
-                    <h3 className="text-base font-semibold">{item.title || `Bonus tambahan ${index + 1}`}</h3>
+                    <h3 className="text-lg font-semibold">{item.title || `Bonus tambahan ${index + 1}`}</h3>
                     {item.body && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.body}</p>}
                     {item.caption && <p className="border-t border-[var(--border)] pt-2 text-xs leading-relaxed text-[var(--muted)]">{item.caption}</p>}
                   </div>
