@@ -1782,6 +1782,29 @@ const AuthLoading: React.FC = () => (
   </div>
 );
 
+const PublicNotFoundPage: React.FC = () => {
+  useEffect(() => {
+    document.title = 'Halaman tidak tersedia | Arunika';
+  }, []);
+
+  return (
+    <main className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6" aria-labelledby="public-not-found-title">
+      <Card className="w-full max-w-lg space-y-5 py-12 text-center">
+        <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
+          <Globe size={28} />
+        </div>
+        <div>
+          <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)]">404</p>
+          <h1 id="public-not-found-title" className="mt-2 text-2xl font-bold">Halaman tidak tersedia</h1>
+          <p className="mx-auto mt-3 max-w-md text-sm leading-relaxed text-[var(--muted)]">
+            Halaman yang Anda tuju tidak diberikan akses atau tidak ditemukan.
+          </p>
+        </div>
+      </Card>
+    </main>
+  );
+};
+
 const App: React.FC = () => {
   const location = useLocation();
   const [authStatus, setAuthStatus] = useState<AuthStatus>('loading');
@@ -1795,7 +1818,8 @@ const App: React.FC = () => {
   const isSyncingRef = useRef(false);
   const lastLocalUpdateRef = useRef<number>(0);
   const isAdmin = authStatus === 'admin';
-  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing)\//.test(location.pathname);
+  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing)(?:\/|$)/.test(location.pathname);
+  const isPublicNotFoundRoute = /^\/(?:c|course|class|form|qna|landing)(?:\/present)?\/?$/.test(location.pathname);
 
   useEffect(() => {
     // Hapus otorisasi dan cache data lama yang sebelumnya dipercaya dari localStorage.
@@ -1871,8 +1895,8 @@ const App: React.FC = () => {
       document.head.appendChild(link);
     }
     link.href = faviconLogo;
-    document.title = branding.siteName || 'Platform Arunika';
-  }, [branding.siteName]);
+    document.title = isPublicNotFoundRoute ? 'Halaman tidak tersedia | Arunika' : (branding.siteName || 'Platform Arunika');
+  }, [branding.siteName, isPublicNotFoundRoute]);
 
   const getReadClient = useCallback(() => (
     isAdmin && !isPublicCourseRoute
@@ -2129,9 +2153,16 @@ const App: React.FC = () => {
         <Route path="/settings" element={renderAdminPage(<Settings />)} />
         <Route path="/c/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} usesShortCode />} />
         <Route path="/course/:id" element={<PublicCourseView courses={courses} mentor={mentor} branding={branding} supabase={PUBLIC_SUPABASE_CONFIG} setBranding={setBranding} setMentor={setMentor} setCourses={setCourses} />} />
+        <Route path="/class" element={<PublicNotFoundPage />} />
         <Route path="/class/:id" element={<PublicRecordedClassView client={getPublicSupabaseClient()} mentor={mentor} resolveCourseId={getCourseIdFromPublicCode} />} />
+        <Route path="/c" element={<PublicNotFoundPage />} />
+        <Route path="/course" element={<PublicNotFoundPage />} />
+        <Route path="/form" element={<PublicNotFoundPage />} />
         <Route path="/form/:slug" element={<PublicFormView client={getPublicSupabaseClient()} />} />
+        <Route path="/landing" element={<PublicNotFoundPage />} />
         <Route path="/landing/:slug" element={<PublicLandingPageView client={getPublicSupabaseClient()} />} />
+        <Route path="/qna" element={<PublicNotFoundPage />} />
+        <Route path="/qna/present" element={<PublicNotFoundPage />} />
         <Route path="/qna/:slug/present" element={<PublicQnaPage client={getPublicSupabaseClient()} presenterMode />} />
         <Route path="/qna/:slug" element={<PublicQnaPage client={getPublicSupabaseClient()} />} />
         <Route path="/" element={authStatus === 'loading' ? <AuthLoading /> : <Navigate to={isAdmin ? '/admin' : '/login'} replace />} />
@@ -2144,6 +2175,9 @@ const rootRegistry = window as any;
 const root = rootRegistry.__arunikaRoot
   || ReactDOMClient.createRoot(document.getElementById('root') as HTMLElement);
 rootRegistry.__arunikaRoot = root;
+const directPublicNotFoundPathMatch = window.location.hash
+  ? null
+  : window.location.pathname.match(/^\/(?:c|course|class|form|landing|qna)(?:\/present)?\/?$/);
 const directFormPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/form\/([^/]+)\/?$/);
 const directFormSlug = directFormPathMatch ? decodeURIComponent(directFormPathMatch[1]) : null;
 const directLandingPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/landing\/([^/]+)\/?$/);
@@ -2154,8 +2188,10 @@ const directQnaPresenter = Boolean(directQnaPathMatch?.[2]);
 const directQnaEntry = directQnaSlug
   ? `/qna/${encodeURIComponent(directQnaSlug)}${directQnaPresenter ? '/present' : ''}${window.location.search}`
   : null;
-root.render(directFormSlug
-  ? <MemoryRouter initialEntries={[`/form/${directFormSlug}`]}><PublicFormView client={getPublicSupabaseClient()} slugOverride={directFormSlug} /></MemoryRouter>
+root.render(directPublicNotFoundPathMatch
+  ? <PublicNotFoundPage />
+  : directFormSlug
+    ? <MemoryRouter initialEntries={[`/form/${directFormSlug}`]}><PublicFormView client={getPublicSupabaseClient()} slugOverride={directFormSlug} /></MemoryRouter>
   : directLandingSlug
     ? <MemoryRouter initialEntries={[`/landing/${directLandingSlug}`]}><PublicLandingPageView client={getPublicSupabaseClient()} slugOverride={directLandingSlug} /></MemoryRouter>
   : directQnaSlug
