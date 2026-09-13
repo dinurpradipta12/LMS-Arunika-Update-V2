@@ -10,6 +10,8 @@ import {
   Layout,
   Link as LinkIcon,
   Loader2,
+  ChevronLeft,
+  ChevronRight,
   MoveDown,
   MoveUp,
   Palette,
@@ -21,6 +23,7 @@ import {
   Trash2,
   Upload,
   Video,
+  X,
   XCircle
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
@@ -56,7 +59,7 @@ const LANDING_BLOCK_OPTIONS: Array<{
 }> = [
   { value: 'hero', label: 'Hero', description: 'Judul utama dan CTA', icon: Sparkles },
   { value: 'text', label: 'Teks', description: 'Penjelasan produk', icon: Layout },
-  { value: 'image', label: 'Gambar', description: 'Visual produk atau banner', icon: ImagePlus },
+  { value: 'image', label: 'Gambar', description: 'Galeri foto atau banner produk', icon: ImagePlus },
   { value: 'video', label: 'Video', description: 'Video demo atau testimoni', icon: Video },
   { value: 'features', label: 'Manfaat', description: 'Keunggulan dalam grid', icon: Star },
   { value: 'pricing', label: 'Harga', description: 'Paket dan harga produk', icon: CreditCard },
@@ -69,6 +72,15 @@ const LANDING_BLOCK_OPTIONS: Array<{
 
 const LANDING_BLOCK_LABELS = Object.fromEntries(LANDING_BLOCK_OPTIONS.map(item => [item.value, item.label])) as Record<LandingBlockType, string>;
 const LANDING_BLOCK_TYPES = new Set<LandingBlockType>(LANDING_BLOCK_OPTIONS.map(item => item.value));
+
+type LandingImageLayout = 'slider' | 'marquee' | 'row';
+type LandingImageItem = { url: string; alt: string; caption: string };
+
+const LANDING_IMAGE_LAYOUT_OPTIONS: Array<{ value: LandingImageLayout; label: string; description: string }> = [
+  { value: 'slider', label: 'Foto slider', description: 'Satu foto utama dengan navigasi dan indikator.' },
+  { value: 'marquee', label: 'Gallery otomatis', description: 'Bergerak dari kanan ke kiri dan berulang.' },
+  { value: 'row', label: 'Gallery satu baris', description: 'Semua foto tampil statis dalam satu baris.' }
+];
 
 const asText = (value: unknown, fallback = '') => typeof value === 'string' ? value : value == null ? fallback : String(value);
 
@@ -98,7 +110,9 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
     image: {
       url: '',
       alt: 'Visual produk',
-      caption: ''
+      caption: '',
+      images: [],
+      layout: 'row'
     },
     video: {
       url: '',
@@ -171,6 +185,19 @@ const normalizeFaqItems = (value: unknown, fallback: Array<{ question: string; a
   })).filter(item => item.question || item.answer);
 };
 
+const normalizeImageItems = (value: unknown, legacyData: Record<string, any> = {}): LandingImageItem[] => {
+  if (Array.isArray(value)) {
+    const items = value.map(item => ({
+      url: asText(item?.url).trim(),
+      alt: asText(item?.alt),
+      caption: asText(item?.caption)
+    })).filter(item => item.url);
+    if (items.length) return items;
+  }
+  const legacyUrl = asText(legacyData.url).trim();
+  return legacyUrl ? [{ url: legacyUrl, alt: asText(legacyData.alt, 'Visual produk'), caption: asText(legacyData.caption) }] : [];
+};
+
 const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   const type = LANDING_BLOCK_TYPES.has(value?.type) ? value.type as LandingBlockType : 'text';
   const fallback = createLandingBlock(type, index);
@@ -179,6 +206,10 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   if (type === 'features') data.items = normalizeLineItems(rawData.items, fallback.data.items);
   if (type === 'pricing') data.features = Array.isArray(rawData.features) ? rawData.features.map((item: unknown) => asText(item)).filter(Boolean) : fallback.data.features;
   if (type === 'faq') data.items = normalizeFaqItems(rawData.items, fallback.data.items);
+  if (type === 'image') {
+    data.images = normalizeImageItems(rawData.images, rawData);
+    data.layout = (['slider', 'marquee', 'row'].includes(rawData.layout) ? rawData.layout : fallback.data.layout) as LandingImageLayout;
+  }
   return {
     id: asText(value?.id, fallback.id),
     type,
@@ -315,6 +346,137 @@ const getVideoEmbedUrl = (value: unknown) => {
   return '';
 };
 
+const LandingImageLightbox: React.FC<{
+  items: LandingImageItem[];
+  activeIndex: number | null;
+  onClose: () => void;
+  onChange: (index: number) => void;
+}> = ({ items, activeIndex, onClose, onChange }) => {
+  useEffect(() => {
+    if (activeIndex === null) return undefined;
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+      if (event.key === 'ArrowLeft' && items.length > 1) onChange((activeIndex - 1 + items.length) % items.length);
+      if (event.key === 'ArrowRight' && items.length > 1) onChange((activeIndex + 1) % items.length);
+    };
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = 'hidden';
+    window.addEventListener('keydown', handleKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener('keydown', handleKeyDown);
+    };
+  }, [activeIndex, items.length, onChange, onClose]);
+
+  if (activeIndex === null || !items[activeIndex]) return null;
+  const item = items[activeIndex];
+
+  return (
+    <div
+      className="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/80 p-4 backdrop-blur-sm"
+      role="dialog"
+      aria-modal="true"
+      aria-label="Preview foto"
+      onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}
+    >
+      <div className="relative flex max-h-[92vh] max-w-[min(1100px,94vw)] flex-col items-center rounded-2xl border border-white/15 bg-slate-950/70 p-3 shadow-2xl" onMouseDown={event => event.stopPropagation()}>
+        <button type="button" onClick={onClose} aria-label="Tutup preview foto" title="Tutup preview" className="absolute right-3 top-3 z-10 rounded-full bg-slate-950/70 p-2 text-white transition-colors hover:bg-slate-800">
+          <X size={18} />
+        </button>
+        <img src={item.url} alt={item.alt || `Foto produk ${activeIndex + 1}`} className="max-h-[78vh] max-w-full rounded-xl object-contain" />
+        {items.length > 1 && (
+          <>
+            <button type="button" onClick={() => onChange((activeIndex - 1 + items.length) % items.length)} aria-label="Foto sebelumnya" title="Foto sebelumnya" className="absolute left-5 top-1/2 -translate-y-1/2 rounded-full bg-slate-950/70 p-2.5 text-white transition-colors hover:bg-slate-800">
+              <ChevronLeft size={20} />
+            </button>
+            <button type="button" onClick={() => onChange((activeIndex + 1) % items.length)} aria-label="Foto berikutnya" title="Foto berikutnya" className="absolute right-5 top-1/2 -translate-y-1/2 rounded-full bg-slate-950/70 p-2.5 text-white transition-colors hover:bg-slate-800">
+              <ChevronRight size={20} />
+            </button>
+          </>
+        )}
+        <div className="flex w-full items-center justify-between gap-4 px-2 pb-1 pt-3 text-xs text-white/80">
+          <span>{item.caption || 'Preview foto produk'}</span>
+          {items.length > 1 && <span className="shrink-0">{activeIndex + 1} / {items.length}</span>}
+        </div>
+      </div>
+    </div>
+  );
+};
+
+const LandingImageGalleryBlock: React.FC<{ data: Record<string, any> }> = ({ data }) => {
+  const items = normalizeImageItems(data.images, data);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [lightboxIndex, setLightboxIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setActiveIndex(current => Math.min(current, Math.max(0, items.length - 1)));
+    setLightboxIndex(current => current !== null && current < items.length ? current : null);
+  }, [items.length]);
+
+  if (!items.length) {
+    return <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-sm text-[var(--muted)]">Upload gambar untuk menampilkan galeri produk.</div>;
+  }
+
+  const layout = (['slider', 'marquee', 'row'].includes(data.layout) ? data.layout : 'row') as LandingImageLayout;
+  const openPreview = (index: number) => setLightboxIndex(index);
+  const renderImageButton = (item: LandingImageItem, index: number, className: string, duplicate = false) => (
+    <button
+      key={`${item.url}-${index}-${duplicate ? 'copy' : 'main'}`}
+      type="button"
+      onClick={() => openPreview(index % items.length)}
+      tabIndex={duplicate ? -1 : undefined}
+      aria-hidden={duplicate ? true : undefined}
+      aria-label={`Lihat ${item.alt || `foto produk ${index % items.length + 1}`}`}
+      className={`group relative overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] ${className}`}
+    >
+      <img src={item.url} alt={duplicate ? '' : item.alt || `Foto produk ${index + 1}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" />
+      <span className="pointer-events-none absolute inset-0 bg-slate-950/0 transition-colors group-hover:bg-slate-950/10" />
+    </button>
+  );
+
+  return (
+    <>
+      {layout === 'slider' ? (
+        <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+          <div className="relative">
+            {renderImageButton(items[activeIndex], activeIndex, 'block aspect-[16/9] w-full rounded-none border-0')}
+            {items.length > 1 && (
+              <>
+                <button type="button" onClick={() => setActiveIndex((activeIndex - 1 + items.length) % items.length)} aria-label="Foto sebelumnya" title="Foto sebelumnya" className="absolute left-3 top-1/2 -translate-y-1/2 rounded-full bg-slate-950/65 p-2 text-white transition-colors hover:bg-slate-800">
+                  <ChevronLeft size={18} />
+                </button>
+                <button type="button" onClick={() => setActiveIndex((activeIndex + 1) % items.length)} aria-label="Foto berikutnya" title="Foto berikutnya" className="absolute right-3 top-1/2 -translate-y-1/2 rounded-full bg-slate-950/65 p-2 text-white transition-colors hover:bg-slate-800">
+                  <ChevronRight size={18} />
+                </button>
+              </>
+            )}
+          </div>
+          <div className="flex items-center justify-between gap-4 px-4 py-3">
+            <p className="min-w-0 truncate text-xs text-[var(--muted)]">{items[activeIndex].caption || 'Klik foto untuk memperbesar.'}</p>
+            {items.length > 1 && <div className="flex shrink-0 items-center gap-1.5" aria-label="Pilih foto">{items.map((item, index) => <button key={`${item.url}-dot-${index}`} type="button" onClick={() => setActiveIndex(index)} aria-label={`Tampilkan foto ${index + 1}`} aria-current={index === activeIndex ? 'true' : undefined} className={`h-2 w-2 rounded-full transition-colors ${index === activeIndex ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)] hover:bg-[var(--muted)]'}`} />)}</div>}
+          </div>
+        </section>
+      ) : layout === 'marquee' ? (
+        <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
+          <div className="landing-gallery-marquee flex w-max gap-3">
+            {items.map((item, index) => renderImageButton(item, index, 'h-44 w-64 shrink-0 sm:h-52 sm:w-80'))}
+            {items.map((item, index) => renderImageButton(item, index, 'h-44 w-64 shrink-0 sm:h-52 sm:w-80', true))}
+          </div>
+          <p className="px-1 pb-1 pt-3 text-xs text-[var(--muted)]">Gallery bergerak otomatis. Arahkan kursor untuk menjeda, atau klik foto untuk melihat preview.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 shadow-sm">
+          <div className="flex min-w-max gap-3">
+            {items.map((item, index) => renderImageButton(item, index, 'h-44 w-64 shrink-0 sm:h-52 sm:w-80'))}
+          </div>
+          <p className="px-1 pb-1 pt-3 text-xs text-[var(--muted)]">Gallery satu baris. Klik foto untuk melihat preview.</p>
+        </div>
+      )}
+      <LandingImageLightbox items={items} activeIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} onChange={setLightboxIndex} />
+    </>
+  );
+};
+
 export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: string }> = ({ block, pageTitle = 'produk ini' }) => {
   const data = block.data || {};
   const textBody = asText(data.body);
@@ -346,14 +508,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
         </section>
       );
     case 'image':
-      return asText(data.url) ? (
-        <figure className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-          <img src={asText(data.url)} alt={asText(data.alt, 'Visual produk')} className="max-h-[520px] w-full object-cover" />
-          {asText(data.caption) && <figcaption className="px-5 py-3 text-center text-xs text-[var(--muted)]">{asText(data.caption)}</figcaption>}
-        </figure>
-      ) : (
-        <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-sm text-[var(--muted)]">Upload gambar untuk menampilkan visual produk.</div>
-      );
+      return <LandingImageGalleryBlock data={data} />;
     case 'video': {
       const embedUrl = getVideoEmbedUrl(data.url);
       return (
@@ -501,6 +656,96 @@ const ImageUploader: React.FC<{ label: string; value: string; onChange: (value: 
   return <div className="space-y-3"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-[var(--muted)]">{label}</p>{value && <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus gambar</button>}</div><div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">{value ? <img src={value} alt={`Preview ${label}`} className="max-h-48 w-full rounded-lg object-contain" /> : <div className="flex min-h-28 items-center justify-center gap-2 text-sm text-[var(--muted)]"><ImagePlus size={22} /> Belum ada gambar</div>}</div><input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} /><Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing}>Upload gambar</Button>{error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}</div>;
 };
 
+const ImageGalleryUploader: React.FC<{ items: LandingImageItem[]; onChange: (items: LandingImageItem[]) => void }> = ({ items, onChange }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [urlInput, setUrlInput] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const maxImages = 10;
+
+  const updateItem = (index: number, patch: Partial<LandingImageItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const removeItem = (index: number) => onChange(items.filter((_, itemIndex) => itemIndex !== index));
+
+  const handleFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(event.target.files || []);
+    event.target.value = '';
+    if (!files.length) return;
+    setError(null);
+    const available = Math.max(0, maxImages - items.length);
+    if (!available) {
+      setError(`Maksimal ${maxImages} foto per galeri.`);
+      return;
+    }
+    const selectedFiles = files.slice(0, available);
+    setIsProcessing(true);
+    try {
+      const uploadedUrls = await Promise.all(selectedFiles.map(file => readImageDataUrl(file, 1400)));
+      onChange([
+        ...items,
+        ...uploadedUrls.map(url => ({ url, alt: 'Visual produk', caption: '' }))
+      ]);
+      if (files.length > selectedFiles.length) setError(`Hanya ${available} foto yang ditambahkan. Maksimal ${maxImages} foto per galeri.`);
+    } catch (uploadError: any) {
+      setError(uploadError?.message || 'Gambar gagal diproses.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const addUrl = () => {
+    const url = urlInput.trim();
+    if (!url) return;
+    if (items.length >= maxImages) {
+      setError(`Maksimal ${maxImages} foto per galeri.`);
+      return;
+    }
+    if (!safeHref(url)) {
+      setError('Masukkan URL gambar yang valid, misalnya https://.../foto.jpg.');
+      return;
+    }
+    setError(null);
+    onChange([...items, { url, alt: 'Visual produk', caption: '' }]);
+    setUrlInput('');
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-[var(--muted)]">Foto galeri</p>
+        <span className="text-[11px] text-[var(--muted)]">{items.length}/{maxImages} foto</span>
+      </div>
+      {items.length ? (
+        <div className="space-y-3">
+          {items.map((item, index) => (
+            <div key={`${item.url}-${index}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <div className="flex items-start gap-3">
+                <img src={item.url} alt={item.alt || `Foto produk ${index + 1}`} className="h-20 w-20 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--surface)] object-cover" />
+                <div className="min-w-0 flex-1 space-y-3">
+                  <Input label={`Alt foto ${index + 1}`} value={item.alt} onChange={event => updateItem(index, { alt: event.target.value })} placeholder="Visual produk" />
+                  <Input label="Caption (opsional)" value={item.caption} onChange={event => updateItem(index, { caption: event.target.value })} placeholder="Keterangan foto" />
+                </div>
+                <button type="button" onClick={() => removeItem(index)} aria-label={`Hapus foto ${index + 1}`} title={`Hapus foto ${index + 1}`} className="rounded-lg p-2 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]">
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada foto. Upload beberapa foto untuk membuat detail produk lebih menarik.</div>
+      )}
+      <input ref={inputRef} type="file" accept="image/*" multiple className="hidden" onChange={handleFiles} />
+      <Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing} disabled={items.length >= maxImages}>Upload beberapa foto</Button>
+      <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-end">
+        <Input label="Tambah URL foto (opsional)" value={urlInput} onChange={event => setUrlInput(event.target.value)} onKeyDown={event => { if (event.key === 'Enter') { event.preventDefault(); addUrl(); } }} placeholder="https://.../foto.jpg" />
+        <Button type="button" variant="secondary" onClick={addUrl} disabled={!urlInput.trim() || items.length >= maxImages}>Tambah URL</Button>
+      </div>
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Foto akan dikompres otomatis. Klik foto di halaman publik untuk membuka preview besar.</p>
+      {error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}
+    </div>
+  );
+};
+
 const pipeItemsToText = (items: Array<{ title: string; description: string }>) => items.map(item => `${item.title} | ${item.description}`).join('\n');
 const textToPipeItems = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean).map(line => { const [title, ...description] = line.split('|'); return { title: title.trim(), description: description.join('|').trim() }; });
 const faqItemsToText = (items: Array<{ question: string; answer: string }>) => items.map(item => `${item.question} | ${item.answer}`).join('\n');
@@ -515,8 +760,36 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
       return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} /><Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
     case 'text':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Textarea label="Isi teks" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} className="min-h-[180px]" /></div>;
-    case 'image':
-      return <div className="space-y-4"><ImageUploader label="Gambar" value={asText(data.url)} onChange={value => patch({ url: value })} /><Input label="URL gambar (opsional)" value={asText(data.url).startsWith('data:') ? '' : asText(data.url)} onChange={event => patch({ url: event.target.value })} placeholder="https://.../gambar.jpg" /><Input label="Teks alternatif" value={asText(data.alt)} onChange={event => patch({ alt: event.target.value })} /><Input label="Caption (opsional)" value={asText(data.caption)} onChange={event => patch({ caption: event.target.value })} /></div>;
+    case 'image': {
+      const items = normalizeImageItems(data.images, data);
+      const layout = (['slider', 'marquee', 'row'].includes(data.layout) ? data.layout : 'row') as LandingImageLayout;
+      return (
+        <div className="space-y-5">
+          <label className="flex flex-col gap-2">
+            <span className="text-xs font-semibold text-[var(--muted)]">Tampilan galeri</span>
+            <select
+              value={layout}
+              onChange={event => patch({ layout: event.target.value as LandingImageLayout })}
+              className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+            >
+              {LANDING_IMAGE_LAYOUT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+            </select>
+            <span className="text-[11px] leading-relaxed text-[var(--muted)]">
+              {LANDING_IMAGE_LAYOUT_OPTIONS.find(option => option.value === layout)?.description}
+            </span>
+          </label>
+          <ImageGalleryUploader
+            items={items}
+            onChange={nextItems => patch({
+              images: nextItems,
+              url: nextItems[0]?.url || '',
+              alt: nextItems[0]?.alt || 'Visual produk',
+              caption: nextItems[0]?.caption || ''
+            })}
+          />
+        </div>
+      );
+    }
     case 'video':
       return <div className="space-y-4"><Input label="Link YouTube" value={asText(data.url)} onChange={event => patch({ url: event.target.value })} icon={LinkIcon} placeholder="https://youtube.com/watch?v=..." /><Textarea label="Keterangan video" value={asText(data.caption)} onChange={event => patch({ caption: event.target.value })} /></div>;
     case 'features':

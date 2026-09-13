@@ -27,3 +27,28 @@
 .qna-presenter-scroll:hover::-webkit-scrollbar-thumb {
   background-color: color-mix(in srgb, var(--muted) 58%, transparent);
 }
+
+@keyframes landing-gallery-marquee {
+  from {
+    transform: translateX(0);
+  }
+  to {
+    /* Account for the 0.75rem gap between the duplicated sequences. */
+    transform: translateX(calc(-50% - 0.375rem));
+  }
+}
+
+.landing-gallery-marquee {
+  animation: landing-gallery-marquee 28s linear infinite;
+  will-change: transform;
+}
+
+.landing-gallery-marquee:hover {
+  animation-play-state: paused;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .landing-gallery-marquee {
+    animation-play-state: paused;
+  }
+}
