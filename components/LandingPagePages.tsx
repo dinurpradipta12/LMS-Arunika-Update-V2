@@ -325,9 +325,11 @@ const landingWriteRow = (page: LandingPage) => ({
   updated_at: new Date().toISOString()
 });
 
-const createLandingShareLink = (slug: string) => {
+const createLandingShareLink = (slug: string, updatedAt?: string) => {
   const url = new URL(getPublicBaseUrl());
   url.pathname = `/landing/${encodeURIComponent(slug)}`;
+  const version = updatedAt ? Date.parse(updatedAt) : NaN;
+  if (Number.isFinite(version)) url.searchParams.set('v', String(version));
   return url.toString();
 };
 
@@ -1191,7 +1193,7 @@ export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
   };
 
   const handleCopy = async (page: LandingPage) => {
-    const url = createLandingShareLink(page.slug);
+    const url = createLandingShareLink(page.slug, page.updatedAt);
     try {
       await navigator.clipboard.writeText(url);
       setCopiedSlug(page.slug);
