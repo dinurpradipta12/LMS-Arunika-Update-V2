@@ -47,6 +47,14 @@
   animation-play-state: paused;
 }
 
+.landing-testimonial-scroll {
+  scrollbar-width: none;
+}
+
+.landing-testimonial-scroll::-webkit-scrollbar {
+  display: none;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .landing-gallery-marquee {
     animation-play-state: paused;

@@ -75,6 +75,7 @@ const LANDING_BLOCK_TYPES = new Set<LandingBlockType>(LANDING_BLOCK_OPTIONS.map(
 
 type LandingImageLayout = 'slider' | 'marquee' | 'row';
 type LandingImageItem = { url: string; alt: string; caption: string };
+type LandingTestimonialItem = { quote: string; name: string; role: string; rating: number };
 
 const LANDING_IMAGE_LAYOUT_OPTIONS: Array<{ value: LandingImageLayout; label: string; description: string }> = [
   { value: 'slider', label: 'Foto slider', description: 'Satu foto utama dengan navigasi dan indikator.' },
@@ -137,7 +138,14 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
     testimonial: {
       quote: 'Produk ini membantu saya bekerja lebih rapi dan percaya diri.',
       name: 'Nama pelanggan',
-      role: 'Pelanggan'
+      role: 'Pelanggan',
+      rating: 5,
+      items: [{
+        quote: 'Produk ini membantu saya bekerja lebih rapi dan percaya diri.',
+        name: 'Nama pelanggan',
+        role: 'Pelanggan',
+        rating: 5
+      }]
     },
     faq: {
       heading: 'Pertanyaan umum',
@@ -198,6 +206,26 @@ const normalizeImageItems = (value: unknown, legacyData: Record<string, any> = {
   return legacyUrl ? [{ url: legacyUrl, alt: asText(legacyData.alt, 'Visual produk'), caption: asText(legacyData.caption) }] : [];
 };
 
+const normalizeTestimonialRating = (value: unknown) => Math.min(5, Math.max(1, Math.round(Number(value) || 5)));
+
+const normalizeTestimonialItems = (value: unknown, legacyData: Record<string, any> = {}): LandingTestimonialItem[] => {
+  if (Array.isArray(value)) {
+    return value.slice(0, 20).map(item => ({
+      quote: asText(item?.quote),
+      name: asText(item?.name),
+      role: asText(item?.role),
+      rating: normalizeTestimonialRating(item?.rating)
+    }));
+  }
+  const legacyItem = {
+    quote: asText(legacyData.quote),
+    name: asText(legacyData.name),
+    role: asText(legacyData.role),
+    rating: normalizeTestimonialRating(legacyData.rating)
+  };
+  return legacyItem.quote || legacyItem.name || legacyItem.role ? [legacyItem] : [];
+};
+
 const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   const type = LANDING_BLOCK_TYPES.has(value?.type) ? value.type as LandingBlockType : 'text';
   const fallback = createLandingBlock(type, index);
@@ -210,6 +238,7 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
     data.images = normalizeImageItems(rawData.images, rawData);
     data.layout = (['slider', 'marquee', 'row'].includes(rawData.layout) ? rawData.layout : fallback.data.layout) as LandingImageLayout;
   }
+  if (type === 'testimonial') data.items = normalizeTestimonialItems(rawData.items, rawData);
   return {
     id: asText(value?.id, fallback.id),
     type,
@@ -477,6 +506,110 @@ const LandingImageGalleryBlock: React.FC<{ data: Record<string, any> }> = ({ dat
   );
 };
 
+const LandingTestimonialCard: React.FC<{ item: LandingTestimonialItem; index: number }> = ({ item, index }) => {
+  const rating = normalizeTestimonialRating(item.rating);
+  const displayName = item.name.trim() || 'Pelanggan';
+  const initials = displayName.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'P';
+
+  return (
+    <article className="flex h-full min-w-0 flex-col rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
+      <div className="flex items-center justify-between gap-3">
+        <div className="flex items-center gap-0.5 text-[var(--accent-strong)]" role="img" aria-label={`Rating ${rating} dari 5`}>
+          {Array.from({ length: 5 }, (_, starIndex) => <Star key={`${index}-star-${starIndex}`} size={15} fill={starIndex < rating ? 'currentColor' : 'none'} />)}
+        </div>
+        <Quote size={18} className="text-[var(--border-strong)]" aria-hidden="true" />
+      </div>
+      <blockquote className="mt-4 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-[var(--text)]">“{item.quote.trim() || 'Tambahkan pengalaman pelanggan di sini.'}”</blockquote>
+      <div className="mt-5 flex items-center gap-3 border-t border-[var(--border)] pt-4">
+        <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[var(--accent-soft)] text-xs font-bold text-[var(--accent-strong)]" aria-hidden="true">{initials}</span>
+        <div className="min-w-0">
+          <p className="truncate text-sm font-semibold">{displayName}</p>
+          {item.role.trim() && <p className="truncate text-xs text-[var(--muted)]">{item.role.trim()}</p>}
+        </div>
+      </div>
+    </article>
+  );
+};
+
+const LandingTestimonialGridBlock: React.FC<{ data: Record<string, any> }> = ({ data }) => {
+  const items = normalizeTestimonialItems(data.items, data);
+  const pageSize = 3;
+  const pages = Array.from({ length: Math.ceil(items.length / pageSize) }, (_, index) => items.slice(index * pageSize, (index + 1) * pageSize));
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [activePage, setActivePage] = useState(0);
+  const [isPaused, setIsPaused] = useState(false);
+
+  useEffect(() => {
+    const nextPage = Math.min(activePage, Math.max(0, pages.length - 1));
+    if (nextPage !== activePage) setActivePage(nextPage);
+    if (scrollRef.current && pages.length <= 1) scrollRef.current.scrollLeft = 0;
+  }, [activePage, pages.length]);
+
+  useEffect(() => {
+    if (pages.length <= 1 || isPaused || window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return undefined;
+    const intervalId = window.setInterval(() => {
+      setActivePage(currentPage => {
+        const nextPage = (currentPage + 1) % pages.length;
+        const container = scrollRef.current;
+        if (container) container.scrollTo({ left: nextPage * container.clientWidth, behavior: 'smooth' });
+        return nextPage;
+      });
+    }, 5000);
+    return () => window.clearInterval(intervalId);
+  }, [isPaused, pages.length]);
+
+  const scrollToPage = (pageIndex: number) => {
+    const nextPage = (pageIndex + pages.length) % pages.length;
+    setActivePage(nextPage);
+    scrollRef.current?.scrollTo({ left: nextPage * (scrollRef.current.clientWidth || 0), behavior: 'smooth' });
+  };
+
+  if (!items.length) {
+    return <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-sm text-[var(--muted)]">Tambahkan testimoni pelanggan untuk menampilkan card.</div>;
+  }
+
+  const renderCard = (item: LandingTestimonialItem, index: number) => <LandingTestimonialCard key={`${item.name}-${index}`} item={item} index={index} />;
+
+  return (
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-5 shadow-sm md:p-6" aria-label="Testimoni pelanggan">
+      {pages.length <= 1 ? (
+        <div className="grid gap-4 md:grid-cols-3">{items.map(renderCard)}</div>
+      ) : (
+        <>
+          <div
+            ref={scrollRef}
+            className="landing-testimonial-scroll overflow-x-auto scroll-smooth"
+            role="region"
+            aria-label="Daftar testimoni yang bergeser otomatis"
+            tabIndex={0}
+            onMouseEnter={() => setIsPaused(true)}
+            onMouseLeave={() => setIsPaused(false)}
+            onFocus={() => setIsPaused(true)}
+            onBlur={() => setIsPaused(false)}
+            onScroll={event => {
+              const container = event.currentTarget;
+              const pageIndex = container.clientWidth ? Math.round(container.scrollLeft / container.clientWidth) : 0;
+              if (pageIndex !== activePage) setActivePage(Math.min(pageIndex, pages.length - 1));
+            }}
+          >
+            <div className="flex w-full">
+              {pages.map((page, pageIndex) => <div key={`testimonial-page-${pageIndex}`} className="grid w-full min-w-full max-w-full shrink-0 grid-cols-1 gap-4 md:grid-cols-3">{page.map((item, itemIndex) => renderCard(item, pageIndex * pageSize + itemIndex))}</div>)}
+            </div>
+          </div>
+          <div className="mt-4 flex items-center justify-between gap-3">
+            <p className="text-xs text-[var(--muted)]">Testimoni bergeser otomatis · arahkan kursor untuk menjeda</p>
+            <div className="flex items-center gap-1.5">
+              <button type="button" onClick={() => scrollToPage(activePage - 1)} aria-label="Testimoni sebelumnya" title="Testimoni sebelumnya" className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1.5 text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"><ChevronLeft size={15} /></button>
+              {pages.map((_, pageIndex) => <button key={`testimonial-dot-${pageIndex}`} type="button" onClick={() => scrollToPage(pageIndex)} aria-label={`Tampilkan testimoni halaman ${pageIndex + 1}`} aria-current={pageIndex === activePage ? 'true' : undefined} className={`h-2 w-2 rounded-full transition-colors ${pageIndex === activePage ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)] hover:bg-[var(--muted)]'}`} />)}
+              <button type="button" onClick={() => scrollToPage(activePage + 1)} aria-label="Testimoni berikutnya" title="Testimoni berikutnya" className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1.5 text-[var(--muted)] transition-colors hover:border-[var(--border-strong)] hover:text-[var(--text)]"><ChevronRight size={15} /></button>
+            </div>
+          </div>
+        </>
+      )}
+    </section>
+  );
+};
+
 export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: string }> = ({ block, pageTitle = 'produk ini' }) => {
   const data = block.data || {};
   const textBody = asText(data.body);
@@ -553,14 +686,7 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
         </section>
       );
     case 'testimonial':
-      return (
-        <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-6 md:p-8">
-          <Quote size={26} className="text-[var(--accent-strong)]" />
-          <blockquote className="mt-4 max-w-3xl text-xl font-semibold leading-relaxed">“{asText(data.quote, 'Tambahkan testimoni pelanggan di sini.')}”</blockquote>
-          <p className="mt-5 text-sm font-semibold">{asText(data.name, 'Nama pelanggan')}</p>
-          {asText(data.role) && <p className="mt-1 text-xs text-[var(--muted)]">{asText(data.role)}</p>}
-        </section>
-      );
+      return <LandingTestimonialGridBlock data={data} />;
     case 'faq':
       return (
         <section className="space-y-4">
@@ -746,6 +872,46 @@ const ImageGalleryUploader: React.FC<{ items: LandingImageItem[]; onChange: (ite
   );
 };
 
+const LandingTestimonialEditor: React.FC<{ items: LandingTestimonialItem[]; onChange: (items: LandingTestimonialItem[]) => void }> = ({ items, onChange }) => {
+  const maxTestimonials = 20;
+  const updateItem = (index: number, patch: Partial<LandingTestimonialItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const addItem = () => {
+    if (items.length >= maxTestimonials) return;
+    onChange([...items, { quote: '', name: '', role: '', rating: 5 }]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-[var(--muted)]">Daftar testimoni</p>
+        <span className="text-[11px] text-[var(--muted)]">{items.length}/{maxTestimonials} testimoni</span>
+      </div>
+      {items.length ? items.map((item, index) => (
+        <div key={`testimonial-editor-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Testimoni {index + 1}</p>
+            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus testimoni ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+          </div>
+          <Textarea label="Testimoni" value={item.quote} onChange={event => updateItem(index, { quote: event.target.value })} placeholder="Ceritakan pengalaman pelanggan..." className="min-h-[120px]" />
+          <Input label="Nama pelanggan" value={item.name} onChange={event => updateItem(index, { name: event.target.value })} placeholder="Nama pelanggan" />
+          <Input label="Jabatan / keterangan" value={item.role} onChange={event => updateItem(index, { role: event.target.value })} placeholder="Pelanggan" />
+          <div className="space-y-2">
+            <span className="block text-xs font-semibold text-[var(--muted)]">Rating bintang</span>
+            <div className="flex items-center gap-1" role="radiogroup" aria-label={`Rating testimoni ${index + 1}`}>
+              {Array.from({ length: 5 }, (_, starIndex) => {
+                const rating = starIndex + 1;
+                return <button key={`testimonial-rating-${index}-${rating}`} type="button" onClick={() => updateItem(index, { rating })} aria-label={`${rating} bintang`} aria-pressed={item.rating === rating} className="rounded-md p-1 text-[var(--accent-strong)] transition-colors hover:bg-[var(--accent-soft)]"><Star size={20} fill={rating <= item.rating ? 'currentColor' : 'none'} /></button>;
+              })}
+            </div>
+          </div>
+        </div>
+      )) : <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 py-6 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada testimoni. Tambahkan testimoni pertama untuk ditampilkan di halaman publik.</div>}
+      <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxTestimonials}>Tambah testimoni</Button>
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Pada halaman publik, tiga card tampil per baris. Jika lebih dari tiga, card bergeser otomatis dan bisa dijeda saat diarahkan.</p>
+    </div>
+  );
+};
+
 const pipeItemsToText = (items: Array<{ title: string; description: string }>) => items.map(item => `${item.title} | ${item.description}`).join('\n');
 const textToPipeItems = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean).map(line => { const [title, ...description] = line.split('|'); return { title: title.trim(), description: description.join('|').trim() }; });
 const faqItemsToText = (items: Array<{ question: string; answer: string }>) => items.map(item => `${item.question} | ${item.answer}`).join('\n');
@@ -796,8 +962,20 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Textarea label="Manfaat (satu per baris, format: Judul | Deskripsi)" value={pipeItemsToText(normalizeLineItems(data.items, []))} onChange={event => patch({ items: textToPipeItems(event.target.value) })} className="min-h-[180px]" /></div>;
     case 'pricing':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Input label="Nominal / harga" value={asText(data.price)} onChange={event => patch({ price: event.target.value })} /><Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><Textarea label="Isi paket (satu per baris)" value={Array.isArray(data.features) ? data.features.join('\n') : ''} onChange={event => patch({ features: event.target.value.split('\n').map(value => value.trim()).filter(Boolean) })} />{commonButtonFields}</div>;
-    case 'testimonial':
-      return <div className="space-y-4"><Textarea label="Testimoni" value={asText(data.quote)} onChange={event => patch({ quote: event.target.value })} /><Input label="Nama pelanggan" value={asText(data.name)} onChange={event => patch({ name: event.target.value })} /><Input label="Jabatan / keterangan" value={asText(data.role)} onChange={event => patch({ role: event.target.value })} /></div>;
+    case 'testimonial': {
+      const items = normalizeTestimonialItems(data.items, data);
+      const updateItems = (nextItems: LandingTestimonialItem[]) => {
+        const first = nextItems[0];
+        patch({
+          items: nextItems,
+          quote: first?.quote || '',
+          name: first?.name || '',
+          role: first?.role || '',
+          rating: first?.rating || 5
+        });
+      };
+      return <LandingTestimonialEditor items={items} onChange={updateItems} />;
+    }
     case 'faq':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} /><Textarea label="FAQ (satu per baris, format: Pertanyaan | Jawaban)" value={faqItemsToText(normalizeFaqItems(data.items, []))} onChange={event => patch({ items: textToFaqItems(event.target.value) })} className="min-h-[200px]" /></div>;
     case 'payment':
