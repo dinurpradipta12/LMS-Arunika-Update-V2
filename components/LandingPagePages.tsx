@@ -6,6 +6,7 @@ import {
   Copy,
   CreditCard,
   ExternalLink,
+  Gift,
   GripVertical,
   ImagePlus,
   Layout,
@@ -67,6 +68,7 @@ const LANDING_BLOCK_OPTIONS: Array<{
   { value: 'testimonial', label: 'Testimoni', description: 'Bukti sosial dari pelanggan', icon: Quote },
   { value: 'faq', label: 'FAQ', description: 'Pertanyaan yang sering ditanya', icon: Layout },
   { value: 'payment', label: 'Pembayaran', description: 'QR Code dan instruksi transfer', icon: CreditCard },
+  { value: 'bonus', label: 'Bonus', description: 'Foto dan keterangan bonus', icon: Gift },
   { value: 'cta', label: 'CTA', description: 'Ajakan bertindak penutup', icon: Sparkles },
   { value: 'spacer', label: 'Jarak', description: 'Atur ruang antar bagian', icon: MoveDown }
 ];
@@ -191,6 +193,14 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       whatsapp: '',
       buttonLabel: 'Konfirmasi melalui WhatsApp',
       buttonUrl: ''
+    },
+    bonus: {
+      heading: 'Bonus spesial untuk Anda',
+      title: 'Dapatkan bonus tambahan',
+      body: 'Jelaskan bonus yang akan diterima pelanggan setelah melakukan pembelian.',
+      imageUrl: '',
+      imageAlt: 'Visual bonus',
+      caption: ''
     },
     cta: {
       heading: 'Siap mulai bersama kami?',
@@ -774,6 +784,23 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
         </section>
       );
     }
+    case 'bonus':
+      return (
+        <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-6 shadow-sm md:p-8">
+          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_280px] md:items-center">
+            <div>
+              <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">Bonus</p>
+              <h2 className="mt-3 text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Bonus spesial untuk Anda')}</h2>
+              {asText(data.title) && <h3 className="mt-3 text-lg font-semibold">{asText(data.title)}</h3>}
+              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{asText(data.body, 'Jelaskan bonus yang akan diterima pelanggan setelah melakukan pembelian.')}</p>
+            </div>
+            <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)]">
+              {asText(data.imageUrl) ? <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual bonus')} className="aspect-[4/3] w-full object-cover" /> : <div className="flex aspect-[4/3] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Upload foto bonus dari pengaturan blok.</div>}
+              {asText(data.caption).trim() && <p className="px-3 py-2 text-xs leading-relaxed text-[var(--muted)]">{asText(data.caption)}</p>}
+            </div>
+          </div>
+        </section>
+      );
     case 'cta':
       return (
         <section className="rounded-2xl bg-[var(--accent)] p-7 text-white shadow-sm md:flex md:items-center md:justify-between md:gap-8 md:p-9">
@@ -1034,7 +1061,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const data = block.data || {};
   const patch = (values: Record<string, any>) => onChange({ ...data, ...values });
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
-  const hasHeadingColor = ['hero', 'text', 'features', 'pricing', 'faq', 'payment', 'cta'].includes(block.type);
+  const hasHeadingColor = ['hero', 'text', 'features', 'pricing', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero':
@@ -1095,6 +1122,8 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="FAQ (satu per baris, format: Pertanyaan | Jawaban)" value={faqItemsToText(normalizeFaqItems(data.items, []))} onChange={event => patch({ items: textToFaqItems(event.target.value) })} className="min-h-[200px]" /></div>;
     case 'payment':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Input label="CTA sebelum harga (opsional)" value={asText(data.ctaBeforePrice)} onChange={event => patch({ ctaBeforePrice: event.target.value })} placeholder="Contoh: Dapatkan harga promo hari ini" /><Input label="Harga coret (opsional)" value={asText(data.originalAmount)} onChange={event => patch({ originalAmount: event.target.value })} placeholder="Contoh: Rp 350.000" /><Input label="Nominal pembayaran" value={asText(data.amount)} onChange={event => patch({ amount: event.target.value })} placeholder="Contoh: Rp 250.000" /><Textarea label="Instruksi pembayaran" value={asText(data.instructions)} onChange={event => patch({ instructions: event.target.value })} /><Input label="Nomor rekening (opsional)" value={asText(data.accountNumber)} onChange={event => patch({ accountNumber: event.target.value })} /><Input label="WhatsApp konfirmasi (opsional)" value={asText(data.whatsapp)} onChange={event => patch({ whatsapp: event.target.value })} placeholder="62812xxxxxxx" /><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} /><ImageUploader label="QR Code pembayaran" value={asText(data.qrCode)} onChange={value => patch({ qrCode: value })} preservePng /><Input label="URL QR Code (opsional)" value={asText(data.qrCode).startsWith('data:') ? '' : asText(data.qrCode)} onChange={event => patch({ qrCode: event.target.value })} placeholder="https://.../qr.png" /></div>;
+    case 'bonus':
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Input label="Judul bonus" value={asText(data.title)} onChange={event => patch({ title: event.target.value })} placeholder="Contoh: Template tambahan gratis" /><Textarea label="Keterangan bonus" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} placeholder="Jelaskan isi dan manfaat bonus untuk pelanggan." /><ImageUploader label="Foto bonus (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><Input label="Alt foto" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} /><Textarea label="Caption foto (opsional)" value={asText(data.caption)} onChange={event => patch({ caption: event.target.value })} className="min-h-[90px]" /></div>;
     case 'cta':
       return <div className="space-y-4"><Input label="Judul CTA" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Deskripsi CTA" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} />{commonButtonFields}</div>;
     case 'spacer':
