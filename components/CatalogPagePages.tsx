@@ -693,7 +693,7 @@ function CatalogMobilePreview({ page }: { page: CatalogPage }) {
 
   const handlePointerDown = (event: React.PointerEvent<HTMLDivElement>) => {
     const target = event.target as Element | null;
-    if (event.button !== 0 || target?.closest('button')) return;
+    if (target?.closest('button')) return;
     const rect = previewRef.current?.getBoundingClientRect();
     if (!rect) return;
     try {
@@ -749,28 +749,31 @@ function CatalogMobilePreview({ page }: { page: CatalogPage }) {
           <button type="button" onClick={resetPosition} className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1.5 text-[10px] font-semibold text-[var(--muted)] hover:bg-[var(--surface-soft)]" aria-label="Kembalikan posisi preview">Reset</button>
         </div>
       </div>
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2">
-        <span className="text-[11px] font-semibold text-[var(--muted)]">Frame HP</span>
-        <div className="flex items-center gap-2" role="group" aria-label="Kontrol zoom preview">
-          <button type="button" onClick={() => changeZoom(-1)} disabled={zoom <= 0.6} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Perkecil preview">−</button>
-          <span className="w-10 text-center text-[11px] font-bold text-[var(--text)]">{zoomPercent}%</span>
-          <button type="button" onClick={() => changeZoom(1)} disabled={zoom >= 1} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Perbesar preview">+</button>
+      <div className="flex items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-2">
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-1.5" role="group" aria-label="Kontrol zoom frame HP">
+          <span className="truncate text-[10px] font-semibold text-[var(--muted)]">Frame HP</span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button type="button" onClick={() => changeZoom(-1)} disabled={zoom <= 0.6} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Perkecil preview">−</button>
+            <span className="w-9 text-center text-[11px] font-bold text-[var(--text)]">{zoomPercent}%</span>
+            <button type="button" onClick={() => changeZoom(1)} disabled={zoom >= 1} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Perbesar preview">+</button>
+          </div>
         </div>
-      </div>
-      <div className="flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2">
-        <span className="text-[11px] font-semibold text-[var(--muted)]">Isi layar</span>
-        <div className="flex items-center gap-2" role="group" aria-label="Kontrol zoom isi layar">
-          <button type="button" onClick={() => changeScreenZoom(-1)} disabled={screenZoom <= 0.8} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Perkecil isi layar">−</button>
-          <span className="w-10 text-center text-[11px] font-bold text-[var(--text)]">{screenZoomPercent}%</span>
-          <button type="button" onClick={() => changeScreenZoom(1)} disabled={screenZoom >= 1.4} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Perbesar isi layar">+</button>
+        <span className="h-6 w-px shrink-0 bg-[var(--border)]" aria-hidden="true" />
+        <div className="flex min-w-0 flex-1 items-center justify-between gap-1.5" role="group" aria-label="Kontrol zoom isi layar">
+          <span className="truncate text-[10px] font-semibold text-[var(--muted)]">Isi layar</span>
+          <div className="flex shrink-0 items-center gap-1.5">
+            <button type="button" onClick={() => changeScreenZoom(-1)} disabled={screenZoom <= 0.8} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Perkecil isi layar">−</button>
+            <span className="w-9 text-center text-[11px] font-bold text-[var(--text)]">{screenZoomPercent}%</span>
+            <button type="button" onClick={() => changeScreenZoom(1)} disabled={screenZoom >= 1.4} className="flex h-7 w-7 items-center justify-center rounded-lg border border-[var(--border)] bg-[var(--surface)] text-sm font-bold text-[var(--text)] hover:bg-[var(--surface-soft)] disabled:cursor-not-allowed disabled:opacity-40" aria-label="Perbesar isi layar">+</button>
+          </div>
         </div>
       </div>
       <div className="mx-auto overflow-hidden" style={{ width: `${phoneWidth * zoom}px`, height: `${phoneHeight * zoom}px` }}>
         <div className="w-[360px] rounded-[2.7rem] border-[10px] border-slate-950 bg-slate-950 p-1 shadow-2xl" style={{ height: `${phoneHeight}px`, transform: `scale(${zoom})`, transformOrigin: 'top left' }}>
           <div className="relative overflow-hidden rounded-[2.15rem] border border-slate-800 bg-[var(--app-bg)]">
             <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-5 w-24 -translate-x-1/2 rounded-full bg-slate-950" aria-hidden="true" />
-            <div className="h-[650px] overflow-auto overscroll-contain" onClick={event => { if ((event.target as HTMLElement).closest('a')) event.preventDefault(); }}>
-              <div className="min-h-full" style={{ width: `${100 / screenZoom}%`, zoom: screenZoom } as React.CSSProperties}>
+            <div className="flex h-[650px] flex-col items-center overflow-x-hidden overflow-y-auto overscroll-contain pt-8" onClick={event => { if ((event.target as HTMLElement).closest('a')) event.preventDefault(); }}>
+              <div className="min-h-full shrink-0" style={{ width: '100%', zoom: screenZoom } as React.CSSProperties}>
                 <PublicCatalogPageView client={null} pageOverride={page} embedded />
               </div>
             </div>
