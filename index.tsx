@@ -64,7 +64,9 @@ import {
   Image as ImageIcon,
   Moon,
   Sun,
-  MessageCircle
+  MessageCircle,
+  PanelLeftClose,
+  PanelLeftOpen
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -713,95 +715,81 @@ const Login: React.FC<{
   );
 };
 
-const Sidebar: React.FC<{ branding: Branding; onLogout: () => void; isOpen: boolean; onClose: () => void }> = ({ branding, onLogout, isOpen, onClose }) => {
+const Sidebar: React.FC<{
+  branding: Branding;
+  onLogout: () => void;
+  isOpen: boolean;
+  onClose: () => void;
+  isCollapsed: boolean;
+  onToggleCollapse: () => void;
+}> = ({ branding, onLogout, isOpen, onClose, isCollapsed, onToggleCollapse }) => {
   const location = useLocation();
-  
+  const labelClassName = isCollapsed ? 'md:hidden' : '';
+  const linkClassName = (active: boolean) => `flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium transition-all ${isCollapsed ? 'md:justify-center md:px-2' : ''} ${active ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'}`;
+  const closeOnMobile = () => { if (window.innerWidth < 768) onClose(); };
+
   return (
     <>
       {isOpen && (
-        <div 
-          className="fixed inset-0 bg-black/40 z-[100] md:hidden backdrop-blur-sm transition-opacity"
+        <div
+          className="fixed inset-0 z-[100] bg-black/40 backdrop-blur-sm transition-opacity md:hidden"
           onClick={onClose}
         />
       )}
-      
-      <div className={`
-        fixed inset-y-0 left-0 z-[101] w-64 bg-[var(--surface)] border-r border-[var(--border)] flex flex-col transition-transform duration-300 ease-in-out
-        ${isOpen ? 'translate-x-0' : '-translate-x-full'}
-        md:relative md:translate-x-0 md:flex
-      `}>
-        <div className="p-5 border-b border-[var(--border)] relative flex items-center justify-between min-h-[84px]">
-          <div className="flex items-center">
-            <img src={logoUtama} className="h-10 w-auto max-w-[180px] object-contain" alt="Logo Utama" />
+
+      <div className={`fixed inset-y-0 left-0 z-[101] flex w-64 flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-[width,transform] duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 md:flex ${isCollapsed ? 'md:w-[76px]' : 'md:w-64'}`}>
+        <div className={`relative flex min-h-[84px] items-center justify-between border-b border-[var(--border)] p-5 ${isCollapsed ? 'md:flex-col md:gap-1 md:px-2 md:py-3' : ''}`}>
+          <div className="flex min-w-0 items-center justify-center">
+            <img src={logoUtama} className={`h-10 w-auto object-contain ${isCollapsed ? 'md:h-8 md:max-w-[42px]' : 'max-w-[180px]'}`} alt="Logo Utama" />
           </div>
-          <button onClick={onClose} aria-label="Tutup navigasi" className="md:hidden p-2 text-[var(--muted)] hover:bg-[var(--surface-soft)] rounded-lg">
-            <X size={20} />
-          </button>
+          <div className="flex items-center gap-1">
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              aria-label={isCollapsed ? 'Perluas sidebar navigasi' : 'Lipat sidebar navigasi'}
+              aria-expanded={!isCollapsed}
+              title={isCollapsed ? 'Perluas sidebar navigasi' : 'Lipat sidebar navigasi'}
+              className={`hidden rounded-lg p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)] md:flex ${isCollapsed ? 'md:mx-auto' : ''}`}
+            >
+              {isCollapsed ? <PanelLeftOpen size={18} /> : <PanelLeftClose size={18} />}
+            </button>
+            <button type="button" onClick={onClose} aria-label="Tutup navigasi" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface-soft)] md:hidden">
+              <X size={20} />
+            </button>
+          </div>
         </div>
-        
-        <nav className="p-3 flex-1 space-y-1">
-          <p className="px-3 pt-3 pb-2 text-[10px] uppercase tracking-[0.18em] font-semibold text-[var(--muted)]">Workspace</p>
-          <Link 
-            to="/admin" 
-            onClick={() => { if(window.innerWidth < 768) onClose(); }}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname === '/admin' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
-          >
-            <LayoutGrid size={18} /> Semua Space
+
+        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+          <p className={`px-3 pb-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)] ${labelClassName}`}>Workspace</p>
+          <Link to="/admin" onClick={closeOnMobile} className={linkClassName(location.pathname === '/admin')} title="Semua Space">
+            <LayoutGrid size={18} /><span className={labelClassName}>Semua Space</span>
           </Link>
-          <Link
-            to="/admin/products"
-            onClick={() => { if(window.innerWidth < 768) onClose(); }}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname === '/admin/products' || location.pathname.startsWith('/admin/course/') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
-          >
-            <BookOpen size={18} /> Tutorial Produk
+          <Link to="/admin/products" onClick={closeOnMobile} className={linkClassName(location.pathname === '/admin/products' || location.pathname.startsWith('/admin/course/'))} title="Tutorial Produk">
+            <BookOpen size={18} /><span className={labelClassName}>Tutorial Produk</span>
           </Link>
-          <Link
-            to="/admin/classes"
-            onClick={() => { if(window.innerWidth < 768) onClose(); }}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname.startsWith('/admin/classes') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
-          >
-            <Video size={18} /> {RECORDED_CLASS_SPACE_LABEL}
+          <Link to="/admin/classes" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/classes'))} title={RECORDED_CLASS_SPACE_LABEL}>
+            <Video size={18} /><span className={labelClassName}>{RECORDED_CLASS_SPACE_LABEL}</span>
           </Link>
-          <Link
-            to="/admin/forms"
-            onClick={() => { if(window.innerWidth < 768) onClose(); }}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname.startsWith('/admin/forms') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
-          >
-            <ClipboardList size={18} /> {FORM_MAKER_SPACE_LABEL}
+          <Link to="/admin/forms" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/forms'))} title={FORM_MAKER_SPACE_LABEL}>
+            <ClipboardList size={18} /><span className={labelClassName}>{FORM_MAKER_SPACE_LABEL}</span>
           </Link>
-          <Link
-            to="/admin/landing-pages"
-            onClick={() => { if(window.innerWidth < 768) onClose(); }}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname.startsWith('/admin/landing-pages') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
-          >
-            <Layout size={18} /> {LANDING_PAGE_SPACE_LABEL}
+          <Link to="/admin/landing-pages" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/landing-pages'))} title={LANDING_PAGE_SPACE_LABEL}>
+            <Layout size={18} /><span className={labelClassName}>{LANDING_PAGE_SPACE_LABEL}</span>
           </Link>
-          <Link
-            to="/admin/qna"
-            onClick={() => { if(window.innerWidth < 768) onClose(); }}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname.startsWith('/admin/qna') ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
-          >
-            <MessageCircle size={18} /> {QNA_SPACE_LABEL}
+          <Link to="/admin/qna" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/qna'))} title={QNA_SPACE_LABEL}>
+            <MessageCircle size={18} /><span className={labelClassName}>{QNA_SPACE_LABEL}</span>
           </Link>
-          <Link 
-            to="/analytics" 
-            onClick={() => { if(window.innerWidth < 768) onClose(); }}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname === '/analytics' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
-          >
-            <BarChart2 size={18} /> Analitik Pengunjung
+          <Link to="/analytics" onClick={closeOnMobile} className={linkClassName(location.pathname === '/analytics')} title="Analitik Pengunjung">
+            <BarChart2 size={18} /><span className={labelClassName}>Analitik Pengunjung</span>
           </Link>
-          <Link 
-            to="/settings" 
-            onClick={() => { if(window.innerWidth < 768) onClose(); }}
-            className={`flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all ${location.pathname === '/settings' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:text-[var(--text)] hover:bg-[var(--surface-soft)]'}`}
-          >
-            <SettingsIcon size={18} /> Settings
+          <Link to="/settings" onClick={closeOnMobile} className={linkClassName(location.pathname === '/settings')} title="Settings">
+            <SettingsIcon size={18} /><span className={labelClassName}>Settings</span>
           </Link>
         </nav>
-        
-        <div className="p-4 border-t border-[var(--border)]">
-          <Button variant="secondary" className="w-full justify-start h-11 text-sm" onClick={() => { onLogout(); onClose(); }}>
-            <LogOut size={18} className="mr-2" /> Logout
+
+        <div className={`border-t border-[var(--border)] p-4 ${isCollapsed ? 'md:p-3' : ''}`}>
+          <Button variant="secondary" className={`h-11 w-full text-sm ${isCollapsed ? 'md:justify-center md:px-2' : 'justify-start'}`} onClick={() => { onLogout(); onClose(); }} title="Logout">
+            <LogOut size={18} className={isCollapsed ? 'md:mr-0' : 'mr-2'} /> <span className={labelClassName}>Logout</span>
           </Button>
         </div>
       </div>
@@ -814,14 +802,18 @@ const AdminLayout: React.FC<{
   branding: Branding; 
   isSidebarOpen: boolean; 
   setIsSidebarOpen: (open: boolean) => void;
+  isSidebarCollapsed: boolean;
+  setIsSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   onLogout: () => void;
-}> = ({ children, branding, isSidebarOpen, setIsSidebarOpen, onLogout }) => (
+}> = ({ children, branding, isSidebarOpen, setIsSidebarOpen, isSidebarCollapsed, setIsSidebarCollapsed, onLogout }) => (
   <div className="flex min-h-screen">
     <Sidebar 
       branding={branding} 
       onLogout={onLogout} 
       isOpen={isSidebarOpen} 
       onClose={() => setIsSidebarOpen(false)} 
+      isCollapsed={isSidebarCollapsed}
+      onToggleCollapse={() => setIsSidebarCollapsed(current => !current)}
     />
     <main className="flex-1 min-w-0 bg-[var(--app-bg)] flex flex-col">
       <header className="md:hidden bg-[var(--surface)] border-b border-[var(--border)] px-4 flex items-center justify-between sticky top-0 z-30 h-16">
@@ -1799,6 +1791,7 @@ const App: React.FC = () => {
   const [branding, setBranding] = useState<Branding>(defaultBranding);
   const [syncing, setSyncing] = useState(false);
   const [isSidebarOpen, setIsSidebarOpen] = useState(false);
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(() => typeof window !== 'undefined' && window.innerWidth < 1800);
   const isSyncingRef = useRef(false);
   const lastLocalUpdateRef = useRef<number>(0);
   const isAdmin = authStatus === 'admin';
@@ -2098,6 +2091,8 @@ const App: React.FC = () => {
         onLogout={() => { void handleLogout(); }}
         isSidebarOpen={isSidebarOpen}
         setIsSidebarOpen={setIsSidebarOpen}
+        isSidebarCollapsed={isSidebarCollapsed}
+        setIsSidebarCollapsed={setIsSidebarCollapsed}
       >
         {content}
       </AdminLayout>
