@@ -223,7 +223,12 @@ const qnaCardFilePart = (value: unknown) => qnaCardText(value)
   .replace(/^-+|-+$/g, '')
   .slice(0, 70) || 'qna';
 
-const createQnaCardImage = async (question: QnaQuestion, session: QnaSession) => {
+type QnaCardOptions = {
+  includeAnswer: boolean;
+  answer: string;
+};
+
+const createQnaCardImage = async (question: QnaQuestion, session: QnaSession, options: QnaCardOptions) => {
   const canvas = document.createElement('canvas');
   canvas.width = 1200;
   canvas.height = 1350;
@@ -236,27 +241,32 @@ const createQnaCardImage = async (question: QnaQuestion, session: QnaSession) =>
     navy: '#173b5e',
     muted: '#65798d',
     border: '#d8e3ec',
-    soft: '#e6eef5',
-    teal: '#0f766e',
-    amber: '#b45309'
+    teal: '#0f766e'
   };
   const cardX = 72;
   const cardWidth = canvas.width - cardX * 2;
   const questionText = qnaCardText(question.body) || 'Pertanyaan tidak tersedia.';
-  const answerText = qnaCardText(question.answer) || 'Belum ada jawaban moderator.';
+  const answerText = options.includeAnswer ? qnaCardText(options.answer) || 'Belum ada jawaban moderator.' : '';
+  const questionContentX = cardX + 110;
   measurementContext.font = '500 34px Arial, sans-serif';
-  const questionLines = wrapQnaCanvasText(measurementContext, questionText, cardWidth - 140, 12);
-  const answerLines = wrapQnaCanvasText(measurementContext, answerText, cardWidth - 140, 8);
+  const questionLines = wrapQnaCanvasText(measurementContext, questionText, cardWidth - 180, 12);
+  const answerLines = answerText ? wrapQnaCanvasText(measurementContext, answerText, cardWidth - 140, 8) : [];
+  measurementContext.font = '700 30px Arial, sans-serif';
+  const nameLines = wrapQnaCanvasText(measurementContext, qnaCardText(question.displayName) || 'Peserta Q&A', cardWidth - 140, 2);
   measurementContext.font = '700 52px Arial, sans-serif';
   const titleLines = wrapQnaCanvasText(measurementContext, qnaCardText(session.title) || 'Sesi Q&A Arunika', cardWidth, 2);
-  const cardTop = titleLines.length > 1 ? 360 : 300;
-  const questionTopOffset = 176;
+  const cardTop = titleLines.length > 1 ? 310 : 250;
+  const nameTopOffset = 112;
+  const nameLineHeight = 40;
+  const questionTopOffset = nameTopOffset + nameLines.length * nameLineHeight + 48;
   const questionLineHeight = 52;
-  const answerLabelOffset = questionTopOffset + questionLines.length * questionLineHeight + 48;
-  const answerTopOffset = answerLabelOffset + 52;
+  const answerLabelOffset = answerText ? questionTopOffset + questionLines.length * questionLineHeight + 48 : 0;
+  const answerTopOffset = answerText ? answerLabelOffset + 52 : 0;
   const answerLineHeight = 46;
-  const metadataOffset = answerTopOffset + answerLines.length * answerLineHeight + 70;
-  const cardHeight = Math.max(670, metadataOffset + 82);
+  const metadataOffset = answerText
+    ? answerTopOffset + answerLines.length * answerLineHeight + 70
+    : questionTopOffset + questionLines.length * questionLineHeight + 75;
+  const cardHeight = Math.max(500, metadataOffset + 82);
   const footerY = cardTop + cardHeight + 130;
   canvas.height = footerY + 60;
   const context = canvas.getContext('2d');
@@ -276,14 +286,9 @@ const createQnaCardImage = async (question: QnaQuestion, session: QnaSession) =>
   context.fillStyle = colors.navy;
   context.font = '700 24px Arial, sans-serif';
   context.fillText('ARUNIKA LEARNING HUB', 204, 92);
-  if (qnaCardText(session.eventName)) {
-    context.fillStyle = colors.muted;
-    context.font = '600 20px Arial, sans-serif';
-    context.fillText(qnaCardText(session.eventName).slice(0, 72), cardX, 170);
-  }
   context.fillStyle = colors.navy;
   context.font = '700 52px Arial, sans-serif';
-  titleLines.forEach((line, index) => context.fillText(line, cardX, 238 + index * 62));
+  titleLines.forEach((line, index) => context.fillText(line, cardX, 190 + index * 62));
 
   drawQnaCanvasRoundedRect(context, cardX, cardTop, cardWidth, cardHeight, 34);
   context.fillStyle = colors.surface;
@@ -292,55 +297,34 @@ const createQnaCardImage = async (question: QnaQuestion, session: QnaSession) =>
   context.lineWidth = 3;
   context.stroke();
 
-  const categoryLabel = qnaCardText(question.category) || 'Umum';
-  const statusLabel = questionStatusLabel(question.status);
-  const categoryWidth = Math.min(260, Math.max(142, 42 + categoryLabel.length * 13));
-  const statusWidth = Math.min(260, Math.max(160, 42 + statusLabel.length * 11));
-  drawQnaCanvasRoundedRect(context, cardX + 70, cardTop + 48, categoryWidth, 42, 18);
-  context.fillStyle = colors.soft;
-  context.fill();
   context.fillStyle = colors.navy;
-  context.font = '700 18px Arial, sans-serif';
-  context.fillText(categoryLabel.slice(0, 24), cardX + 91, cardTop + 76);
-  drawQnaCanvasRoundedRect(context, cardX + 88 + categoryWidth, cardTop + 48, statusWidth, 42, 18);
-  context.fillStyle = question.status === 'answered' ? '#d9f1ea' : colors.soft;
-  context.fill();
-  context.fillStyle = question.status === 'answered' ? colors.teal : colors.muted;
-  context.font = '700 18px Arial, sans-serif';
-  context.fillText(statusLabel.slice(0, 24), cardX + 109 + categoryWidth, cardTop + 76);
-
+  context.font = '700 30px Arial, sans-serif';
+  nameLines.forEach((line, index) => context.fillText(line, cardX + 70, cardTop + nameTopOffset + index * nameLineHeight));
   context.fillStyle = colors.teal;
   context.font = '700 86px Georgia, serif';
-  context.fillText('“', cardX + 54, cardTop + 144);
+  context.fillText('“', cardX + 46, cardTop + questionTopOffset + 12);
   context.fillStyle = colors.navy;
   context.font = '500 34px Arial, sans-serif';
-  questionLines.forEach((line, index) => context.fillText(line, cardX + 70, cardTop + questionTopOffset + index * questionLineHeight));
+  questionLines.forEach((line, index) => context.fillText(line, questionContentX, cardTop + questionTopOffset + index * questionLineHeight));
 
-  context.strokeStyle = colors.border;
-  context.lineWidth = 2;
-  context.beginPath();
-  context.moveTo(cardX + 70, cardTop + answerLabelOffset - 24);
-  context.lineTo(cardX + cardWidth - 70, cardTop + answerLabelOffset - 24);
-  context.stroke();
-  context.fillStyle = colors.muted;
-  context.font = '700 19px Arial, sans-serif';
-  context.fillText('Jawaban moderator', cardX + 70, cardTop + answerLabelOffset + 10);
-  context.fillStyle = colors.navy;
-  context.font = '500 29px Arial, sans-serif';
-  answerLines.forEach((line, index) => context.fillText(line, cardX + 70, cardTop + answerTopOffset + index * answerLineHeight));
+  if (answerText) {
+    context.strokeStyle = colors.border;
+    context.lineWidth = 2;
+    context.beginPath();
+    context.moveTo(cardX + 70, cardTop + answerLabelOffset - 24);
+    context.lineTo(cardX + cardWidth - 70, cardTop + answerLabelOffset - 24);
+    context.stroke();
+    context.fillStyle = colors.muted;
+    context.font = '700 19px Arial, sans-serif';
+    context.fillText('Jawaban moderator', cardX + 70, cardTop + answerLabelOffset + 10);
+    context.fillStyle = colors.navy;
+    context.font = '500 29px Arial, sans-serif';
+    answerLines.forEach((line, index) => context.fillText(line, cardX + 70, cardTop + answerTopOffset + index * answerLineHeight));
+  }
 
-  context.fillStyle = colors.navy;
-  context.font = '700 28px Arial, sans-serif';
-  context.fillText(qnaCardText(question.displayName) || 'Peserta Q&A', cardX + 70, cardTop + metadataOffset);
   context.fillStyle = colors.muted;
   context.font = '500 21px Arial, sans-serif';
-  const metadata = `${question.upvotes} vote · ${formatDate(question.createdAt)}`;
-  context.fillText(metadata, cardX + 70, cardTop + metadataOffset + 38);
-  context.fillStyle = colors.amber;
-  context.font = '700 22px Arial, sans-serif';
-  context.textAlign = 'right';
-  context.fillText(question.status === 'answered' ? 'TERJAWAB' : 'Q&A', cardX + cardWidth - 70, cardTop + metadataOffset + 38);
-  context.textAlign = 'start';
+  context.fillText(formatDate(question.createdAt), cardX + 70, cardTop + metadataOffset);
 
   context.fillStyle = colors.muted;
   context.font = '600 22px Arial, sans-serif';
@@ -355,6 +339,8 @@ const QnaCardModal: React.FC<{
   session: QnaSession;
   onClose: () => void;
 }> = ({ question, session, onClose }) => {
+  const [includeAnswer, setIncludeAnswer] = useState(() => Boolean(qnaCardText(question.answer)));
+  const [answerDraft, setAnswerDraft] = useState(question.answer);
   const [imageUrl, setImageUrl] = useState('');
   const [isGenerating, setIsGenerating] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -369,10 +355,16 @@ const QnaCardModal: React.FC<{
 
   useEffect(() => {
     let isCancelled = false;
+    const initialOptions: QnaCardOptions = {
+      includeAnswer: Boolean(qnaCardText(question.answer)),
+      answer: question.answer
+    };
+    setIncludeAnswer(initialOptions.includeAnswer);
+    setAnswerDraft(initialOptions.answer);
     setImageUrl('');
     setIsGenerating(true);
     setError(null);
-    void createQnaCardImage(question, session)
+    void createQnaCardImage(question, session, initialOptions)
       .then(url => {
         if (isCancelled) return;
         setImageUrl(url);
@@ -384,7 +376,22 @@ const QnaCardModal: React.FC<{
         setIsGenerating(false);
       });
     return () => { isCancelled = true; };
-  }, [question, session]);
+  }, [question.id, question.answer, session.id, session.title]);
+
+  const generatePreview = () => {
+    setImageUrl('');
+    setIsGenerating(true);
+    setError(null);
+    void createQnaCardImage(question, session, { includeAnswer, answer: answerDraft })
+      .then(url => {
+        setImageUrl(url);
+        setIsGenerating(false);
+      })
+      .catch(generationError => {
+        setError(generationError instanceof Error ? generationError.message : 'Card Q&A gagal dibuat.');
+        setIsGenerating(false);
+      });
+  };
 
   const handleDownload = () => {
     if (!imageUrl) return;
@@ -415,18 +422,38 @@ const QnaCardModal: React.FC<{
           <div className="min-w-0">
             <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Card Q&A otomatis</p>
             <h2 id="arunika-qna-card-title" className="mt-2 text-xl font-bold">{question.displayName || 'Peserta Q&A'}</h2>
-            <p className="mt-1 text-sm text-[var(--muted)]">{session.title} · {questionStatusLabel(question.status)}</p>
+            <p className="mt-1 text-sm text-[var(--muted)]">{session.title}</p>
           </div>
           <button type="button" aria-label="Tutup card Q&A" onClick={onClose} className="rounded-xl p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"><X size={19} /></button>
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+          <div className="mb-5 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+            <p className="text-xs font-semibold text-[var(--muted)]">Isi card Q&A</p>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2">
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm transition-colors ${!includeAnswer ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] bg-[var(--surface)]'}`}>
+                <input type="radio" name={`qna-card-content-${question.id}`} checked={!includeAnswer} onChange={() => { setIncludeAnswer(false); setImageUrl(''); }} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />
+                <span><span className="block font-semibold">Hanya pertanyaan</span><span className="mt-1 block text-xs text-[var(--muted)]">Tanpa jawaban moderator.</span></span>
+              </label>
+              <label className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3 text-sm transition-colors ${includeAnswer ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] bg-[var(--surface)]'}`}>
+                <input type="radio" name={`qna-card-content-${question.id}`} checked={includeAnswer} onChange={() => { setIncludeAnswer(true); setImageUrl(''); }} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />
+                <span><span className="block font-semibold">Dengan jawaban</span><span className="mt-1 block text-xs text-[var(--muted)]">Sertakan jawaban moderator di bawah pertanyaan.</span></span>
+              </label>
+            </div>
+            {includeAnswer && <Textarea label="Jawaban yang ditampilkan" value={answerDraft} onChange={event => { setAnswerDraft(event.target.value); setImageUrl(''); }} className="mt-3 min-h-[100px]" placeholder="Tulis jawaban untuk card ini..." />}
+            <div className="mt-3 flex flex-wrap items-center justify-between gap-3">
+              <p className="text-xs leading-relaxed text-[var(--muted)]">Preview dibuat setelah Anda memilih isi card.</p>
+              <Button type="button" variant="secondary" icon={ImagePlus} onClick={generatePreview} isLoading={isGenerating}>Buat card</Button>
+            </div>
+          </div>
           {isGenerating ? (
             <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Membuat card Q&A...</div>
           ) : error ? (
             <div className="flex min-h-80 items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-5 text-center text-sm text-[var(--danger-text)]">{error}</div>
           ) : imageUrl ? (
             <img src={imageUrl} alt={`Card Q&A ${question.displayName || 'peserta'} untuk ${session.title}`} className="mx-auto w-full max-w-lg rounded-xl border border-[var(--border)] shadow-sm" />
-          ) : null}
+          ) : (
+            <div className="flex min-h-80 items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-5 text-center text-sm text-[var(--muted)]">Pilih isi card lalu tekan “Buat card”.</div>
+          )}
         </div>
         <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] p-4 sm:p-5">
           <Button type="button" variant="secondary" onClick={onClose}>Tutup</Button>
