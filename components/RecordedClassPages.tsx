@@ -40,6 +40,7 @@ import {
   Module,
   PublicCourseQuiz,
   QuizAttempt,
+  QuizAnswerReview,
   QuizQuestion,
   QuizQuestionType,
   QuizSubmissionResult
@@ -114,6 +115,9 @@ const mapAttemptRow = (row: any): QuizAttempt => ({
   passed: row.passed === true,
   needsReview: row.needs_review === true,
   classFeedback: row.class_feedback || null,
+  reviewedAnswers: row.reviewed_answers && typeof row.reviewed_answers === 'object' && !Array.isArray(row.reviewed_answers) ? row.reviewed_answers : {},
+  reviewFeedback: row.review_feedback || null,
+  reviewedAt: row.reviewed_at || null,
   attemptNumber: Number(row.attempt_number || 1),
   submittedAt: row.submitted_at
 });
@@ -142,6 +146,9 @@ const databaseErrorMessage = (error: any) => {
     || message.includes('feedback_enabled')
     || message.includes('overall_feedback_enabled')
     || message.includes('class_feedback')
+    || message.includes('reviewed_answers')
+    || message.includes('review_feedback')
+    || message.includes('reviewed_at')
   ) {
     return 'Database kelas recording belum siap. Jalankan migration terbaru untuk fitur post-test dan feedback.';
   }
@@ -189,6 +196,251 @@ const plainText = (value: unknown) => String(value ?? '')
   .replace(/[ \t]+\n/g, '\n')
   .replace(/\n{3,}/g, '\n\n')
   .trim();
+
+type QuizAnswerReviewEntry = {
+  id: string;
+  number: number;
+  prompt: string;
+  answer: string;
+  rawAnswer: string;
+  type: QuizQuestionType | string;
+  correct: boolean | null;
+  correctAnswer: string;
+  feedback: string;
+  points: number;
+  question: QuizQuestion | null;
+};
+
+const normalizedQuizValue = (value: unknown) => plainText(value).trim().toLowerCase();
+
+const automaticAnswerCorrect = (question: QuizQuestion, rawAnswer: string): boolean | null => {
+  if (question.type === 'long_answer') return null;
+  const expectedAnswer = normalizedQuizValue(question.correctAnswer);
+  if (!expectedAnswer) return rawAnswer ? null : false;
+  return normalizedQuizValue(rawAnswer) === expectedAnswer;
+};
+
+const buildQuizAnswerEntries = (attempt: QuizAttempt, quiz: CourseQuiz | null): QuizAnswerReviewEntry[] => {
+  const answers = attempt.answers || {};
+  const storedReviews = attempt.reviewedAnswers || {};
+  const knownQuestionIds = new Set<string>();
+  const entries: QuizAnswerReviewEntry[] = [];
+
+  (quiz?.questions || []).forEach((question, index) => {
+    knownQuestionIds.add(question.id);
+    const rawAnswer = String(answers[question.id] ?? '').trim();
+    const storedReview = storedReviews[question.id];
+    entries.push({
+      id: question.id,
+      number: index + 1,
+      prompt: plainText(question.prompt) || `Pertanyaan ${index + 1}`,
+      answer: plainText(rawAnswer) || 'Tidak ada jawaban',
+      rawAnswer,
+      type: question.type || 'multiple_choice',
+      correct: storedReview && typeof storedReview.correct === 'boolean'
+        ? storedReview.correct
+        : automaticAnswerCorrect(question, rawAnswer),
+      correctAnswer: plainText(question.correctAnswer),
+      feedback: plainText(storedReview?.feedback),
+      points: Math.max(0, Number(question.points) || 0),
+      question
+    });
+  });
+
+  Object.entries(answers).forEach(([answerId, value], index) => {
+    if (knownQuestionIds.has(answerId)) return;
+    const rawAnswer = String(value ?? '').trim();
+    const storedReview = storedReviews[answerId];
+    entries.push({
+      id: answerId,
+      number: entries.length + 1,
+      prompt: `Pertanyaan tambahan ${index + 1}`,
+      answer: plainText(rawAnswer) || 'Tidak ada jawaban',
+      rawAnswer,
+      type: 'long_answer',
+      correct: storedReview && typeof storedReview.correct === 'boolean' ? storedReview.correct : null,
+      correctAnswer: '',
+      feedback: plainText(storedReview?.feedback),
+      points: 0,
+      question: null
+    });
+  });
+
+  return entries;
+};
+
+const calculateReviewedAttempt = (
+  attempt: QuizAttempt,
+  quiz: CourseQuiz | null,
+  reviews: Record<string, QuizAnswerReview>
+) => {
+  const entries = buildQuizAnswerEntries({ ...attempt, reviewedAnswers: reviews }, quiz);
+  let totalPoints = 0;
+  let earnedPoints = 0;
+  let needsReview = false;
+
+  entries.forEach(entry => {
+    if (!entry.question) return;
+    totalPoints += entry.points;
+    if (entry.correct === null) needsReview = true;
+    if (entry.correct === true) earnedPoints += entry.points;
+  });
+
+  const score = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
+  return {
+    score,
+    needsReview,
+    passed: !needsReview && score >= (quiz?.passingScore ?? 0)
+  };
+};
+
+const reviewStatusLabel = (correct: boolean | null) => {
+  if (correct === true) return 'Benar';
+  if (correct === false) return 'Salah';
+  return 'Menunggu review';
+};
+
+const reportText = (value: unknown, fallback = '—') => plainText(value) || fallback;
+
+const pdfEscape = (value: unknown) => reportText(value, '')
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^\x20-\x7E]/g, '?')
+  .replace(/\\/g, '\\\\')
+  .replace(/\(/g, '\\(')
+  .replace(/\)/g, '\\)');
+
+const wrapReportText = (value: unknown, maxLength = 88) => {
+  const text = pdfEscape(value);
+  if (!text) return ['—'];
+  const lines: string[] = [];
+  text.split(/\r?\n/).forEach(paragraph => {
+    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      lines.push('');
+      return;
+    }
+    let line = '';
+    words.forEach(word => {
+      const candidate = line ? `${line} ${word}` : word;
+      if (candidate.length <= maxLength || !line) line = candidate;
+      else {
+        lines.push(line);
+        line = word;
+      }
+    });
+    if (line) lines.push(line);
+  });
+  return lines.length ? lines : ['—'];
+};
+
+const createQuizReportPdf = (attempt: QuizAttempt, quiz: CourseQuiz | null, courseTitle: string) => {
+  const lines: Array<{ text: string; size?: number; gapAfter?: number }> = [];
+  const add = (text: unknown, size = 10, gapAfter = 0) => wrapReportText(text).forEach(line => lines.push({ text: line, size, gapAfter }));
+  const addLabel = (label: string, value: unknown) => add(`${label}: ${reportText(value)}`);
+
+  lines.push({ text: 'RAPORT PENILAIAN POST-TEST', size: 16, gapAfter: 8 });
+  add(`Kelas: ${reportText(courseTitle)}`);
+  addLabel('Peserta', attempt.participantName);
+  addLabel('Email', attempt.participantEmail);
+  addLabel('Percobaan', `#${attempt.attemptNumber}`);
+  addLabel('Waktu submit', attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString('id-ID') : '—');
+  addLabel('Nilai', `${attempt.score}/100`);
+  addLabel('Status', attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum lulus');
+  if (attempt.reviewedAt) addLabel('Direview', new Date(attempt.reviewedAt).toLocaleString('id-ID'));
+  if (attempt.reviewFeedback) {
+    add('CATATAN KOREKTOR', 11, 2);
+    add(attempt.reviewFeedback, 10, 6);
+  }
+  if (attempt.classFeedback) {
+    add('FEEDBACK PESERTA', 11, 2);
+    add(attempt.classFeedback, 10, 6);
+  }
+  add('DETAIL JAWABAN', 11, 4);
+
+  buildQuizAnswerEntries(attempt, quiz).forEach(entry => {
+    add(`${entry.number}. ${entry.prompt}`, 10, 1);
+    add(`Jawaban peserta: ${entry.answer}`, 9);
+    if (entry.correctAnswer) add(`Jawaban kunci: ${entry.correctAnswer}`, 9);
+    add(`Hasil: ${reviewStatusLabel(entry.correct)}`, 9);
+    if (entry.feedback) add(`Feedback korektor: ${entry.feedback}`, 9);
+    lines.push({ text: '', size: 9, gapAfter: 3 });
+  });
+
+  const pageHeight = 842;
+  const pageWidth = 595;
+  const marginX = 46;
+  const marginTop = 52;
+  const lineHeight = 14;
+  const pages: Array<Array<{ text: string; size?: number; gapAfter?: number }>> = [];
+  let page: Array<{ text: string; size?: number; gapAfter?: number }> = [];
+  let usedHeight = marginTop;
+  lines.forEach(line => {
+    const height = lineHeight + (line.gapAfter || 0);
+    if (page.length && usedHeight + height > pageHeight - 48) {
+      pages.push(page);
+      page = [];
+      usedHeight = marginTop;
+    }
+    page.push(line);
+    usedHeight += height;
+  });
+  if (page.length || pages.length === 0) pages.push(page);
+
+  const pagesObject = 2;
+  const fontObject = 3;
+  const objects: string[] = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+  ];
+  const catalogObject = 1;
+  while (objects.length < fontObject - 1) objects.push('');
+  const pageObjectIds: number[] = [];
+  const contentObjectIds: number[] = [];
+  pages.forEach(() => {
+    pageObjectIds.push(objects.length + 1);
+    objects.push('');
+    contentObjectIds.push(objects.length + 1);
+    objects.push('');
+  });
+  pages.forEach((pageLines, pageIndex) => {
+    const content = pageLines.map((line, index) => {
+      const y = pageHeight - marginTop - index * lineHeight;
+      const size = line.size || 10;
+      return `BT /F1 ${size} Tf 1 0 0 1 ${marginX} ${y} Tm (${pdfEscape(line.text)}) Tj ET`;
+    }).join('\n');
+    objects[pageObjectIds[pageIndex] - 1] = `<< /Type /Page /Parent ${pagesObject} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObject} 0 R >> >> /Contents ${contentObjectIds[pageIndex]} 0 R >>`;
+    objects[contentObjectIds[pageIndex] - 1] = `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
+  });
+  objects[pagesObject - 1] = `<< /Type /Pages /Kids [${pageObjectIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
+
+  let pdf = '%PDF-1.4\n%Arunika\n';
+  const offsets = [0];
+  objects.forEach((object, index) => {
+    offsets[index + 1] = pdf.length;
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xrefOffset = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
+  for (let index = 1; index <= objects.length; index += 1) {
+    pdf += `${String(offsets[index]).padStart(10, '0')} 00000 n \n`;
+  }
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogObject} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  return new Blob([pdf], { type: 'application/pdf' });
+};
+
+const downloadQuizReport = (attempt: QuizAttempt, quiz: CourseQuiz | null, courseTitle: string) => {
+  const blob = createQuizReportPdf(attempt, quiz, courseTitle);
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = `raport-post-test-${reviewFilePart(attempt.participantName)}.pdf`;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+};
 
 const drawCanvasRoundedRect = (context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) => {
   const safeRadius = Math.min(radius, width / 2, height / 2);
@@ -537,198 +789,151 @@ const AnswerReviewModal: React.FC<{
   quiz: CourseQuiz | null;
   overallFeedback: ClassFeedbackSubmission | null;
   onClose: () => void;
-}> = ({ attempt, quiz, overallFeedback, onClose }) => {
+  onSave: (reviews: Record<string, QuizAnswerReview>, reviewFeedback: string | null) => Promise<void>;
+  onDownloadReport: () => void;
+}> = ({ attempt, quiz, overallFeedback, onClose, onSave, onDownloadReport }) => {
+  const createInitialReviews = useCallback(() => buildQuizAnswerEntries(attempt, quiz).reduce<Record<string, QuizAnswerReview>>((reviews, entry) => {
+    reviews[entry.id] = { correct: entry.correct, feedback: entry.feedback };
+    return reviews;
+  }, {}), [attempt, quiz]);
+  const [draftReviews, setDraftReviews] = useState<Record<string, QuizAnswerReview>>(createInitialReviews);
+  const [draftReviewFeedback, setDraftReviewFeedback] = useState(attempt.reviewFeedback || '');
+  const [isSaving, setIsSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  const [saveSuccess, setSaveSuccess] = useState(false);
+
+  useEffect(() => {
+    setDraftReviews(createInitialReviews());
+    setDraftReviewFeedback(attempt.reviewFeedback || '');
+    setSaveError(null);
+    setSaveSuccess(false);
+  }, [attempt.id, attempt.reviewedAt, createInitialReviews, attempt.reviewFeedback]);
+
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
-      if (event.key === 'Escape') onClose();
+      if (event.key === 'Escape' && !isSaving) onClose();
     };
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [onClose]);
+  }, [isSaving, onClose]);
 
-  const answerEntries = useMemo(() => {
-    const answers = attempt.answers || {};
-    const knownQuestionIds = new Set<string>();
-    const entries: Array<{
-      id: string;
-      number: number;
-      prompt: string;
-      answer: string;
-      rawAnswer: string;
-      type: QuizQuestionType | string;
-      correct: boolean | null;
-      correctAnswer: string;
-    }> = [];
-
-    (quiz?.questions || []).forEach((question, index) => {
-      knownQuestionIds.add(question.id);
-      const type = question.type || 'multiple_choice';
-      const rawAnswer = String(answers[question.id] ?? '').trim();
-      const expectedAnswer = String(question.correctAnswer ?? '').trim();
-      entries.push({
-        id: question.id,
-        number: index + 1,
-        prompt: plainText(question.prompt) || `Pertanyaan ${index + 1}`,
-        answer: plainText(rawAnswer) || 'Tidak ada jawaban',
-        rawAnswer,
-        type,
-        correct: type === 'long_answer' || !rawAnswer || !expectedAnswer
-          ? type === 'long_answer' ? null : rawAnswer ? null : false
-          : rawAnswer.toLowerCase() === expectedAnswer.toLowerCase(),
-        correctAnswer: plainText(expectedAnswer)
-      });
-    });
-
-    Object.entries(answers).forEach(([answerId, value], index) => {
-      if (knownQuestionIds.has(answerId)) return;
-      const rawAnswer = String(value ?? '').trim();
-      entries.push({
-        id: answerId,
-        number: entries.length + 1,
-        prompt: `Pertanyaan tambahan ${index + 1}`,
-        answer: plainText(rawAnswer) || 'Tidak ada jawaban',
-        rawAnswer,
-        type: 'long_answer',
-        correct: null,
-        correctAnswer: ''
-      });
-    });
-
-    return entries;
-  }, [attempt.answers, quiz]);
-
-  const statusLabel = attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum lulus';
-  const statusClass = attempt.needsReview
+  const answerEntries = useMemo(() => buildQuizAnswerEntries({ ...attempt, reviewedAnswers: draftReviews }, quiz), [attempt, draftReviews, quiz]);
+  const reviewSummary = useMemo(() => calculateReviewedAttempt(attempt, quiz, draftReviews), [attempt, draftReviews, quiz]);
+  const statusLabel = reviewSummary.needsReview ? 'Menunggu review' : reviewSummary.passed ? 'Lulus' : 'Belum lulus';
+  const statusClass = reviewSummary.needsReview
     ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]'
-    : attempt.passed
+    : reviewSummary.passed
       ? 'bg-[var(--success-soft)] text-[var(--success-text)]'
       : 'bg-[var(--danger-soft)] text-[var(--danger-text)]';
   const submittedAt = attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString('id-ID') : '—';
   const postTestFeedback = plainText(attempt.classFeedback);
   const overallFeedbackText = plainText(overallFeedback?.feedback);
 
+  const updateReviewStatus = (id: string, value: string) => {
+    setDraftReviews(current => ({
+      ...current,
+      [id]: { correct: value === 'pending' ? null : value === 'correct', feedback: current[id]?.feedback || '' }
+    }));
+    setSaveSuccess(false);
+  };
+
+  const updateReviewFeedback = (id: string, feedback: string) => {
+    setDraftReviews(current => ({
+      ...current,
+      [id]: { correct: current[id]?.correct ?? null, feedback }
+    }));
+    setSaveSuccess(false);
+  };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    setSaveError(null);
+    setSaveSuccess(false);
+    try {
+      await onSave(draftReviews, draftReviewFeedback.trim() || null);
+      setSaveSuccess(true);
+    } catch (error) {
+      setSaveError(error instanceof Error ? error.message : 'Review gagal disimpan.');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
   return (
     <div
       className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
       role="presentation"
       onMouseDown={event => {
-        if (event.target === event.currentTarget) onClose();
+        if (event.target === event.currentTarget && !isSaving) onClose();
       }}
     >
       <div
         role="dialog"
         aria-modal="true"
         aria-labelledby="arunika-answer-review-title"
-        className="flex max-h-[90vh] w-full max-w-3xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl"
+        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl"
         onMouseDown={event => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-5 sm:p-6">
           <div className="min-w-0">
-            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Detail Peserta</p>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Review post-test</p>
             <h2 id="arunika-answer-review-title" className="mt-2 text-xl font-bold">{attempt.participantName}</h2>
             <p className="mt-1 break-all text-sm text-[var(--muted)]">{attempt.participantEmail}</p>
+            <p className="mt-2 text-xs text-[var(--muted)]">Tandai tiap jawaban, tulis feedback, lalu simpan penilaian peserta.</p>
           </div>
-          <button
-            type="button"
-            aria-label="Tutup detail peserta"
-            onClick={onClose}
-            className="rounded-xl p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"
-          >
-            <X size={19} />
-          </button>
+          <button type="button" aria-label="Tutup detail peserta" onClick={onClose} disabled={isSaving} className="rounded-xl p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)] disabled:opacity-50"><X size={19} /></button>
         </div>
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5 sm:p-6">
           <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Nilai</p>
-              <p className="mt-1 text-lg font-bold">{attempt.score}</p>
-            </div>
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Status</p>
-              <span className={`mt-1 inline-flex rounded-lg px-2 py-1 text-xs font-semibold ${statusClass}`}>{statusLabel}</span>
-            </div>
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Percobaan</p>
-              <p className="mt-1 text-lg font-bold">#{attempt.attemptNumber}</p>
-            </div>
-            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
-              <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Dikirim</p>
-              <p className="mt-1 text-xs font-semibold leading-relaxed">{submittedAt}</p>
-            </div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Nilai</p><p className="mt-1 text-lg font-bold">{reviewSummary.score}</p></div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Status</p><span className={`mt-1 inline-flex rounded-lg px-2 py-1 text-xs font-semibold ${statusClass}`}>{statusLabel}</span></div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Percobaan</p><p className="mt-1 text-lg font-bold">#{attempt.attemptNumber}</p></div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Dikirim</p><p className="mt-1 text-xs font-semibold leading-relaxed">{submittedAt}</p></div>
           </div>
 
-          <section className="space-y-3">
-            <div>
-              <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Feedback</p>
-              <h3 className="mt-1 text-lg font-bold">Feedback kelas peserta</h3>
-            </div>
-            {postTestFeedback || overallFeedback ? (
+          {(postTestFeedback || overallFeedback) && (
+            <section className="space-y-3">
+              <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Feedback peserta</p><h3 className="mt-1 text-lg font-bold">Konteks feedback kelas</h3></div>
               <div className="grid gap-3 md:grid-cols-2">
-                {postTestFeedback && (
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
-                    <p className="text-xs font-semibold text-[var(--muted)]">Feedback saat post-test</p>
-                    <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{postTestFeedback}</p>
-                  </div>
-                )}
-                {overallFeedback && (
-                  <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <p className="text-xs font-semibold text-[var(--muted)]">Feedback keseluruhan kelas</p>
-                      <span className="rounded-lg bg-[var(--success-soft)] px-2 py-1 text-xs font-semibold text-[var(--success-text)]">{overallFeedback.rating}/5</span>
-                    </div>
-                    {overallFeedbackText && <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{overallFeedbackText}</p>}
-                    <p className="mt-3 break-all text-xs text-[var(--muted)]">Email sertifikat: {overallFeedback.certificateEmail || '—'}</p>
-                  </div>
-                )}
+                {postTestFeedback && <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4"><p className="text-xs font-semibold text-[var(--muted)]">Feedback saat post-test</p><p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{postTestFeedback}</p></div>}
+                {overallFeedback && <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4"><div className="flex flex-wrap items-center justify-between gap-2"><p className="text-xs font-semibold text-[var(--muted)]">Feedback keseluruhan kelas</p><span className="rounded-lg bg-[var(--success-soft)] px-2 py-1 text-xs font-semibold text-[var(--success-text)]">{overallFeedback.rating}/5</span></div>{overallFeedbackText && <p className="mt-2 whitespace-pre-wrap break-words text-sm leading-relaxed">{overallFeedbackText}</p>}<p className="mt-3 break-all text-xs text-[var(--muted)]">Email sertifikat: {overallFeedback.certificateEmail || '—'}</p></div>}
               </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">Peserta ini belum mengirim feedback kelas.</div>
-            )}
-          </section>
+            </section>
+          )}
 
           <section className="space-y-3">
-            <div className="flex flex-wrap items-end justify-between gap-2">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Jawaban</p>
-                <h3 className="mt-1 text-lg font-bold">Jawaban post-test</h3>
-              </div>
-              <p className="text-xs text-[var(--muted)]">{answerEntries.length} pertanyaan</p>
-            </div>
+            <div className="flex flex-wrap items-end justify-between gap-2"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Koreksi jawaban</p><h3 className="mt-1 text-lg font-bold">Nilai dan feedback per pertanyaan</h3></div><p className="text-xs text-[var(--muted)]">{answerEntries.length} pertanyaan</p></div>
             {answerEntries.length > 0 ? (
               <div className="space-y-3">
-                {answerEntries.map(entry => (
-                  <article key={`${attempt.id}-${entry.id}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
-                    <div className="flex flex-wrap items-start justify-between gap-3">
-                      <p className="min-w-0 flex-1 text-sm font-semibold leading-relaxed">
-                        <span className="mr-2 text-[var(--muted)]">{entry.number}.</span>{entry.prompt}
-                      </p>
-                      <span className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{questionTypeLabel(entry.type)}</span>
-                    </div>
-                    <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3">
-                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Jawaban peserta</p>
-                      <p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{entry.answer}</p>
-                    </div>
-                    {entry.type === 'long_answer' ? (
-                      <p className="mt-2 text-xs font-semibold text-[var(--accent-strong)]">Jawaban panjang menunggu review admin.</p>
-                    ) : entry.correct === true ? (
-                      <p className="mt-2 text-xs font-semibold text-[var(--success-text)]">Jawaban benar.</p>
-                    ) : entry.rawAnswer && entry.correctAnswer ? (
-                      <p className="mt-2 text-xs font-semibold text-[var(--danger-text)]">Jawaban benar: {entry.correctAnswer}</p>
-                    ) : (
-                      <p className="mt-2 text-xs font-semibold text-[var(--muted)]">Belum ada jawaban yang dapat dinilai.</p>
-                    )}
-                  </article>
-                ))}
+                {answerEntries.map(entry => {
+                  const draft = draftReviews[entry.id] || { correct: entry.correct, feedback: entry.feedback };
+                  const statusValue = draft.correct === true ? 'correct' : draft.correct === false ? 'incorrect' : 'pending';
+                  return (
+                    <article key={`${attempt.id}-${entry.id}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+                      <div className="flex flex-wrap items-start justify-between gap-3"><p className="min-w-0 flex-1 text-sm font-semibold leading-relaxed"><span className="mr-2 text-[var(--muted)]">{entry.number}.</span>{entry.prompt}</p><span className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{questionTypeLabel(entry.type)}</span></div>
+                      <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Jawaban peserta</p><p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{entry.answer}</p></div>
+                      {entry.correctAnswer && <p className="mt-3 text-xs text-[var(--muted)]">Kunci jawaban: <span className="font-semibold text-[var(--text)]">{entry.correctAnswer}</span></p>}
+                      <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,220px)_1fr] md:items-end">
+                        <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status koreksi</span><select value={statusValue} onChange={event => updateReviewStatus(entry.id, event.target.value)} className="min-h-[46px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="pending">Menunggu review</option><option value="correct">Benar</option><option value="incorrect">Salah</option></select></label>
+                        <Textarea label="Feedback untuk peserta (opsional)" value={draft.feedback} onChange={event => updateReviewFeedback(entry.id, event.target.value)} placeholder="Tulis catatan untuk jawaban ini..." className="min-h-[88px]" maxLength={2000} />
+                      </div>
+                    </article>
+                  );
+                })}
               </div>
-            ) : (
-              <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">Tidak ada jawaban yang tersimpan untuk percobaan ini.</div>
-            )}
+            ) : <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]">Tidak ada jawaban yang tersimpan untuk percobaan ini.</div>}
           </section>
+
+          <Textarea label="Catatan korektor keseluruhan (opsional)" value={draftReviewFeedback} onChange={event => { setDraftReviewFeedback(event.target.value); setSaveSuccess(false); }} placeholder="Tambahkan ringkasan penilaian peserta..." maxLength={5000} />
+          {saveError && <p className="rounded-xl border border-[var(--danger-text)]/30 bg-[var(--danger-soft)] p-3 text-sm text-[var(--danger-text)]">{saveError}</p>}
+          {saveSuccess && <p className="rounded-xl border border-[var(--success-text)]/30 bg-[var(--success-soft)] p-3 text-sm text-[var(--success-text)]">Review dan nilai peserta berhasil disimpan.</p>}
         </div>
 
-        <div className="flex justify-end border-t border-[var(--border)] p-4 sm:p-5">
-          <Button variant="secondary" onClick={onClose}>Tutup</Button>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] p-4 sm:p-5">
+          <Button variant="secondary" icon={FileText} onClick={onDownloadReport}>Download raport PDF</Button>
+          <Button variant="secondary" onClick={onClose} disabled={isSaving}>Tutup</Button>
+          <Button icon={Save} onClick={handleSave} isLoading={isSaving}>Simpan penilaian</Button>
         </div>
       </div>
     </div>
@@ -1549,6 +1754,41 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
     URL.revokeObjectURL(url);
   };
 
+  const saveAttemptReview = async (attempt: QuizAttempt, reviews: Record<string, QuizAnswerReview>, reviewFeedback: string | null) => {
+    if (!client) throw new Error('Koneksi Supabase belum tersedia.');
+    const normalizedReviews = Object.entries(reviews).reduce<Record<string, QuizAnswerReview>>((result, [questionId, review]) => {
+      result[questionId] = {
+        correct: review?.correct === true ? true : review?.correct === false ? false : null,
+        feedback: plainText(review?.feedback).slice(0, 2000)
+      };
+      return result;
+    }, {});
+    const summary = calculateReviewedAttempt(attempt, quiz, normalizedReviews);
+    const { data, error } = await withRequestTimeout<any>(client
+      .from('quiz_attempts')
+      .update({
+        reviewed_answers: normalizedReviews,
+        review_feedback: reviewFeedback ? plainText(reviewFeedback).slice(0, 5000) : null,
+        reviewed_at: new Date().toISOString(),
+        score: summary.score,
+        passed: summary.passed,
+        needs_review: summary.needsReview
+      })
+      .eq('id', attempt.id)
+      .select('*')
+      .single());
+    if (error) throw new Error(databaseErrorMessage(error));
+    const updatedAttempt = data ? mapAttemptRow(data) : {
+      ...attempt,
+      reviewedAnswers: normalizedReviews,
+      reviewFeedback,
+      reviewedAt: new Date().toISOString(),
+      ...summary
+    };
+    setAttempts(current => current.map(item => item.id === attempt.id ? updatedAttempt : item));
+    setSelectedAttempt(updatedAttempt);
+  };
+
   return (
     <div className="p-4 md:p-8 max-w-6xl mx-auto space-y-8">
       <div className="flex flex-col md:flex-row md:items-end justify-between gap-4">
@@ -1584,19 +1824,20 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
           <div className="hidden md:block overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
             <table className="w-full text-left text-sm">
               <thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]">
-                <tr><th className="p-4">Peserta</th><th className="p-4">Nilai</th><th className="p-4">Status</th><th className="p-4">Percobaan</th><th className="p-4">Dikirim</th><th className="p-4">Detail</th></tr>
+                <tr><th className="p-4">Peserta</th><th className="p-4">Nilai</th><th className="p-4">Status</th><th className="p-4">Percobaan</th><th className="p-4">Dikirim</th><th className="p-4">Detail</th><th className="p-4">Raport</th></tr>
               </thead>
               <tbody>
                 {attempts.map(attempt => (
                   <tr key={attempt.id} className="border-t border-[var(--border)]">
                     <td className="p-4"><p className="font-semibold">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] mt-1">{attempt.participantEmail}</p></td>
                     <td className="p-4 font-bold">{attempt.score}</td>
-                    <td className="p-4"><span className={`inline-flex px-2.5 py-1 rounded-lg text-xs font-semibold ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</span></td>
+                    <td className="p-4"><button type="button" onClick={() => setSelectedAttempt(attempt)} className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold transition hover:ring-2 hover:ring-[var(--accent-soft)] ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`} aria-label={`Buka review ${attempt.participantName}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</button></td>
                     <td className="p-4">#{attempt.attemptNumber}</td>
                     <td className="p-4 text-xs text-[var(--muted)]">{new Date(attempt.submittedAt).toLocaleString('id-ID')}</td>
                     <td className="p-4">
                       <button type="button" onClick={() => setSelectedAttempt(attempt)} className="text-xs font-semibold text-[var(--accent-strong)] hover:underline">Lihat jawaban</button>
                     </td>
+                    <td className="p-4"><Button type="button" variant="secondary" icon={FileText} className="px-3 py-2 text-xs" onClick={() => downloadQuizReport(attempt, quiz, course?.title || RECORDED_CLASS_SPACE_LABEL)}>Download PDF</Button></td>
                   </tr>
                 ))}
               </tbody>
@@ -1605,9 +1846,9 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
           <div className="md:hidden space-y-3">
             {attempts.map(attempt => (
               <Card key={attempt.id} className="space-y-4">
-                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold truncate">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{attempt.participantEmail}</p></div><span className={`px-2 py-1 rounded-lg text-[10px] font-semibold ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</span></div>
+                <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold truncate">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{attempt.participantEmail}</p></div><button type="button" onClick={() => setSelectedAttempt(attempt)} className={`rounded-lg px-2 py-1 text-[10px] font-semibold transition hover:ring-2 hover:ring-[var(--accent-soft)] ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`} aria-label={`Buka review ${attempt.participantName}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</button></div>
                 <div className="grid grid-cols-3 gap-3 text-xs"><div><p className="text-[var(--muted)]">Nilai</p><p className="font-bold text-lg mt-1">{attempt.score}</p></div><div><p className="text-[var(--muted)]">Percobaan</p><p className="font-semibold mt-2">#{attempt.attemptNumber}</p></div><div><p className="text-[var(--muted)]">Dikirim</p><p className="font-semibold mt-2">{new Date(attempt.submittedAt).toLocaleDateString('id-ID')}</p></div></div>
-                <button type="button" onClick={() => setSelectedAttempt(attempt)} className="border-t border-[var(--border)] pt-3 text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline">Lihat jawaban dan feedback</button>
+                <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-3"><button type="button" onClick={() => setSelectedAttempt(attempt)} className="text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline">Lihat dan koreksi jawaban</button><Button type="button" variant="secondary" icon={FileText} className="ml-auto px-3 py-2 text-xs" onClick={() => downloadQuizReport(attempt, quiz, course?.title || RECORDED_CLASS_SPACE_LABEL)}>Download PDF</Button></div>
               </Card>
             ))}
           </div>
@@ -1633,6 +1874,8 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
           quiz={quiz}
           overallFeedback={feedbackSubmissions.find(feedback => feedback.participantEmail.trim().toLowerCase() === selectedAttempt.participantEmail.trim().toLowerCase()) || null}
           onClose={() => setSelectedAttempt(null)}
+          onSave={(reviews, reviewFeedback) => saveAttemptReview(selectedAttempt, reviews, reviewFeedback)}
+          onDownloadReport={() => downloadQuizReport(selectedAttempt, quiz, course?.title || RECORDED_CLASS_SPACE_LABEL)}
         />
       )}
       {selectedFeedbackForCard && <ReviewCardModal feedback={selectedFeedbackForCard} courseTitle={course?.title || 'Kelas Arunika'} onClose={() => setSelectedFeedbackForCard(null)} />}

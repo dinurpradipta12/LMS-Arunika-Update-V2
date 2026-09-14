@@ -96,8 +96,16 @@ export interface QuizAttempt {
   passed: boolean;
   needsReview: boolean;
   classFeedback: string | null;
+  reviewedAnswers: Record<string, QuizAnswerReview>;
+  reviewFeedback: string | null;
+  reviewedAt: string | null;
   attemptNumber: number;
   submittedAt: string;
+}
+
+export interface QuizAnswerReview {
+  correct: boolean | null;
+  feedback: string;
 }
 
 export interface ClassFeedbackSubmission {
