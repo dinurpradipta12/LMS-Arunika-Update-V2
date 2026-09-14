@@ -850,14 +850,123 @@ const questionTypeLabel = (type: QuizQuestionType | string | undefined) => {
   return 'Pilihan ganda';
 };
 
+const AssessmentReportPreviewModal: React.FC<{
+  attempt: QuizAttempt;
+  quiz: CourseQuiz | null;
+  courseTitle: string;
+  onClose: () => void;
+  onDownload: () => void;
+}> = ({ attempt, quiz, courseTitle, onClose, onDownload }) => {
+  const entries = buildQuizAnswerEntries(attempt, quiz);
+  const summary = calculateReviewedAttempt(attempt, quiz, attempt.reviewedAnswers || {});
+  const statusLabel = summary.needsReview ? 'Menunggu review' : summary.passed ? 'Lulus' : 'Belum lulus';
+  const visibleEntries = entries.slice(0, 11);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-[1250] flex items-center justify-center bg-slate-950/55 p-3 backdrop-blur-sm sm:p-5"
+      role="presentation"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="arunika-report-preview-title"
+        className="flex max-h-[94vh] w-full max-w-6xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl"
+        onMouseDown={event => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-4 sm:p-5">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Preview raport PDF</p>
+            <h2 id="arunika-report-preview-title" className="mt-1 text-lg font-bold">Raport penilaian {attempt.participantName}</h2>
+            <p className="mt-1 text-xs text-[var(--muted)]">Periksa ringkasan satu halaman sebelum mengunduh file PDF.</p>
+          </div>
+          <button type="button" aria-label="Tutup preview raport" onClick={onClose} className="rounded-xl p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"><X size={19} /></button>
+        </div>
+
+        <div className="min-h-0 flex-1 overflow-auto bg-slate-100 p-3 sm:p-6">
+          <div className="mx-auto min-w-[760px] max-w-[1040px] rounded-lg border-[3px] border-[#173f5f] bg-[#f6f9fb] p-4 shadow-lg sm:p-7">
+            <div className="rounded-md border border-[#0f766e] p-4 sm:p-6">
+              <div className="flex items-start justify-between gap-6 border-b border-[#c9d9e4] pb-4">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2"><span className="h-1.5 w-12 bg-[#0f766e]" /><span className="h-1.5 w-6 bg-[#d89b3c]" /></div>
+                  <p className="mt-3 text-[10px] font-bold tracking-[0.2em] text-[#0f766e]">ARUNIKA LEARNING HUB</p>
+                  <h3 className="mt-2 text-xl font-bold tracking-tight text-[#173f5f] sm:text-3xl">LAPORAN PENILAIAN POST-TEST</h3>
+                  <p className="mt-1 text-xs text-[#667b8f]">Ringkasan penilaian peserta</p>
+                </div>
+                <div className="w-32 shrink-0 rounded-lg border border-[#c9d9e4] bg-[#edf4f8] px-3 py-3 text-center sm:w-40 sm:px-4">
+                  <p className="text-[9px] font-bold tracking-[0.15em] text-[#667b8f]">NILAI AKHIR</p>
+                  <p className="mt-1 text-2xl font-bold text-[#173f5f] sm:text-3xl">{summary.score}/100</p>
+                  <p className={`mt-1 text-[10px] font-bold ${summary.needsReview ? 'text-[#b7791f]' : summary.passed ? 'text-[#0f766e]' : 'text-[#a84949]'}`}>{statusLabel}</p>
+                </div>
+              </div>
+
+              <div className="grid gap-x-6 gap-y-3 border-b border-[#c9d9e4] py-4 text-xs sm:grid-cols-3">
+                <div><p className="text-[9px] font-bold uppercase tracking-wide text-[#667b8f]">Peserta</p><p className="mt-1 truncate font-semibold text-[#1f3448]">{attempt.participantName || '—'}</p></div>
+                <div><p className="text-[9px] font-bold uppercase tracking-wide text-[#667b8f]">Email</p><p className="mt-1 truncate font-semibold text-[#1f3448]">{attempt.participantEmail || '—'}</p></div>
+                <div><p className="text-[9px] font-bold uppercase tracking-wide text-[#667b8f]">Kelas</p><p className="mt-1 truncate font-semibold text-[#1f3448]">{courseTitle || 'Kelas Arunika'}</p></div>
+                <div><p className="text-[9px] font-bold uppercase tracking-wide text-[#667b8f]">Percobaan</p><p className="mt-1 font-semibold text-[#1f3448]">#{attempt.attemptNumber}</p></div>
+                <div><p className="text-[9px] font-bold uppercase tracking-wide text-[#667b8f]">Waktu submit</p><p className="mt-1 font-semibold text-[#1f3448]">{attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString('id-ID') : '—'}</p></div>
+                <div><p className="text-[9px] font-bold uppercase tracking-wide text-[#667b8f]">Direview</p><p className="mt-1 font-semibold text-[#1f3448]">{attempt.reviewedAt ? new Date(attempt.reviewedAt).toLocaleString('id-ID') : 'Belum direview'}</p></div>
+              </div>
+
+              <div className="grid grid-cols-4 gap-2 py-4 text-center sm:gap-3">
+                <div className="rounded border border-[#c9d9e4] bg-white px-2 py-2"><p className="text-[8px] font-bold tracking-wide text-[#667b8f]">JUMLAH SOAL</p><p className="mt-1 text-sm font-bold text-[#173f5f]">{summary.totalQuestions}</p></div>
+                <div className="rounded border border-[#c9d9e4] bg-white px-2 py-2"><p className="text-[8px] font-bold tracking-wide text-[#667b8f]">SUDAH DINILAI</p><p className="mt-1 text-sm font-bold text-[#173f5f]">{summary.gradedQuestions}/{summary.totalQuestions}</p></div>
+                <div className="rounded border border-[#c9d9e4] bg-white px-2 py-2"><p className="text-[8px] font-bold tracking-wide text-[#667b8f]">JAWABAN BENAR</p><p className="mt-1 text-sm font-bold text-[#173f5f]">{summary.correctAnswers}/{summary.totalQuestions}</p></div>
+                <div className="rounded border border-[#c9d9e4] bg-white px-2 py-2"><p className="text-[8px] font-bold tracking-wide text-[#667b8f]">RUMUS NILAI</p><p className="mt-1 text-[11px] font-bold text-[#173f5f]">{summary.totalQuestions > 0 ? `${summary.correctAnswers}/${summary.totalQuestions} x 100` : '—'}</p></div>
+              </div>
+
+              <div className="overflow-hidden rounded border border-[#c9d9e4] bg-white">
+                <table className="w-full table-fixed text-left text-[10px] text-[#1f3448]">
+                  <colgroup><col className="w-[7%]" /><col className="w-[30%]" /><col className="w-[30%]" /><col className="w-[11%]" /><col className="w-[22%]" /></colgroup>
+                  <thead className="bg-[#173f5f] text-[9px] font-bold tracking-wide text-white"><tr><th className="px-2 py-2 text-center">NO</th><th className="px-2 py-2">RINGKASAN SOAL</th><th className="px-2 py-2">JAWABAN PESERTA</th><th className="px-2 py-2 text-center">NILAI</th><th className="px-2 py-2">FEEDBACK</th></tr></thead>
+                  <tbody>
+                    {visibleEntries.length > 0 ? visibleEntries.map((entry, index) => (
+                      <tr key={`${attempt.id}-preview-${entry.id}`} className={index % 2 === 0 ? 'bg-white' : 'bg-[#f6f9fb]'}>
+                        <td className="border-t border-[#c9d9e4] px-2 py-2 text-center font-bold">{entry.number}</td>
+                        <td className="max-h-12 overflow-hidden border-t border-[#c9d9e4] px-2 py-2 align-top"><p className="max-h-9 overflow-hidden leading-tight">{entry.prompt}</p></td>
+                        <td className="max-h-12 overflow-hidden border-t border-[#c9d9e4] px-2 py-2 align-top"><p className="max-h-9 overflow-hidden leading-tight">{entry.answer}</p></td>
+                        <td className={`border-t border-[#c9d9e4] px-2 py-2 text-center align-top font-bold ${entry.correct === true ? 'text-[#0f766e]' : entry.correct === false ? 'text-[#a84949]' : 'text-[#b7791f]'}`}><p>{entry.correct === null ? '—' : entry.correct ? '1/1' : '0/1'}</p><p className="mt-0.5 text-[8px] font-medium text-[#667b8f]">{reviewStatusLabel(entry.correct)}</p></td>
+                        <td className="max-h-12 overflow-hidden border-t border-[#c9d9e4] px-2 py-2 align-top text-[#667b8f]"><p className="max-h-9 overflow-hidden leading-tight">{entry.feedback || '—'}</p></td>
+                      </tr>
+                    )) : <tr><td colSpan={5} className="px-3 py-6 text-center text-[#667b8f]">Belum ada jawaban untuk ditampilkan.</td></tr>}
+                  </tbody>
+                </table>
+              </div>
+
+              <div className="flex items-end justify-between gap-4 pt-4 text-[9px] text-[#667b8f]"><p className="max-w-[70%] truncate">{entries.length > visibleEntries.length ? `+ ${entries.length - visibleEntries.length} soal lainnya diringkas di aplikasi.` : attempt.reviewFeedback ? `Catatan korektor: ${plainText(attempt.reviewFeedback).slice(0, 130)}` : 'Dokumen ini merupakan ringkasan penilaian post-test peserta.'}</p><p className="shrink-0 font-semibold">Made with @arunika 2026</p></div>
+            </div>
+          </div>
+        </div>
+
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] p-4 sm:p-5">
+          <Button type="button" variant="secondary" onClick={onClose}>Tutup preview</Button>
+          <Button type="button" icon={Download} onClick={onDownload}>Download PDF</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const AnswerReviewModal: React.FC<{
   attempt: QuizAttempt;
   quiz: CourseQuiz | null;
   overallFeedback: ClassFeedbackSubmission | null;
   onClose: () => void;
   onSave: (reviews: Record<string, QuizAnswerReview>, reviewFeedback: string | null) => Promise<void>;
-  onDownloadReport: () => void;
-}> = ({ attempt, quiz, overallFeedback, onClose, onSave, onDownloadReport }) => {
+  onOpenReportPreview: () => void;
+}> = ({ attempt, quiz, overallFeedback, onClose, onSave, onOpenReportPreview }) => {
   const createInitialReviews = useCallback(() => buildQuizAnswerEntries(attempt, quiz).reduce<Record<string, QuizAnswerReview>>((reviews, entry) => {
     reviews[entry.id] = { correct: entry.correct, feedback: entry.feedback };
     return reviews;
@@ -999,7 +1108,7 @@ const AnswerReviewModal: React.FC<{
         </div>
 
         <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] p-4 sm:p-5">
-          <Button variant="secondary" icon={FileText} onClick={onDownloadReport}>Download raport PDF</Button>
+          <Button variant="secondary" icon={FileText} onClick={onOpenReportPreview}>Preview raport PDF</Button>
           <Button variant="secondary" onClick={onClose} disabled={isSaving}>Tutup</Button>
           <Button icon={Save} onClick={handleSave} isLoading={isSaving}>Simpan penilaian</Button>
         </div>
@@ -1756,6 +1865,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
   const [feedbackSubmissions, setFeedbackSubmissions] = useState<ClassFeedbackSubmission[]>([]);
   const [quiz, setQuiz] = useState<CourseQuiz | null>(null);
   const [selectedAttempt, setSelectedAttempt] = useState<QuizAttempt | null>(null);
+  const [reportPreviewAttempt, setReportPreviewAttempt] = useState<QuizAttempt | null>(null);
   const [selectedFeedbackForCard, setSelectedFeedbackForCard] = useState<ClassFeedbackSubmission | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -1792,6 +1902,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
       setQuiz(quizResult.data ? mapQuizRow(quizResult.data) : null);
     }
     setSelectedAttempt(null);
+    setReportPreviewAttempt(null);
     setIsLoading(false);
   }, [client, id]);
 
@@ -1905,7 +2016,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
                     <td className="p-4">
                       <button type="button" onClick={() => setSelectedAttempt(attempt)} className="text-xs font-semibold text-[var(--accent-strong)] hover:underline">Lihat jawaban</button>
                     </td>
-                    <td className="p-4"><Button type="button" variant="secondary" icon={FileText} className="px-3 py-2 text-xs" onClick={() => downloadQuizReport(attempt, quiz, course?.title || RECORDED_CLASS_SPACE_LABEL)}>Download PDF</Button></td>
+                    <td className="p-4"><Button type="button" variant="secondary" icon={FileText} className="px-3 py-2 text-xs" onClick={() => setReportPreviewAttempt(attempt)}>Preview PDF</Button></td>
                   </tr>
                 ))}
               </tbody>
@@ -1916,7 +2027,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
               <Card key={attempt.id} className="space-y-4">
                 <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold truncate">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{attempt.participantEmail}</p></div><button type="button" onClick={() => setSelectedAttempt(attempt)} className={`rounded-lg px-2 py-1 text-[10px] font-semibold transition hover:ring-2 hover:ring-[var(--accent-soft)] ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`} aria-label={`Buka review ${attempt.participantName}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</button></div>
                 <div className="grid grid-cols-3 gap-3 text-xs"><div><p className="text-[var(--muted)]">Nilai</p><p className="font-bold text-lg mt-1">{attempt.score}</p></div><div><p className="text-[var(--muted)]">Percobaan</p><p className="font-semibold mt-2">#{attempt.attemptNumber}</p></div><div><p className="text-[var(--muted)]">Dikirim</p><p className="font-semibold mt-2">{new Date(attempt.submittedAt).toLocaleDateString('id-ID')}</p></div></div>
-                <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-3"><button type="button" onClick={() => setSelectedAttempt(attempt)} className="text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline">Lihat dan koreksi jawaban</button><Button type="button" variant="secondary" icon={FileText} className="ml-auto px-3 py-2 text-xs" onClick={() => downloadQuizReport(attempt, quiz, course?.title || RECORDED_CLASS_SPACE_LABEL)}>Download PDF</Button></div>
+                <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-3"><button type="button" onClick={() => setSelectedAttempt(attempt)} className="text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline">Lihat dan koreksi jawaban</button><Button type="button" variant="secondary" icon={FileText} className="ml-auto px-3 py-2 text-xs" onClick={() => setReportPreviewAttempt(attempt)}>Preview PDF</Button></div>
               </Card>
             ))}
           </div>
@@ -1943,7 +2054,16 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
           overallFeedback={feedbackSubmissions.find(feedback => feedback.participantEmail.trim().toLowerCase() === selectedAttempt.participantEmail.trim().toLowerCase()) || null}
           onClose={() => setSelectedAttempt(null)}
           onSave={(reviews, reviewFeedback) => saveAttemptReview(selectedAttempt, reviews, reviewFeedback)}
-          onDownloadReport={() => downloadQuizReport(selectedAttempt, quiz, course?.title || RECORDED_CLASS_SPACE_LABEL)}
+          onOpenReportPreview={() => setReportPreviewAttempt(selectedAttempt)}
+        />
+      )}
+      {reportPreviewAttempt && (
+        <AssessmentReportPreviewModal
+          attempt={reportPreviewAttempt}
+          quiz={quiz}
+          courseTitle={course?.title || RECORDED_CLASS_SPACE_LABEL}
+          onClose={() => setReportPreviewAttempt(null)}
+          onDownload={() => downloadQuizReport(reportPreviewAttempt, quiz, course?.title || RECORDED_CLASS_SPACE_LABEL)}
         />
       )}
       {selectedFeedbackForCard && <ReviewCardModal feedback={selectedFeedbackForCard} courseTitle={course?.title || 'Kelas Arunika'} onClose={() => setSelectedFeedbackForCard(null)} />}
