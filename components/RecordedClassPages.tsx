@@ -190,6 +190,279 @@ const plainText = (value: unknown) => String(value ?? '')
   .replace(/\n{3,}/g, '\n\n')
   .trim();
 
+const drawCanvasRoundedRect = (context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) => {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.lineTo(x + width - safeRadius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  context.lineTo(x + width, y + height - safeRadius);
+  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  context.lineTo(x + safeRadius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  context.lineTo(x, y + safeRadius);
+  context.quadraticCurveTo(x, y, x + safeRadius, y);
+  context.closePath();
+};
+
+const wrapCanvasText = (context: CanvasRenderingContext2D, value: string, maxWidth: number, maxLines: number) => {
+  const paragraphs = value.split(/\r?\n/);
+  const lines: string[] = [];
+  let wasTruncated = false;
+
+  paragraphLoop: for (let paragraphIndex = 0; paragraphIndex < paragraphs.length; paragraphIndex += 1) {
+    const paragraph = paragraphs[paragraphIndex];
+    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      if (lines.length < maxLines) lines.push('');
+      else wasTruncated = true;
+      continue;
+    }
+
+    let line = '';
+    for (let wordIndex = 0; wordIndex < words.length; wordIndex += 1) {
+      const word = words[wordIndex];
+      const candidate = line ? `${line} ${word}` : word;
+      if (context.measureText(candidate).width <= maxWidth || !line) {
+        line = candidate;
+        continue;
+      }
+      lines.push(line);
+      if (lines.length >= maxLines) {
+        wasTruncated = true;
+        break paragraphLoop;
+      }
+      line = word;
+    }
+    if (wasTruncated) break;
+    if (line) lines.push(line);
+    if (lines.length >= maxLines) {
+      wasTruncated = paragraphIndex < paragraphs.length - 1;
+      break;
+    }
+  }
+
+  const visibleLines = lines.slice(0, maxLines);
+  if (wasTruncated && visibleLines.length) {
+    let lastLine = visibleLines[visibleLines.length - 1].replace(/\s+$/, '');
+    while (lastLine.length > 1 && context.measureText(`${lastLine}…`).width > maxWidth) lastLine = lastLine.slice(0, -1);
+    visibleLines[visibleLines.length - 1] = `${lastLine}…`;
+  }
+  return visibleLines.length ? visibleLines : [''];
+};
+
+const loadCanvasImage = (source: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+  const image = new Image();
+  image.onload = () => resolve(image);
+  image.onerror = () => reject(new Error('Logo gagal dimuat.'));
+  image.src = source;
+});
+
+const drawCanvasImageContain = (context: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, width: number, height: number) => {
+  const scale = Math.min(width / image.width, height / image.height);
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+  context.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+};
+
+const createReviewCardImage = async (feedback: ClassFeedbackSubmission, courseTitle: string) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1200;
+  canvas.height = 1350;
+  const measurementContext = canvas.getContext('2d');
+  if (!measurementContext) throw new Error('Browser tidak mendukung pembuatan gambar review.');
+
+  const colors = {
+    background: '#f3f7fa',
+    surface: '#ffffff',
+    navy: '#173b5e',
+    muted: '#65798d',
+    border: '#d8e3ec',
+    soft: '#e6eef5',
+    teal: '#0f766e',
+    star: '#f59e0b'
+  };
+  const cardX = 72;
+  const cardTop = 370;
+  const cardWidth = canvas.width - cardX * 2;
+  const feedbackText = plainText(feedback.feedback) || 'Tidak ada feedback tertulis.';
+  measurementContext.font = '500 36px Arial, sans-serif';
+  const feedbackLines = wrapCanvasText(measurementContext, feedbackText, cardWidth - 150, 14);
+  const feedbackTopOffset = 190;
+  const feedbackLineHeight = 56;
+  const starsOffset = feedbackTopOffset + feedbackLines.length * feedbackLineHeight + 44;
+  const authorOffset = starsOffset + 72;
+  const dateOffset = authorOffset + 42;
+  const cardHeight = Math.max(720, dateOffset + 52);
+  const footerY = cardTop + cardHeight + 130;
+  canvas.height = footerY + 60;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Browser tidak mendukung pembuatan gambar review.');
+
+  context.fillStyle = colors.background;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = colors.navy;
+  context.fillRect(0, 0, canvas.width, 14);
+
+  try {
+    const logo = await loadCanvasImage(logoUtama);
+    drawCanvasImageContain(context, logo, 82, 56, 92, 66);
+  } catch {
+    // Kartu tetap dapat dibuat bila logo gagal dimuat.
+  }
+  context.fillStyle = colors.navy;
+  context.font = '700 24px Arial, sans-serif';
+  context.fillText('ARUNIKA LEARNING HUB', 204, 92);
+  context.fillStyle = colors.muted;
+  context.font = '600 20px Arial, sans-serif';
+  context.fillText('KARTU REVIEW KELAS', cardX, 214);
+
+  context.fillStyle = colors.navy;
+  context.font = '700 52px Arial, sans-serif';
+  const titleLines = wrapCanvasText(context, plainText(courseTitle) || 'Kelas Arunika', cardWidth, 2);
+  titleLines.forEach((line, index) => context.fillText(line, cardX, 276 + index * 62));
+
+  drawCanvasRoundedRect(context, cardX, cardTop, cardWidth, cardHeight, 34);
+  context.fillStyle = colors.surface;
+  context.fill();
+  context.strokeStyle = colors.border;
+  context.lineWidth = 3;
+  context.stroke();
+
+  context.fillStyle = colors.soft;
+  context.beginPath();
+  context.arc(canvas.width - 152, cardTop + 110, 70, 0, Math.PI * 2);
+  context.fill();
+  context.fillStyle = colors.teal;
+  context.font = '700 86px Georgia, serif';
+  context.fillText('“', cardX + 54, cardTop + 134);
+
+  context.fillStyle = colors.navy;
+  context.font = '500 36px Arial, sans-serif';
+  feedbackLines.forEach((line, index) => context.fillText(line, cardX + 70, cardTop + 190 + index * 56));
+
+  const rating = Math.min(5, Math.max(0, Number(feedback.rating) || 0));
+  const starsY = cardTop + starsOffset;
+  context.font = '700 48px Arial, sans-serif';
+  context.fillStyle = colors.star;
+  context.fillText('★'.repeat(rating), cardX + 70, starsY);
+  const filledStarWidth = context.measureText('★'.repeat(rating)).width;
+  context.fillStyle = colors.border;
+  context.fillText('★'.repeat(5 - rating), cardX + 70 + filledStarWidth, starsY);
+  context.fillStyle = colors.navy;
+  context.font = '700 28px Arial, sans-serif';
+  context.fillText(`${rating}/5`, cardX + 385, starsY - 4);
+
+  context.font = '700 30px Arial, sans-serif';
+  context.fillText(plainText(feedback.participantName) || 'Peserta kelas', cardX + 70, cardTop + authorOffset);
+  context.fillStyle = colors.muted;
+  context.font = '500 22px Arial, sans-serif';
+  const submittedAt = feedback.submittedAt ? new Date(feedback.submittedAt).toLocaleDateString('id-ID', { day: 'numeric', month: 'long', year: 'numeric' }) : '';
+  context.fillText(submittedAt, cardX + 70, cardTop + dateOffset);
+
+  context.fillStyle = colors.muted;
+  context.font = '600 22px Arial, sans-serif';
+  context.textAlign = 'center';
+  context.fillText('Made with @arunika 2026', canvas.width / 2, footerY);
+  context.textAlign = 'start';
+  return canvas.toDataURL('image/png');
+};
+
+const reviewFilePart = (value: unknown) => plainText(value)
+  .toLowerCase()
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '')
+  .slice(0, 70) || 'kelas';
+
+const ReviewCardModal: React.FC<{
+  feedback: ClassFeedbackSubmission;
+  courseTitle: string;
+  onClose: () => void;
+}> = ({ feedback, courseTitle, onClose }) => {
+  const [imageUrl, setImageUrl] = useState('');
+  const [isGenerating, setIsGenerating] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    setImageUrl('');
+    setIsGenerating(true);
+    setError(null);
+    void createReviewCardImage(feedback, courseTitle)
+      .then(url => {
+        if (isCancelled) return;
+        setImageUrl(url);
+        setIsGenerating(false);
+      })
+      .catch(generationError => {
+        if (isCancelled) return;
+        setError(generationError instanceof Error ? generationError.message : 'Card review gagal dibuat.');
+        setIsGenerating(false);
+      });
+    return () => { isCancelled = true; };
+  }, [courseTitle, feedback]);
+
+  const handleDownload = () => {
+    if (!imageUrl) return;
+    const anchor = document.createElement('a');
+    anchor.href = imageUrl;
+    anchor.download = `card-review-${reviewFilePart(feedback.participantName)}-${reviewFilePart(courseTitle)}.png`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[1150] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="arunika-review-card-title"
+        className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl"
+        onMouseDown={event => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-5 sm:p-6">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Card review otomatis</p>
+            <h2 id="arunika-review-card-title" className="mt-2 text-xl font-bold">Review {feedback.participantName || 'peserta'}</h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">{courseTitle || 'Kelas Arunika'} · {feedback.rating}/5</p>
+          </div>
+          <button type="button" aria-label="Tutup card review" onClick={onClose} className="rounded-xl p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"><X size={19} /></button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+          {isGenerating ? (
+            <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Membuat card review...</div>
+          ) : error ? (
+            <div className="flex min-h-80 items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-5 text-center text-sm text-[var(--danger-text)]">{error}</div>
+          ) : imageUrl ? (
+            <img src={imageUrl} alt={`Card review ${feedback.participantName || 'peserta'} untuk ${courseTitle || 'kelas'}`} className="mx-auto w-full max-w-lg rounded-xl border border-[var(--border)] shadow-sm" />
+          ) : null}
+        </div>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] p-4 sm:p-5">
+          <Button type="button" variant="secondary" onClick={onClose}>Tutup</Button>
+          <Button type="button" icon={Download} onClick={handleDownload} disabled={!imageUrl}>Download PNG</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const withRequestTimeout = <T,>(request: PromiseLike<T>, timeoutMs = 15000): Promise<T> => new Promise((resolve, reject) => {
   const timeoutId = window.setTimeout(() => reject(new Error('REQUEST_TIMEOUT')), timeoutMs);
   Promise.resolve(request).then(
@@ -1219,6 +1492,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
   const [feedbackSubmissions, setFeedbackSubmissions] = useState<ClassFeedbackSubmission[]>([]);
   const [quiz, setQuiz] = useState<CourseQuiz | null>(null);
   const [selectedAttempt, setSelectedAttempt] = useState<QuizAttempt | null>(null);
+  const [selectedFeedbackForCard, setSelectedFeedbackForCard] = useState<ClassFeedbackSubmission | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
 
@@ -1353,11 +1627,11 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
               <div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Evaluasi Akhir</p><h2 className="text-xl font-bold mt-2">Feedback Keseluruhan</h2></div>
               <div className="hidden md:block overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
                 <table className="w-full text-left text-sm">
-                  <thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]"><tr><th className="p-4">Peserta</th><th className="p-4">Rating</th><th className="p-4">Email Sertifikat</th><th className="p-4">Feedback</th><th className="p-4">Dikirim</th></tr></thead>
-                  <tbody>{feedbackSubmissions.map(feedback => <tr key={feedback.id} className="border-t border-[var(--border)]"><td className="p-4"><p className="font-semibold">{feedback.participantName}</p><p className="text-xs text-[var(--muted)] mt-1">{feedback.participantEmail}</p></td><td className="p-4 font-bold">{feedback.rating}/5</td><td className="p-4 text-xs break-all">{feedback.certificateEmail}</td><td className="p-4 max-w-md whitespace-pre-wrap text-[var(--muted)]">{feedback.feedback}</td><td className="p-4 text-xs text-[var(--muted)]">{new Date(feedback.submittedAt).toLocaleString('id-ID')}</td></tr>)}</tbody>
+                  <thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]"><tr><th className="p-4">Peserta</th><th className="p-4">Rating</th><th className="p-4">Email Sertifikat</th><th className="p-4">Feedback</th><th className="p-4">Dikirim</th><th className="p-4">Card Review</th></tr></thead>
+                  <tbody>{feedbackSubmissions.map(feedback => <tr key={feedback.id} className="border-t border-[var(--border)]"><td className="p-4"><p className="font-semibold">{feedback.participantName}</p><p className="text-xs text-[var(--muted)] mt-1">{feedback.participantEmail}</p></td><td className="p-4 font-bold">{feedback.rating}/5</td><td className="p-4 text-xs break-all">{feedback.certificateEmail}</td><td className="p-4 max-w-md whitespace-pre-wrap text-[var(--muted)]">{feedback.feedback}</td><td className="p-4 text-xs text-[var(--muted)]">{new Date(feedback.submittedAt).toLocaleString('id-ID')}</td><td className="p-4"><Button type="button" variant="secondary" icon={Share2} className="px-3 py-2 text-xs" onClick={() => setSelectedFeedbackForCard(feedback)}>Buat card review</Button></td></tr>)}</tbody>
                 </table>
               </div>
-              <div className="md:hidden space-y-3">{feedbackSubmissions.map(feedback => <Card key={feedback.id} className="space-y-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{feedback.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{feedback.participantEmail}</p></div><span className="px-2 py-1 rounded-lg bg-[var(--success-soft)] text-[var(--success-text)] text-xs font-semibold">{feedback.rating}/5</span></div><p className="text-xs text-[var(--muted)] break-all">Sertifikat: {feedback.certificateEmail}</p><p className="text-sm whitespace-pre-wrap">{feedback.feedback}</p></Card>)}</div>
+              <div className="md:hidden space-y-3">{feedbackSubmissions.map(feedback => <Card key={feedback.id} className="space-y-3"><div className="flex items-start justify-between gap-3"><div><p className="font-semibold">{feedback.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{feedback.participantEmail}</p></div><span className="px-2 py-1 rounded-lg bg-[var(--success-soft)] text-[var(--success-text)] text-xs font-semibold">{feedback.rating}/5</span></div><p className="text-xs text-[var(--muted)] break-all">Sertifikat: {feedback.certificateEmail}</p><p className="text-sm whitespace-pre-wrap">{feedback.feedback}</p><Button type="button" variant="secondary" icon={Share2} className="w-full text-xs" onClick={() => setSelectedFeedbackForCard(feedback)}>Buat card review</Button></Card>)}</div>
             </section>
           )}
         </>
@@ -1370,6 +1644,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
           onClose={() => setSelectedAttempt(null)}
         />
       )}
+      {selectedFeedbackForCard && <ReviewCardModal feedback={selectedFeedbackForCard} courseTitle={course?.title || 'Kelas Arunika'} onClose={() => setSelectedFeedbackForCard(null)} />}
     </div>
   );
 };
