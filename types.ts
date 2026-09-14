@@ -265,7 +265,10 @@ export interface CatalogBenefit {
   description: string;
 }
 
+export type CatalogProductLayout = 'default' | 'grid' | 'large-image' | 'compact';
+
 export interface CatalogContent {
+  productLayout: CatalogProductLayout;
   announcement: string;
   heroEyebrow: string;
   heroTitle: string;

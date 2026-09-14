@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { CatalogBenefit, CatalogContent, CatalogPage, CatalogPageItem, CatalogPageStatus, CatalogSocialLink, FormThemeKey } from '../types';
+import { CatalogBenefit, CatalogContent, CatalogPage, CatalogPageItem, CatalogPageStatus, CatalogProductLayout, CatalogSocialLink, FormThemeKey } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
 import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
@@ -51,6 +51,7 @@ const slugify = (value: string) => value
   .slice(0, 100) || `catalog-${Date.now()}`;
 
 const isTheme = (value: unknown): value is FormThemeKey => FORM_THEME_OPTIONS.some(option => option.value === value);
+const isCatalogProductLayout = (value: unknown): value is CatalogProductLayout => value === 'default' || value === 'grid' || value === 'large-image' || value === 'compact';
 
 const normalizeCustomDomain = (value: unknown) => {
   let raw = asText(value).trim().toLowerCase();
@@ -88,6 +89,7 @@ const normalizeCatalogBenefits = (value: unknown): CatalogBenefit[] => {
 };
 
 const emptyCatalogContent = (): CatalogContent => ({
+  productLayout: 'default',
   announcement: '',
   heroEyebrow: '',
   heroTitle: '',
@@ -101,6 +103,7 @@ const emptyCatalogContent = (): CatalogContent => ({
 });
 
 const createDefaultCatalogContent = (): CatalogContent => ({
+  productLayout: 'default',
   announcement: 'Produk digital siap dipakai',
   heroEyebrow: 'KOLEKSI PRODUK DIGITAL',
   heroTitle: 'Temukan resource untuk bekerja lebih cerdas',
@@ -120,7 +123,9 @@ const createDefaultCatalogContent = (): CatalogContent => ({
 const normalizeCatalogContent = (value: unknown): CatalogContent => {
   const raw = value && typeof value === 'object' && !Array.isArray(value) ? value as Record<string, any> : {};
   const fallback = emptyCatalogContent();
+  const requestedLayout = [raw.productLayout, raw.product_layout, raw.layout].find(isCatalogProductLayout);
   return {
+    productLayout: requestedLayout || fallback.productLayout,
     announcement: asText(raw.announcement),
     heroEyebrow: asText(raw.heroEyebrow),
     heroTitle: asText(raw.heroTitle),
@@ -154,6 +159,20 @@ const CATALOG_STATUS_OPTIONS: Array<{ value: CatalogPageStatus; label: string }>
 ];
 
 const statusLabel = (status: CatalogPageStatus) => CATALOG_STATUS_OPTIONS.find(option => option.value === status)?.label || 'Draft';
+
+const CATALOG_LAYOUT_OPTIONS: Array<{ value: CatalogProductLayout; label: string; description: string }> = [
+  { value: 'default', label: 'Default', description: 'Kartu standar satu kolom.' },
+  { value: 'grid', label: 'Grid', description: 'Kartu rapat dua kolom.' },
+  { value: 'large-image', label: 'Large Image', description: 'Visual produk lebih dominan.' },
+  { value: 'compact', label: 'Compact', description: 'Baris ringkas untuk banyak produk.' }
+];
+
+const CatalogLayoutPreview: React.FC<{ layout: CatalogProductLayout }> = ({ layout }) => {
+  if (layout === 'grid') return <div className="grid h-full grid-cols-2 gap-1.5"><span className="rounded bg-[var(--accent-soft)]" /><span className="rounded bg-[var(--accent-soft)]" /><span className="rounded bg-[var(--accent-soft)]" /><span className="rounded bg-[var(--accent-soft)]" /></div>;
+  if (layout === 'large-image') return <div className="flex h-full flex-col gap-1.5"><span className="h-10 rounded bg-[var(--accent-soft)]" /><span className="h-2 w-3/4 rounded bg-[var(--border-strong)]" /><span className="h-2 w-1/2 rounded bg-[var(--border)]" /></div>;
+  if (layout === 'compact') return <div className="space-y-1.5"><span className="flex h-5 items-center gap-1.5 rounded bg-[var(--accent-soft)] p-1"><span className="h-3 w-5 rounded bg-[var(--border-strong)]" /><span className="h-1.5 flex-1 rounded bg-[var(--border-strong)]" /></span><span className="flex h-5 items-center gap-1.5 rounded bg-[var(--accent-soft)] p-1"><span className="h-3 w-5 rounded bg-[var(--border-strong)]" /><span className="h-1.5 flex-1 rounded bg-[var(--border-strong)]" /></span><span className="flex h-5 items-center gap-1.5 rounded bg-[var(--accent-soft)] p-1"><span className="h-3 w-5 rounded bg-[var(--border-strong)]" /><span className="h-1.5 flex-1 rounded bg-[var(--border-strong)]" /></span></div>;
+  return <div className="space-y-1.5"><span className="flex h-5 items-center gap-1.5 rounded bg-[var(--accent-soft)] p-1"><span className="h-3 w-8 rounded bg-[var(--border-strong)]" /><span className="h-1.5 flex-1 rounded bg-[var(--border-strong)]" /></span><span className="flex h-5 items-center gap-1.5 rounded bg-[var(--accent-soft)] p-1"><span className="h-3 w-8 rounded bg-[var(--border-strong)]" /><span className="h-1.5 flex-1 rounded bg-[var(--border-strong)]" /></span><span className="flex h-5 items-center gap-1.5 rounded bg-[var(--accent-soft)] p-1"><span className="h-3 w-8 rounded bg-[var(--border-strong)]" /><span className="h-1.5 flex-1 rounded bg-[var(--border-strong)]" /></span></div>;
+};
 
 const getLandingPreviewImage = (landing: LandingOption | any) => {
   const blocks = Array.isArray(landing?.blocks) ? landing.blocks : [];
@@ -228,6 +247,7 @@ const catalogWriteRow = (page: CatalogPage) => ({
   custom_domain: normalizeCustomDomain(page.customDomain),
   social_links: page.socialLinks.map(link => ({ id: link.id, label: link.label, url: link.url })),
   content: {
+    productLayout: page.content.productLayout,
     announcement: page.content.announcement || '',
     heroEyebrow: page.content.heroEyebrow || '',
     heroTitle: page.content.heroTitle || '',
@@ -578,6 +598,12 @@ const CatalogContentEditor: React.FC<{
       <h3 className="mt-2 text-lg font-bold">Hero & benefit katalog</h3>
       <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Buat katalog terasa seperti storefront produk digital dengan banner, ajakan, dan alasan untuk membeli.</p>
     </div>
+    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+      <div><p className="text-sm font-semibold">Layout produk</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Pilih susunan kartu yang paling cocok untuk jumlah dan visual produk Anda.</p></div>
+      <div className="grid grid-cols-2 gap-2">
+        {CATALOG_LAYOUT_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={content.productLayout === option.value} onClick={() => update({ productLayout: option.value })} className={`rounded-xl border p-2.5 text-left transition-colors ${content.productLayout === option.value ? 'border-[var(--accent)] bg-[var(--surface)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)]'}`}><div className="mb-2 h-16 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-2"><CatalogLayoutPreview layout={option.value} /></div><span className="block text-xs font-semibold text-[var(--text)]">{option.label}</span><span className="mt-1 block text-[10px] leading-relaxed text-[var(--muted)]">{option.description}</span></button>)}
+      </div>
+    </div>
     <Input label="Pengumuman singkat (opsional)" value={content.announcement} onChange={event => update({ announcement: event.target.value })} placeholder="Produk digital baru sudah tersedia" />
     <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
       <div className="flex items-start gap-2"><Sparkles size={17} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div><p className="text-sm font-semibold">Hero katalog</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tampilkan pesan utama dan visual koleksi di bagian paling atas.</p></div></div>
@@ -905,11 +931,19 @@ const safeCatalogCtaHref = (value: unknown) => {
   return safeExternalHref(raw);
 };
 
-const CatalogPublicCard: React.FC<{ item: CatalogPageItem; index: number }> = ({ item, index }) => {
+const CatalogPublicCard: React.FC<{ item: CatalogPageItem; index: number; layout: CatalogProductLayout }> = ({ item, index, layout }) => {
   const href = item.slug ? landingHref(item.slug) : '#catalog-products';
-  return <a href={href} onClick={event => { if (!item.slug) event.preventDefault(); }} className={`group flex h-full flex-col overflow-hidden rounded-2xl border bg-[var(--surface)] text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ${item.featured ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--accent)]'}`}>
-    <div className="relative aspect-[16/10] w-full overflow-hidden bg-[var(--surface-soft)]">{item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || item.title || `Produk ${index + 1}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" /> : <div className="flex h-full items-center justify-center text-[var(--accent-strong)]"><Package size={42} strokeWidth={1.5} /></div>}{item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--surface)]/95 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)] shadow-sm"><BadgeCheck size={13} />{item.badge}</span>}{item.featured && !item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)]"><Star size={13} fill="currentColor" /> Unggulan</span>}</div>
-    <div className="flex flex-1 flex-col p-4"><div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{item.category && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2 py-1 text-[var(--accent-strong)]"><Tag size={12} />{item.category}</span>}{item.format && <span className="inline-flex items-center gap-1"><Package size={12} />{item.format}</span>}</div><h2 className="mt-3 line-clamp-2 text-base font-bold leading-snug text-[var(--text)]">{item.title || 'Lihat produk'}</h2><p className="mt-2 line-clamp-3 text-sm leading-relaxed text-[var(--muted)]">{item.description || 'Pelajari detail produk dan penawaran selengkapnya.'}</p><div className="mt-auto flex items-end justify-between gap-3 pt-5"><div>{item.price && <p className="text-base font-bold text-[var(--text)]">{item.price}</p>}{item.compareAtPrice && <p className="mt-0.5 text-xs text-[var(--muted)] line-through">{item.compareAtPrice}</p>}{!item.price && !item.compareAtPrice && <p className="text-xs font-semibold text-[var(--muted)]">Detail produk</p>}</div><span className="inline-flex shrink-0 items-center gap-1 text-xs font-semibold text-[var(--accent-strong)]">{item.buttonLabel || 'Lihat produk'} <ArrowRight size={14} className="transition-transform group-hover:translate-x-0.5" /></span></div></div>
+  const isCompact = layout === 'compact';
+  const imageClass = isCompact
+    ? 'h-28 w-28 shrink-0 sm:h-32 sm:w-32'
+    : layout === 'large-image'
+      ? 'aspect-[16/8] w-full'
+      : layout === 'grid'
+        ? 'aspect-square w-full'
+        : 'aspect-[16/10] w-full';
+  return <a href={href} onClick={event => { if (!item.slug) event.preventDefault(); }} className={`group ${isCompact ? 'flex min-h-32 flex-row' : 'flex h-full flex-col'} overflow-hidden rounded-2xl border bg-[var(--surface)] text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ${item.featured ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--accent)]'}`}>
+    <div className={`relative overflow-hidden bg-[var(--surface-soft)] ${imageClass}`}>{item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || item.title || `Produk ${index + 1}`} className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.03]" /> : <div className="flex h-full items-center justify-center text-[var(--accent-strong)]"><Package size={isCompact ? 30 : 42} strokeWidth={1.5} /></div>}{item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--surface)]/95 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)] shadow-sm"><BadgeCheck size={13} />{item.badge}</span>}{item.featured && !item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)]"><Star size={13} fill="currentColor" /> Unggulan</span>}</div>
+    <div className={`flex min-w-0 flex-1 flex-col ${isCompact ? 'p-3.5 sm:p-4' : 'p-4'}`}><div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{item.category && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2 py-1 text-[var(--accent-strong)]"><Tag size={12} />{item.category}</span>}{item.format && <span className="inline-flex items-center gap-1"><Package size={12} />{item.format}</span>}</div><h2 className={`${isCompact ? 'mt-2' : 'mt-3'} line-clamp-2 text-base font-bold leading-snug text-[var(--text)]`}>{item.title || 'Lihat produk'}</h2><p className={`${isCompact ? 'line-clamp-2' : 'line-clamp-3'} mt-2 text-sm leading-relaxed text-[var(--muted)]`}>{item.description || 'Pelajari detail produk dan penawaran selengkapnya.'}</p><div className={`${isCompact ? 'mt-4' : 'mt-auto pt-5'} flex flex-wrap items-end justify-between gap-3`}><div>{item.price && <p className="text-base font-bold text-[var(--text)]">{item.price}</p>}{item.compareAtPrice && <p className="mt-0.5 text-xs text-[var(--muted)] line-through">{item.compareAtPrice}</p>}{!item.price && !item.compareAtPrice && <p className="text-xs font-semibold text-[var(--muted)]">Detail produk</p>}</div><span className="inline-flex min-h-9 shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] px-3 py-2 text-xs font-semibold text-white transition-colors group-hover:bg-[var(--accent-hover)]">{item.buttonLabel || 'Lihat produk'}</span></div></div>
   </a>;
 };
 
@@ -978,12 +1012,14 @@ export const PublicCatalogPageView: React.FC<PublicCatalogPageViewProps> = ({ cl
   if (loadError || !page) return <div className={`flex ${embedded ? 'min-h-full' : 'min-h-screen'} items-center justify-center bg-[var(--app-bg)] p-6`}><Card className="w-full max-w-md space-y-5 py-10 text-center"><XCircle size={34} className="mx-auto text-[var(--danger-text)]" /><div><h1 className="text-xl font-bold">Katalog tidak dapat dibuka</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{loadError}</p></div><Button onClick={() => void fetchPage()} className="mx-auto w-full">Coba lagi</Button></Card></div>;
 
   const content = page.content;
+  const productLayout = isCatalogProductLayout(content.productLayout) ? content.productLayout : 'default';
+  const productGridClass = productLayout === 'grid' ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-4';
   const heroCtaHref = safeCatalogCtaHref(content.heroCtaUrl);
   const hasHero = Boolean(content.heroEyebrow || content.heroTitle || content.heroDescription || content.heroImageUrl || content.heroCtaLabel);
 
   return <div className={`${embedded ? 'min-h-full px-3 py-5' : 'min-h-screen px-4 py-8 sm:px-6'} bg-[var(--app-bg)] text-[var(--text)]`} style={formThemeStyle(page.theme)}><main className="mx-auto flex w-full max-w-5xl flex-col items-center"><header className="flex w-full flex-col items-center text-center"><div className="flex h-24 w-24 items-center justify-center overflow-hidden rounded-full border-4 border-[var(--surface)] bg-[var(--accent-soft)] p-1 shadow-sm">{page.avatarUrl ? <img src={page.avatarUrl} alt={page.title} className="h-full w-full rounded-full object-cover" /> : <img src={logoUtama} alt="Arunika" className="max-h-16 max-w-16 object-contain" />}</div><h1 className="mt-5 text-2xl font-bold tracking-tight sm:text-3xl">{page.title}</h1>{page.description && <p className="mt-3 max-w-2xl text-sm leading-relaxed text-[var(--muted)] sm:text-base">{page.description}</p>}<div className="mt-4 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-1.5 text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]"><LinkIcon size={13} /> Katalog produk digital</div>{content.announcement && <div className="mt-3 inline-flex items-center gap-2 rounded-full border border-[var(--border)] bg-[var(--success-soft)] px-3 py-1.5 text-xs font-semibold text-[var(--success-text)]"><Sparkles size={13} /> {content.announcement}</div>}{page.socialLinks.length > 0 && <nav className="mt-4 flex flex-wrap justify-center gap-2" aria-label="Tautan sosial dan lainnya">{page.socialLinks.map(link => { const href = safeExternalHref(link.url); return href ? <a key={link.id} href={href} target="_blank" rel="noreferrer" className="inline-flex items-center gap-1.5 rounded-full border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--accent)] hover:bg-[var(--surface-soft)]"><LinkIcon size={13} className="text-[var(--accent-strong)]" />{link.label || 'Link'}<ExternalLink size={12} className="text-[var(--muted)]" /></a> : null; })}</nav>}</header>
     {hasHero && <section className="relative mt-8 w-full overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-sm"><div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[var(--accent-soft)] opacity-70" /><div className="relative grid items-center gap-6 p-6 sm:p-10 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.78fr)]"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent-strong)]">{content.heroEyebrow || 'PRODUK DIGITAL'}</p><h2 className="mt-3 max-w-2xl text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{content.heroTitle || page.title}</h2>{content.heroDescription && <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--muted)] sm:text-base">{content.heroDescription}</p>}{content.heroCtaLabel && heroCtaHref && <a href={heroCtaHref} target={heroCtaHref.startsWith('http') ? '_blank' : undefined} rel={heroCtaHref.startsWith('http') ? 'noreferrer' : undefined} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--accent-hover)]">{content.heroCtaLabel}<ArrowRight size={16} /></a>}</div><div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)]">{content.heroImageUrl ? <img src={content.heroImageUrl} alt={content.heroImageAlt || 'Visual katalog produk'} className="h-full w-full object-cover" /> : <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-[var(--muted)]"><Package size={42} strokeWidth={1.5} className="text-[var(--accent-strong)]" /><span className="text-xs font-semibold">Koleksi produk digital</span></div>}</div></div></section>}
     {content.benefits.length > 0 && <section className="mt-10 w-full"><div className="mb-4 flex items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)]">Keunggulan</p><h2 className="mt-2 text-2xl font-bold tracking-tight">{content.benefitsHeading || 'Belanja digital dengan lebih mudah'}</h2></div><Badge color="var(--surface)"><BadgeCheck size={13} className="mr-1.5" /> Terpilih</Badge></div><div className="grid gap-3 md:grid-cols-3">{content.benefits.map((benefit, index) => <article key={benefit.id || `benefit-${index}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-strong)]">{String(index + 1).padStart(2, '0')}</span><h3 className="mt-4 text-sm font-bold">{benefit.title || 'Benefit produk'}</h3>{benefit.description && <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{benefit.description}</p>}</article>)}</div></section>}
-    <section id="catalog-products" className="mt-10 w-full"><div className="mb-4 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)]">Etalase digital</p><h2 className="mt-2 text-2xl font-bold tracking-tight">Pilih produk yang Anda butuhkan</h2><p className="mt-1 text-sm text-[var(--muted)]">{visibleItems.length} dari {page.items.length} produk ditampilkan</p></div>{categories.length > 1 && <label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><span className="sr-only">Filter kategori</span><select value={activeCategory} onChange={event => setActiveCategory(event.target.value)} className="min-h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-semibold text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="all">Semua kategori</option>{categories.map(category => <option key={category} value={category}>{category}</option>)}</select></label>}</div>{visibleItems.length ? <div className="grid gap-4 sm:grid-cols-2">{visibleItems.map((item, index) => <CatalogPublicCard key={item.id || `${item.landingPageId}-${index}`} item={item} index={index} />)}</div> : <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk pada kategori ini.</div>}</section>
+    <section id="catalog-products" className="mt-10 w-full"><div className="mb-4 flex flex-col justify-between gap-4 sm:flex-row sm:items-end"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)]">Etalase digital</p><h2 className="mt-2 text-2xl font-bold tracking-tight">Pilih produk yang Anda butuhkan</h2><p className="mt-1 text-sm text-[var(--muted)]">{visibleItems.length} dari {page.items.length} produk ditampilkan</p></div>{categories.length > 1 && <label className="flex items-center gap-2 text-xs font-semibold text-[var(--muted)]"><span className="sr-only">Filter kategori</span><select value={activeCategory} onChange={event => setActiveCategory(event.target.value)} className="min-h-10 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-semibold text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="all">Semua kategori</option>{categories.map(category => <option key={category} value={category}>{category}</option>)}</select></label>}</div>{visibleItems.length ? <div className={productGridClass} data-layout={productLayout}>{visibleItems.map((item, index) => <CatalogPublicCard key={item.id || `${item.landingPageId}-${index}`} item={item} index={index} layout={productLayout} />)}</div> : <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk pada kategori ini.</div>}</section>
     <footer className="mt-12 flex items-center gap-2 text-xs text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" /> Dibuat dengan Arunika</footer></main></div>;
 };
