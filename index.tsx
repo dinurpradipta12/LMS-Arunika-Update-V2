@@ -726,8 +726,8 @@ const Sidebar: React.FC<{
         />
       )}
 
-      <div className={`fixed inset-y-0 left-0 z-[101] flex w-64 flex-col border-r border-[var(--border)] bg-[var(--surface)] transition-[width,transform] duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 md:flex ${isCollapsed ? 'md:w-[76px]' : 'md:w-64'}`}>
-        <div className={`relative flex min-h-[84px] items-center justify-between border-b border-[var(--border)] p-5 ${isCollapsed ? 'md:flex-col md:gap-1 md:px-2 md:py-3' : ''}`}>
+      <div className={`fixed inset-y-0 left-0 z-[101] flex h-screen min-h-0 w-64 flex-col overflow-hidden border-r border-[var(--border)] bg-[var(--surface)] transition-[width,transform] duration-300 ease-in-out ${isOpen ? 'translate-x-0' : '-translate-x-full'} md:relative md:translate-x-0 md:flex ${isCollapsed ? 'md:w-[76px]' : 'md:w-64'}`}>
+        <div className={`relative flex min-h-[84px] shrink-0 items-center justify-between border-b border-[var(--border)] p-5 ${isCollapsed ? 'md:flex-col md:gap-1 md:px-2 md:py-3' : ''}`}>
           <div className="flex min-w-0 items-center justify-center">
             <img src={logoUtama} className={`h-10 w-auto object-contain ${isCollapsed ? 'md:h-8 md:max-w-[42px]' : 'max-w-[180px]'}`} alt="Logo Utama" />
           </div>
@@ -748,7 +748,7 @@ const Sidebar: React.FC<{
           </div>
         </div>
 
-        <nav className="flex-1 space-y-1 overflow-y-auto p-3">
+        <nav className="min-h-0 flex-1 space-y-1 overflow-y-auto p-3">
           <p className={`px-3 pb-2 pt-3 text-[10px] font-semibold uppercase tracking-[0.18em] text-[var(--muted)] ${labelClassName}`}>Workspace</p>
           <Link to="/admin" onClick={closeOnMobile} className={linkClassName(location.pathname === '/admin')} title="Semua Space">
             <LayoutGrid size={18} /><span className={labelClassName}>Semua Space</span>
@@ -779,7 +779,7 @@ const Sidebar: React.FC<{
           </Link>
         </nav>
 
-        <div className={`border-t border-[var(--border)] p-4 ${isCollapsed ? 'md:p-3' : ''}`}>
+        <div className={`shrink-0 border-t border-[var(--border)] p-4 ${isCollapsed ? 'md:p-3' : ''}`}>
           <Button variant="secondary" className={`h-11 w-full text-sm ${isCollapsed ? 'md:justify-center md:px-2' : 'justify-start'}`} onClick={() => { onLogout(); onClose(); }} title="Logout">
             <LogOut size={18} className={isCollapsed ? 'md:mr-0' : 'mr-2'} /> <span className={labelClassName}>Logout</span>
           </Button>
@@ -798,7 +798,7 @@ const AdminLayout: React.FC<{
   setIsSidebarCollapsed: React.Dispatch<React.SetStateAction<boolean>>;
   onLogout: () => void;
 }> = ({ children, branding, isSidebarOpen, setIsSidebarOpen, isSidebarCollapsed, setIsSidebarCollapsed, onLogout }) => (
-  <div className="flex min-h-screen">
+  <div className="flex h-screen min-h-screen overflow-hidden">
     <Sidebar 
       branding={branding} 
       onLogout={onLogout} 
@@ -807,7 +807,7 @@ const AdminLayout: React.FC<{
       isCollapsed={isSidebarCollapsed}
       onToggleCollapse={() => setIsSidebarCollapsed(current => !current)}
     />
-    <main className="flex-1 min-w-0 bg-[var(--app-bg)] flex flex-col">
+    <main className="flex h-screen min-h-0 min-w-0 flex-1 flex-col bg-[var(--app-bg)]">
       <header className="md:hidden bg-[var(--surface)] border-b border-[var(--border)] px-4 flex items-center justify-between sticky top-0 z-30 h-16">
         <button onClick={() => setIsSidebarOpen(true)} aria-label="Buka navigasi" className="p-2 text-[var(--text)] hover:bg-[var(--surface-soft)] rounded-xl transition-colors">
           <Menu size={24} />
@@ -817,7 +817,7 @@ const AdminLayout: React.FC<{
         </div>
         <div className="w-10"></div>
       </header>
-      <div className="flex-1 overflow-y-auto">
+      <div className="min-h-0 flex-1 overflow-y-auto">
         {children}
       </div>
     </main>
