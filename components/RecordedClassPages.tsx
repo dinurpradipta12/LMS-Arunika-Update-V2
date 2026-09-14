@@ -278,7 +278,6 @@ const createReviewCardImage = async (feedback: ClassFeedbackSubmission, courseTi
     navy: '#173b5e',
     muted: '#65798d',
     border: '#d8e3ec',
-    soft: '#e6eef5',
     teal: '#0f766e',
     star: '#f59e0b'
   };
@@ -313,10 +312,6 @@ const createReviewCardImage = async (feedback: ClassFeedbackSubmission, courseTi
   context.fillStyle = colors.navy;
   context.font = '700 24px Arial, sans-serif';
   context.fillText('ARUNIKA LEARNING HUB', 204, 92);
-  context.fillStyle = colors.muted;
-  context.font = '600 20px Arial, sans-serif';
-  context.fillText('KARTU REVIEW KELAS', cardX, 214);
-
   context.fillStyle = colors.navy;
   context.font = '700 52px Arial, sans-serif';
   const titleLines = wrapCanvasText(context, plainText(courseTitle) || 'Kelas Arunika', cardWidth, 2);
@@ -329,10 +324,6 @@ const createReviewCardImage = async (feedback: ClassFeedbackSubmission, courseTi
   context.lineWidth = 3;
   context.stroke();
 
-  context.fillStyle = colors.soft;
-  context.beginPath();
-  context.arc(canvas.width - 152, cardTop + 110, 70, 0, Math.PI * 2);
-  context.fill();
   context.fillStyle = colors.teal;
   context.font = '700 86px Georgia, serif';
   context.fillText('“', cardX + 54, cardTop + 134);
