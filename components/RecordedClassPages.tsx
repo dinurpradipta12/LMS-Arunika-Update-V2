@@ -1036,7 +1036,7 @@ const AnswerReviewModal: React.FC<{
 
   return (
     <div
-      className="fixed inset-0 z-[1100] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+      className="fixed inset-0 z-[1200] !mt-0 isolate flex h-[100dvh] min-h-screen w-full items-center justify-center overflow-y-auto overscroll-contain bg-slate-950/75 p-4 backdrop-blur-md sm:p-6"
       role="presentation"
       onMouseDown={event => {
         if (event.target === event.currentTarget && !isSaving) onClose();
@@ -1046,7 +1046,7 @@ const AnswerReviewModal: React.FC<{
         role="dialog"
         aria-modal="true"
         aria-labelledby="arunika-answer-review-title"
-        className="flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl"
+        className="relative z-10 flex max-h-[92vh] w-full max-w-4xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl"
         onMouseDown={event => event.stopPropagation()}
       >
         <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-5 sm:p-6">
