@@ -275,22 +275,19 @@ const calculateReviewedAttempt = (
   reviews: Record<string, QuizAnswerReview>
 ) => {
   const entries = buildQuizAnswerEntries({ ...attempt, reviewedAnswers: reviews }, quiz);
-  let totalPoints = 0;
-  let earnedPoints = 0;
-  let needsReview = false;
-
-  entries.forEach(entry => {
-    if (!entry.question) return;
-    totalPoints += entry.points;
-    if (entry.correct === null) needsReview = true;
-    if (entry.correct === true) earnedPoints += entry.points;
-  });
-
-  const score = totalPoints > 0 ? Math.round((earnedPoints / totalPoints) * 100) : 0;
+  const questionEntries = entries.filter(entry => entry.question);
+  const totalQuestions = questionEntries.length;
+  const correctAnswers = questionEntries.filter(entry => entry.correct === true).length;
+  const gradedQuestions = questionEntries.filter(entry => entry.correct !== null).length;
+  const needsReview = questionEntries.some(entry => entry.correct === null);
+  const score = totalQuestions > 0 ? Math.round((correctAnswers / totalQuestions) * 100) : 0;
   return {
     score,
     needsReview,
-    passed: !needsReview && score >= (quiz?.passingScore ?? 0)
+    passed: !needsReview && score >= (quiz?.passingScore ?? 0),
+    totalQuestions,
+    gradedQuestions,
+    correctAnswers
   };
 };
 
@@ -304,6 +301,10 @@ const reportText = (value: unknown, fallback = '—') => plainText(value) || fal
 
 const pdfEscape = (value: unknown) => reportText(value, '')
   .normalize('NFKD')
+  .replace(/[“”]/g, '"')
+  .replace(/[‘’]/g, "'")
+  .replace(/[–—]/g, '-')
+  .replace(/…/g, '...')
   .replace(/[\u0300-\u036f]/g, '')
   .replace(/[^\x20-\x7E]/g, '?')
   .replace(/\\/g, '\\\\')
@@ -338,33 +339,49 @@ const createQuizReportPdf = (attempt: QuizAttempt, quiz: CourseQuiz | null, cour
   const lines: Array<{ text: string; size?: number; gapAfter?: number }> = [];
   const add = (text: unknown, size = 10, gapAfter = 0) => wrapReportText(text).forEach(line => lines.push({ text: line, size, gapAfter }));
   const addLabel = (label: string, value: unknown) => add(`${label}: ${reportText(value)}`);
+  const addSection = (title: string) => lines.push({ text: title, size: 12, gapAfter: 4 });
+  const reportEntries = buildQuizAnswerEntries(attempt, quiz);
+  const reportSummary = calculateReviewedAttempt(attempt, quiz, attempt.reviewedAnswers || {});
 
   lines.push({ text: 'RAPORT PENILAIAN POST-TEST', size: 16, gapAfter: 8 });
-  add(`Kelas: ${reportText(courseTitle)}`);
+  add(`Kelas: ${reportText(courseTitle)}`, 10, 2);
   addLabel('Peserta', attempt.participantName);
   addLabel('Email', attempt.participantEmail);
   addLabel('Percobaan', `#${attempt.attemptNumber}`);
   addLabel('Waktu submit', attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString('id-ID') : '—');
-  addLabel('Nilai', `${attempt.score}/100`);
-  addLabel('Status', attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum lulus');
+  addLabel('Nilai akhir', `${reportSummary.score}/100`);
+  addLabel('Status', reportSummary.needsReview ? 'Menunggu review' : reportSummary.passed ? 'Lulus' : 'Belum lulus');
   if (attempt.reviewedAt) addLabel('Direview', new Date(attempt.reviewedAt).toLocaleString('id-ID'));
   if (attempt.reviewFeedback) {
-    add('CATATAN KOREKTOR', 11, 2);
+    addSection('CATATAN KOREKTOR');
     add(attempt.reviewFeedback, 10, 6);
   }
   if (attempt.classFeedback) {
-    add('FEEDBACK PESERTA', 11, 2);
+    addSection('FEEDBACK PESERTA');
     add(attempt.classFeedback, 10, 6);
   }
-  add('DETAIL JAWABAN', 11, 4);
+  addSection('RINGKASAN PENILAIAN');
+  addLabel('Jumlah soal', reportSummary.totalQuestions);
+  addLabel('Soal sudah dinilai', `${reportSummary.gradedQuestions}/${reportSummary.totalQuestions}`);
+  addLabel('Total jawaban benar', `${reportSummary.correctAnswers}/${reportSummary.totalQuestions}`);
+  addLabel('Rumus nilai akhir', reportSummary.totalQuestions > 0
+    ? `(${reportSummary.correctAnswers} / ${reportSummary.totalQuestions}) x 100 = ${reportSummary.score}`
+    : 'Belum ada soal');
+  addLabel('Nilai akhir', `${reportSummary.score}/100`);
 
-  buildQuizAnswerEntries(attempt, quiz).forEach(entry => {
-    add(`${entry.number}. ${entry.prompt}`, 10, 1);
-    add(`Jawaban peserta: ${entry.answer}`, 9);
-    if (entry.correctAnswer) add(`Jawaban kunci: ${entry.correctAnswer}`, 9);
-    add(`Hasil: ${reviewStatusLabel(entry.correct)}`, 9);
-    if (entry.feedback) add(`Feedback korektor: ${entry.feedback}`, 9);
-    lines.push({ text: '', size: 9, gapAfter: 3 });
+  addSection('DETAIL PENILAIAN PER SOAL');
+  reportEntries.forEach(entry => {
+    const mark = entry.correct === null ? '—' : entry.correct ? '1/1' : '0/1';
+    add(`SOAL ${entry.number}`, 12, 2);
+    add(`Pertanyaan: ${entry.prompt}`, 10, 2);
+    add('JAWABAN PESERTA', 9, 1);
+    add(entry.answer, 10, 3);
+    add('KUNCI JAWABAN', 9, 1);
+    add(entry.correctAnswer || 'Dinilai manual oleh korektor.', 10, 3);
+    add(`PENILAIAN: ${mark} - ${reviewStatusLabel(entry.correct)}`, 10, 2);
+    add('FEEDBACK KOREKTOR', 9, 1);
+    add(entry.feedback || 'Tidak ada feedback untuk soal ini.', 10, 6);
+    lines.push({ text: '----------------------------------------', size: 9, gapAfter: 6 });
   });
 
   const pageHeight = 842;
@@ -405,9 +422,11 @@ const createQuizReportPdf = (attempt: QuizAttempt, quiz: CourseQuiz | null, cour
     objects.push('');
   });
   pages.forEach((pageLines, pageIndex) => {
-    const content = pageLines.map((line, index) => {
-      const y = pageHeight - marginTop - index * lineHeight;
+    let cursorY = pageHeight - marginTop;
+    const content = pageLines.map(line => {
+      const y = cursorY;
       const size = line.size || 10;
+      cursorY -= lineHeight + (line.gapAfter || 0);
       return `BT /F1 ${size} Tf 1 0 0 1 ${marginX} ${y} Tm (${pdfEscape(line.text)}) Tj ET`;
     }).join('\n');
     objects[pageObjectIds[pageIndex] - 1] = `<< /Type /Page /Parent ${pagesObject} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObject} 0 R >> >> /Contents ${contentObjectIds[pageIndex]} 0 R >>`;
@@ -885,8 +904,9 @@ const AnswerReviewModal: React.FC<{
         </div>
 
         <div className="min-h-0 flex-1 space-y-6 overflow-y-auto p-5 sm:p-6">
-          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-5">
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Nilai</p><p className="mt-1 text-lg font-bold">{reviewSummary.score}</p></div>
+            <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Jawaban benar</p><p className="mt-1 text-lg font-bold">{reviewSummary.correctAnswers}/{reviewSummary.totalQuestions}</p></div>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Status</p><span className={`mt-1 inline-flex rounded-lg px-2 py-1 text-xs font-semibold ${statusClass}`}>{statusLabel}</span></div>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Percobaan</p><p className="mt-1 text-lg font-bold">#{attempt.attemptNumber}</p></div>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Dikirim</p><p className="mt-1 text-xs font-semibold leading-relaxed">{submittedAt}</p></div>
@@ -914,6 +934,7 @@ const AnswerReviewModal: React.FC<{
                       <div className="flex flex-wrap items-start justify-between gap-3"><p className="min-w-0 flex-1 text-sm font-semibold leading-relaxed"><span className="mr-2 text-[var(--muted)]">{entry.number}.</span>{entry.prompt}</p><span className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{questionTypeLabel(entry.type)}</span></div>
                       <div className="mt-4 rounded-lg border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Jawaban peserta</p><p className="mt-1 whitespace-pre-wrap break-words text-sm leading-relaxed">{entry.answer}</p></div>
                       {entry.correctAnswer && <p className="mt-3 text-xs text-[var(--muted)]">Kunci jawaban: <span className="font-semibold text-[var(--text)]">{entry.correctAnswer}</span></p>}
+                      <p className="mt-3 text-xs text-[var(--muted)]">Penilaian soal: <span className="font-semibold text-[var(--text)]">{entry.correct === null ? 'Belum dinilai' : entry.correct ? '1/1' : '0/1'}</span></p>
                       <div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,220px)_1fr] md:items-end">
                         <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status koreksi</span><select value={statusValue} onChange={event => updateReviewStatus(entry.id, event.target.value)} className="min-h-[46px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="pending">Menunggu review</option><option value="correct">Benar</option><option value="incorrect">Salah</option></select></label>
                         <Textarea label="Feedback untuk peserta (opsional)" value={draft.feedback} onChange={event => updateReviewFeedback(entry.id, event.target.value)} placeholder="Tulis catatan untuk jawaban ini..." className="min-h-[88px]" maxLength={2000} />
