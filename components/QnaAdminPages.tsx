@@ -1,11 +1,12 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, Copy, Eye, ImagePlus, Loader2, MessageCircle, Pin, Play, Plus, Save, Trash2, Upload, XCircle } from 'lucide-react';
+import { ArrowLeft, Check, Copy, Download, Eye, ImagePlus, Loader2, MessageCircle, Pin, Play, Plus, Save, Trash2, Upload, X, XCircle } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 
 import { FormThemeKey, QnaQuestion, QnaQuestionStatus, QnaSession, QnaSessionStatus } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
 import { getPublicBaseUrl } from './PublicMetadata';
+import logoUtama from '../src/logo-utama.png';
 
 export const QNA_SPACE_LABEL = 'Q&A Audience';
 
@@ -134,6 +135,307 @@ const defaultSession = (): QnaSession => ({
 });
 
 const formatDate = (value?: string | null) => value ? new Date(value).toLocaleString('id-ID') : '—';
+
+const qnaCardText = (value: unknown) => String(value ?? '')
+  .replace(/\r\n/g, '\n')
+  .replace(/[ \t]+/g, ' ')
+  .trim();
+
+const drawQnaCanvasRoundedRect = (context: CanvasRenderingContext2D, x: number, y: number, width: number, height: number, radius: number) => {
+  const safeRadius = Math.min(radius, width / 2, height / 2);
+  context.beginPath();
+  context.moveTo(x + safeRadius, y);
+  context.lineTo(x + width - safeRadius, y);
+  context.quadraticCurveTo(x + width, y, x + width, y + safeRadius);
+  context.lineTo(x + width, y + height - safeRadius);
+  context.quadraticCurveTo(x + width, y + height, x + width - safeRadius, y + height);
+  context.lineTo(x + safeRadius, y + height);
+  context.quadraticCurveTo(x, y + height, x, y + height - safeRadius);
+  context.lineTo(x, y + safeRadius);
+  context.quadraticCurveTo(x, y, x + safeRadius, y);
+  context.closePath();
+};
+
+const wrapQnaCanvasText = (context: CanvasRenderingContext2D, value: string, maxWidth: number, maxLines: number) => {
+  const paragraphs = value.split(/\r?\n/);
+  const lines: string[] = [];
+  let wasTruncated = false;
+
+  paragraphLoop: for (let paragraphIndex = 0; paragraphIndex < paragraphs.length; paragraphIndex += 1) {
+    const paragraph = paragraphs[paragraphIndex];
+    const words = paragraph.trim().split(/\s+/).filter(Boolean);
+    if (!words.length) {
+      if (lines.length < maxLines) lines.push('');
+      else wasTruncated = true;
+      continue;
+    }
+
+    let line = '';
+    for (const word of words) {
+      const candidate = line ? `${line} ${word}` : word;
+      if (context.measureText(candidate).width <= maxWidth || !line) {
+        line = candidate;
+        continue;
+      }
+      lines.push(line);
+      if (lines.length >= maxLines) {
+        wasTruncated = true;
+        break paragraphLoop;
+      }
+      line = word;
+    }
+    if (wasTruncated) break;
+    if (line) lines.push(line);
+    if (lines.length >= maxLines) {
+      wasTruncated = paragraphIndex < paragraphs.length - 1;
+      break;
+    }
+  }
+
+  const visibleLines = lines.slice(0, maxLines);
+  if (wasTruncated && visibleLines.length) {
+    let lastLine = visibleLines[visibleLines.length - 1].replace(/\s+$/, '');
+    while (lastLine.length > 1 && context.measureText(`${lastLine}…`).width > maxWidth) lastLine = lastLine.slice(0, -1);
+    visibleLines[visibleLines.length - 1] = `${lastLine}…`;
+  }
+  return visibleLines.length ? visibleLines : [''];
+};
+
+const loadQnaCanvasImage = (source: string) => new Promise<HTMLImageElement>((resolve, reject) => {
+  const image = new Image();
+  image.onload = () => resolve(image);
+  image.onerror = () => reject(new Error('Logo gagal dimuat.'));
+  image.src = source;
+});
+
+const drawQnaCanvasImageContain = (context: CanvasRenderingContext2D, image: HTMLImageElement, x: number, y: number, width: number, height: number) => {
+  const scale = Math.min(width / image.width, height / image.height);
+  const drawWidth = image.width * scale;
+  const drawHeight = image.height * scale;
+  context.drawImage(image, x + (width - drawWidth) / 2, y + (height - drawHeight) / 2, drawWidth, drawHeight);
+};
+
+const qnaCardFilePart = (value: unknown) => qnaCardText(value)
+  .toLowerCase()
+  .normalize('NFKD')
+  .replace(/[\u0300-\u036f]/g, '')
+  .replace(/[^a-z0-9]+/g, '-')
+  .replace(/^-+|-+$/g, '')
+  .slice(0, 70) || 'qna';
+
+const createQnaCardImage = async (question: QnaQuestion, session: QnaSession) => {
+  const canvas = document.createElement('canvas');
+  canvas.width = 1200;
+  canvas.height = 1350;
+  const measurementContext = canvas.getContext('2d');
+  if (!measurementContext) throw new Error('Browser tidak mendukung pembuatan gambar Q&A.');
+
+  const colors = {
+    background: '#f3f7fa',
+    surface: '#ffffff',
+    navy: '#173b5e',
+    muted: '#65798d',
+    border: '#d8e3ec',
+    soft: '#e6eef5',
+    teal: '#0f766e',
+    amber: '#b45309'
+  };
+  const cardX = 72;
+  const cardWidth = canvas.width - cardX * 2;
+  const questionText = qnaCardText(question.body) || 'Pertanyaan tidak tersedia.';
+  const answerText = qnaCardText(question.answer) || 'Belum ada jawaban moderator.';
+  measurementContext.font = '500 34px Arial, sans-serif';
+  const questionLines = wrapQnaCanvasText(measurementContext, questionText, cardWidth - 140, 12);
+  const answerLines = wrapQnaCanvasText(measurementContext, answerText, cardWidth - 140, 8);
+  measurementContext.font = '700 52px Arial, sans-serif';
+  const titleLines = wrapQnaCanvasText(measurementContext, qnaCardText(session.title) || 'Sesi Q&A Arunika', cardWidth, 2);
+  const cardTop = titleLines.length > 1 ? 360 : 300;
+  const questionTopOffset = 176;
+  const questionLineHeight = 52;
+  const answerLabelOffset = questionTopOffset + questionLines.length * questionLineHeight + 48;
+  const answerTopOffset = answerLabelOffset + 52;
+  const answerLineHeight = 46;
+  const metadataOffset = answerTopOffset + answerLines.length * answerLineHeight + 70;
+  const cardHeight = Math.max(670, metadataOffset + 82);
+  const footerY = cardTop + cardHeight + 130;
+  canvas.height = footerY + 60;
+  const context = canvas.getContext('2d');
+  if (!context) throw new Error('Browser tidak mendukung pembuatan gambar Q&A.');
+
+  context.fillStyle = colors.background;
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.fillStyle = colors.navy;
+  context.fillRect(0, 0, canvas.width, 14);
+
+  try {
+    const logo = await loadQnaCanvasImage(logoUtama);
+    drawQnaCanvasImageContain(context, logo, 82, 56, 92, 66);
+  } catch {
+    // Card tetap dapat dibuat bila logo gagal dimuat.
+  }
+  context.fillStyle = colors.navy;
+  context.font = '700 24px Arial, sans-serif';
+  context.fillText('ARUNIKA LEARNING HUB', 204, 92);
+  if (qnaCardText(session.eventName)) {
+    context.fillStyle = colors.muted;
+    context.font = '600 20px Arial, sans-serif';
+    context.fillText(qnaCardText(session.eventName).slice(0, 72), cardX, 170);
+  }
+  context.fillStyle = colors.navy;
+  context.font = '700 52px Arial, sans-serif';
+  titleLines.forEach((line, index) => context.fillText(line, cardX, 238 + index * 62));
+
+  drawQnaCanvasRoundedRect(context, cardX, cardTop, cardWidth, cardHeight, 34);
+  context.fillStyle = colors.surface;
+  context.fill();
+  context.strokeStyle = colors.border;
+  context.lineWidth = 3;
+  context.stroke();
+
+  const categoryLabel = qnaCardText(question.category) || 'Umum';
+  const statusLabel = questionStatusLabel(question.status);
+  const categoryWidth = Math.min(260, Math.max(142, 42 + categoryLabel.length * 13));
+  const statusWidth = Math.min(260, Math.max(160, 42 + statusLabel.length * 11));
+  drawQnaCanvasRoundedRect(context, cardX + 70, cardTop + 48, categoryWidth, 42, 18);
+  context.fillStyle = colors.soft;
+  context.fill();
+  context.fillStyle = colors.navy;
+  context.font = '700 18px Arial, sans-serif';
+  context.fillText(categoryLabel.slice(0, 24), cardX + 91, cardTop + 76);
+  drawQnaCanvasRoundedRect(context, cardX + 88 + categoryWidth, cardTop + 48, statusWidth, 42, 18);
+  context.fillStyle = question.status === 'answered' ? '#d9f1ea' : colors.soft;
+  context.fill();
+  context.fillStyle = question.status === 'answered' ? colors.teal : colors.muted;
+  context.font = '700 18px Arial, sans-serif';
+  context.fillText(statusLabel.slice(0, 24), cardX + 109 + categoryWidth, cardTop + 76);
+
+  context.fillStyle = colors.teal;
+  context.font = '700 86px Georgia, serif';
+  context.fillText('“', cardX + 54, cardTop + 144);
+  context.fillStyle = colors.navy;
+  context.font = '500 34px Arial, sans-serif';
+  questionLines.forEach((line, index) => context.fillText(line, cardX + 70, cardTop + questionTopOffset + index * questionLineHeight));
+
+  context.strokeStyle = colors.border;
+  context.lineWidth = 2;
+  context.beginPath();
+  context.moveTo(cardX + 70, cardTop + answerLabelOffset - 24);
+  context.lineTo(cardX + cardWidth - 70, cardTop + answerLabelOffset - 24);
+  context.stroke();
+  context.fillStyle = colors.muted;
+  context.font = '700 19px Arial, sans-serif';
+  context.fillText('Jawaban moderator', cardX + 70, cardTop + answerLabelOffset + 10);
+  context.fillStyle = colors.navy;
+  context.font = '500 29px Arial, sans-serif';
+  answerLines.forEach((line, index) => context.fillText(line, cardX + 70, cardTop + answerTopOffset + index * answerLineHeight));
+
+  context.fillStyle = colors.navy;
+  context.font = '700 28px Arial, sans-serif';
+  context.fillText(qnaCardText(question.displayName) || 'Peserta Q&A', cardX + 70, cardTop + metadataOffset);
+  context.fillStyle = colors.muted;
+  context.font = '500 21px Arial, sans-serif';
+  const metadata = `${question.upvotes} vote · ${formatDate(question.createdAt)}`;
+  context.fillText(metadata, cardX + 70, cardTop + metadataOffset + 38);
+  context.fillStyle = colors.amber;
+  context.font = '700 22px Arial, sans-serif';
+  context.textAlign = 'right';
+  context.fillText(question.status === 'answered' ? 'TERJAWAB' : 'Q&A', cardX + cardWidth - 70, cardTop + metadataOffset + 38);
+  context.textAlign = 'start';
+
+  context.fillStyle = colors.muted;
+  context.font = '600 22px Arial, sans-serif';
+  context.textAlign = 'center';
+  context.fillText('Made with @arunika 2026', canvas.width / 2, footerY);
+  context.textAlign = 'start';
+  return canvas.toDataURL('image/png');
+};
+
+const QnaCardModal: React.FC<{
+  question: QnaQuestion;
+  session: QnaSession;
+  onClose: () => void;
+}> = ({ question, session, onClose }) => {
+  const [imageUrl, setImageUrl] = useState('');
+  const [isGenerating, setIsGenerating] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') onClose();
+    };
+    document.addEventListener('keydown', handleKeyDown);
+    return () => document.removeEventListener('keydown', handleKeyDown);
+  }, [onClose]);
+
+  useEffect(() => {
+    let isCancelled = false;
+    setImageUrl('');
+    setIsGenerating(true);
+    setError(null);
+    void createQnaCardImage(question, session)
+      .then(url => {
+        if (isCancelled) return;
+        setImageUrl(url);
+        setIsGenerating(false);
+      })
+      .catch(generationError => {
+        if (isCancelled) return;
+        setError(generationError instanceof Error ? generationError.message : 'Card Q&A gagal dibuat.');
+        setIsGenerating(false);
+      });
+    return () => { isCancelled = true; };
+  }, [question, session]);
+
+  const handleDownload = () => {
+    if (!imageUrl) return;
+    const anchor = document.createElement('a');
+    anchor.href = imageUrl;
+    anchor.download = `card-qna-${qnaCardFilePart(question.displayName)}-${qnaCardFilePart(session.title)}.png`;
+    document.body.appendChild(anchor);
+    anchor.click();
+    anchor.remove();
+  };
+
+  return (
+    <div
+      className="fixed inset-0 z-[1150] flex items-center justify-center bg-slate-950/50 p-4 backdrop-blur-sm"
+      role="presentation"
+      onMouseDown={event => {
+        if (event.target === event.currentTarget) onClose();
+      }}
+    >
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="arunika-qna-card-title"
+        className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl"
+        onMouseDown={event => event.stopPropagation()}
+      >
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-5 sm:p-6">
+          <div className="min-w-0">
+            <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Card Q&A otomatis</p>
+            <h2 id="arunika-qna-card-title" className="mt-2 text-xl font-bold">{question.displayName || 'Peserta Q&A'}</h2>
+            <p className="mt-1 text-sm text-[var(--muted)]">{session.title} · {questionStatusLabel(question.status)}</p>
+          </div>
+          <button type="button" aria-label="Tutup card Q&A" onClick={onClose} className="rounded-xl p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"><X size={19} /></button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+          {isGenerating ? (
+            <div className="flex min-h-80 items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Membuat card Q&A...</div>
+          ) : error ? (
+            <div className="flex min-h-80 items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-5 text-center text-sm text-[var(--danger-text)]">{error}</div>
+          ) : imageUrl ? (
+            <img src={imageUrl} alt={`Card Q&A ${question.displayName || 'peserta'} untuk ${session.title}`} className="mx-auto w-full max-w-lg rounded-xl border border-[var(--border)] shadow-sm" />
+          ) : null}
+        </div>
+        <div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] p-4 sm:p-5">
+          <Button type="button" variant="secondary" onClick={onClose}>Tutup</Button>
+          <Button type="button" icon={Download} onClick={handleDownload} disabled={!imageUrl}>Download PNG</Button>
+        </div>
+      </div>
+    </div>
+  );
+};
 
 const slugify = (value: string) => value
   .toLowerCase()
@@ -393,12 +695,13 @@ const QnaModerationPanel: React.FC<{
   onAnswerChange: (questionId: string, value: string) => void;
   onUpdate: (question: QnaQuestion, patch: Partial<QnaQuestion>) => void;
   onDelete: (question: QnaQuestion) => void;
-}> = ({ questions, isLoading, filter, onFilterChange, answerDrafts, onAnswerChange, onUpdate, onDelete }) => {
+  onCreateCard: (question: QnaQuestion) => void;
+}> = ({ questions, isLoading, filter, onFilterChange, answerDrafts, onAnswerChange, onUpdate, onDelete, onCreateCard }) => {
   const filteredQuestions = useMemo(() => sortQuestionsForDisplay(filter === 'all' ? questions : questions.filter(question => question.status === filter)), [filter, questions]);
   const pendingCount = questions.filter(question => question.status === 'pending').length;
   const visibleCount = questions.filter(question => question.status === 'approved' || question.status === 'answered').length;
 
-  return <Card className="space-y-5"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Moderasi realtime</p><h2 className="mt-2 text-xl font-bold">Pertanyaan audience</h2><p className="mt-1 text-sm text-[var(--muted)]">Pertanyaan baru langsung tampil. Moderator dapat menyembunyikan, menyematkan, menjawab, atau menghapusnya.</p></div><div className="flex gap-2"><Badge color="var(--surface-soft)">{pendingCount} belum tampil</Badge><Badge color="var(--success-soft)">{visibleCount} tampil</Badge></div></div><div className="flex flex-wrap gap-2">{(['all', 'pending', 'approved', 'answered', 'hidden'] as const).map(value => <button key={value} type="button" onClick={() => onFilterChange(value)} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${filter === value ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--border-strong)]'}`}>{value === 'all' ? 'Semua' : questionStatusLabel(value)}</button>)}</div>{isLoading ? <div className="flex items-center justify-center gap-3 py-12 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat pertanyaan...</div> : filteredQuestions.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-10 text-center text-sm text-[var(--muted)]"><MessageCircle size={30} className="mx-auto mb-3" />Belum ada pertanyaan pada filter ini.</div> : <div className="space-y-3">{filteredQuestions.map(question => <article key={question.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{question.displayName || 'Anonim'}</span>{question.category && <span className="rounded-lg bg-[var(--surface)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{question.category}</span>}<span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${questionStatusClass(question.status)}`}>{questionStatusLabel(question.status)}</span>{question.isPinned && <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--accent-strong)]"><Pin size={11} /> Dipin</span>}</div><p className="mt-1 text-xs text-[var(--muted)]">{formatDate(question.createdAt)} · {question.upvotes} vote</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" className="text-xs" onClick={() => onUpdate(question, { isPinned: !question.isPinned })}>{question.isPinned ? 'Lepas pin' : 'Pin'}</Button>{question.status === 'pending' && <Button type="button" className="text-xs" icon={Check} onClick={() => onUpdate(question, { status: 'approved' })}>Tampilkan</Button>}{(question.status === 'approved' || question.status === 'answered') && <Button type="button" variant="secondary" className="text-xs" onClick={() => onUpdate(question, { status: 'hidden' })}>Sembunyikan</Button>}{question.status === 'hidden' && <Button type="button" className="text-xs" onClick={() => onUpdate(question, { status: 'approved' })}>Tampilkan lagi</Button>}<Button type="button" variant="danger" className="text-xs" icon={Trash2} onClick={() => onDelete(question)}>Hapus</Button></div></div><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text)]">{question.body}</p><div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"><Textarea label="Jawaban moderator (opsional)" value={answerDrafts[question.id] ?? question.answer} onChange={event => onAnswerChange(question.id, event.target.value)} className="min-h-[84px]" placeholder="Tulis jawaban yang akan tampil di presenter..." /><Button type="button" variant="secondary" className="text-xs" onClick={() => onUpdate(question, { answer: answerDrafts[question.id] ?? question.answer, status: (answerDrafts[question.id] ?? question.answer).trim() ? 'answered' : question.status === 'answered' ? 'approved' : question.status })}>Simpan jawaban</Button></div></article>)}</div>}</Card>;
+  return <Card className="space-y-5"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Moderasi realtime</p><h2 className="mt-2 text-xl font-bold">Pertanyaan audience</h2><p className="mt-1 text-sm text-[var(--muted)]">Pertanyaan baru langsung tampil. Moderator dapat menyembunyikan, menyematkan, menjawab, atau menghapusnya.</p></div><div className="flex gap-2"><Badge color="var(--surface-soft)">{pendingCount} belum tampil</Badge><Badge color="var(--success-soft)">{visibleCount} tampil</Badge></div></div><div className="flex flex-wrap gap-2">{(['all', 'pending', 'approved', 'answered', 'hidden'] as const).map(value => <button key={value} type="button" onClick={() => onFilterChange(value)} className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${filter === value ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--border-strong)]'}`}>{value === 'all' ? 'Semua' : questionStatusLabel(value)}</button>)}</div>{isLoading ? <div className="flex items-center justify-center gap-3 py-12 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat pertanyaan...</div> : filteredQuestions.length === 0 ? <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-10 text-center text-sm text-[var(--muted)]"><MessageCircle size={30} className="mx-auto mb-3" />Belum ada pertanyaan pada filter ini.</div> : <div className="space-y-3">{filteredQuestions.map(question => <article key={question.id} className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><span className="text-sm font-semibold">{question.displayName || 'Anonim'}</span>{question.category && <span className="rounded-lg bg-[var(--surface)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{question.category}</span>}<span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${questionStatusClass(question.status)}`}>{questionStatusLabel(question.status)}</span>{question.isPinned && <span className="inline-flex items-center gap-1 rounded-lg bg-[var(--accent-soft)] px-2 py-1 text-[10px] font-semibold text-[var(--accent-strong)]"><Pin size={11} /> Dipin</span>}</div><p className="mt-1 text-xs text-[var(--muted)]">{formatDate(question.createdAt)} · {question.upvotes} vote</p></div><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" icon={ImagePlus} className="text-xs" onClick={() => onCreateCard(question)}>Buat card Q&A</Button><Button type="button" variant="secondary" className="text-xs" onClick={() => onUpdate(question, { isPinned: !question.isPinned })}>{question.isPinned ? 'Lepas pin' : 'Pin'}</Button>{question.status === 'pending' && <Button type="button" className="text-xs" icon={Check} onClick={() => onUpdate(question, { status: 'approved' })}>Tampilkan</Button>}{(question.status === 'approved' || question.status === 'answered') && <Button type="button" variant="secondary" className="text-xs" onClick={() => onUpdate(question, { status: 'hidden' })}>Sembunyikan</Button>}{question.status === 'hidden' && <Button type="button" className="text-xs" onClick={() => onUpdate(question, { status: 'approved' })}>Tampilkan lagi</Button>}<Button type="button" variant="danger" className="text-xs" icon={Trash2} onClick={() => onDelete(question)}>Hapus</Button></div></div><p className="mt-4 whitespace-pre-wrap break-words text-sm leading-relaxed text-[var(--text)]">{question.body}</p><div className="mt-4 grid gap-3 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"><Textarea label="Jawaban moderator (opsional)" value={answerDrafts[question.id] ?? question.answer} onChange={event => onAnswerChange(question.id, event.target.value)} className="min-h-[84px]" placeholder="Tulis jawaban yang akan tampil di presenter..." /><Button type="button" variant="secondary" className="text-xs" onClick={() => onUpdate(question, { answer: answerDrafts[question.id] ?? question.answer, status: (answerDrafts[question.id] ?? question.answer).trim() ? 'answered' : question.status === 'answered' ? 'approved' : question.status })}>Simpan jawaban</Button></div></article>)}</div>}</Card>;
 };
 
 const QnaLinksPanel: React.FC<{ session: QnaSession; onCopy: (value: string, label: string) => void }> = ({ session, onCopy }) => {
@@ -420,6 +723,7 @@ export const QnaAdminDetailPage: React.FC<{ client: any }> = ({ client }) => {
   const [isSaving, setIsSaving] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [deleteTarget, setDeleteTarget] = useState<QnaDeleteTarget | null>(null);
+  const [selectedQuestionForCard, setSelectedQuestionForCard] = useState<QnaQuestion | null>(null);
   const [notice, setNotice] = useState<NoticeValue | null>(null);
   const rawTab = new URLSearchParams(location.search).get('tab');
   const activeTab: QnaTab = rawTab === 'settings' || rawTab === 'links' ? rawTab : 'moderation';
@@ -522,9 +826,10 @@ export const QnaAdminDetailPage: React.FC<{ client: any }> = ({ client }) => {
     <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><Link to="/admin/qna" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> Daftar Q&A</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">{session.title}</h1><Badge color={session.status === 'live' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{session.status === 'live' ? 'LIVE' : session.status.toUpperCase()}</Badge></div><p className="mt-1 text-sm text-[var(--muted)]">{session.eventName || 'Tanpa nama event'} · Kelola sesi dan pertanyaan audience.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={Eye} onClick={() => window.open(createQnaLink(session.slug), '_blank', 'noopener,noreferrer')}>Preview Audience</Button><Button variant="secondary" icon={Play} disabled={!session.presenterToken} onClick={() => session.presenterToken && window.open(createQnaLink(session.slug, session.presenterToken), '_blank', 'noopener,noreferrer')}>Presenter</Button></div></div>
     <Notice notice={notice} />
     <Card className="p-2"><div className="grid gap-2 sm:grid-cols-3"><button type="button" onClick={() => setTab('moderation')} className={`rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'moderation' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>Moderasi <span className="ml-1 text-xs">({questions.filter(question => question.status === 'pending').length} menunggu)</span></button><button type="button" onClick={() => setTab('settings')} className={`rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'settings' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>Pengaturan</button><button type="button" onClick={() => setTab('links')} className={`rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'links' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>Link & Presenter</button></div></Card>
-    {activeTab === 'moderation' && <QnaModerationPanel questions={questions} isLoading={isLoadingQuestions} filter={questionFilter} onFilterChange={setQuestionFilter} answerDrafts={answerDrafts} onAnswerChange={(questionId, value) => setAnswerDrafts(current => ({ ...current, [questionId]: value }))} onUpdate={(question, patch) => { void updateQuestion(question, patch); }} onDelete={question => setDeleteTarget({ kind: 'question', id: question.id, label: question.body })} />}
+    {activeTab === 'moderation' && <QnaModerationPanel questions={questions} isLoading={isLoadingQuestions} filter={questionFilter} onFilterChange={setQuestionFilter} answerDrafts={answerDrafts} onAnswerChange={(questionId, value) => setAnswerDrafts(current => ({ ...current, [questionId]: value }))} onUpdate={(question, patch) => { void updateQuestion(question, patch); }} onDelete={question => setDeleteTarget({ kind: 'question', id: question.id, label: question.body })} onCreateCard={setSelectedQuestionForCard} />}
     {activeTab === 'settings' && <QnaSessionForm session={session} isSaving={isSaving} isCreate={false} onChange={updateSession} onSubmit={() => void handleSave()} onCancel={() => setTab('moderation')} onDelete={() => setDeleteTarget({ kind: 'session', id: session.id, label: session.title })} />}
     {activeTab === 'links' && <QnaLinksPanel session={session} onCopy={(value, label) => void copyLink(value, label)} />}
     <ConfirmModal open={Boolean(deleteTarget)} title={deleteTarget?.kind === 'session' ? 'Hapus sesi Q&A ini?' : 'Hapus pertanyaan ini?'} description={deleteTarget?.kind === 'session' ? <>Sesi <strong className="text-[var(--text)]">{deleteTarget.label}</strong> beserta seluruh pertanyaan dan vote di dalamnya akan dihapus permanen.</> : <>Pertanyaan <strong className="text-[var(--text)]">{deleteTarget?.label}</strong> akan dihapus permanen dan tidak akan muncul lagi setelah halaman dimuat ulang.</>} confirmLabel={deleteTarget?.kind === 'session' ? 'Hapus Sesi' : 'Hapus Pertanyaan'} isLoading={isDeleting} onCancel={() => { if (!isDeleting) setDeleteTarget(null); }} onConfirm={() => void handleDelete()} />
+    {selectedQuestionForCard && <QnaCardModal question={selectedQuestionForCard} session={session} onClose={() => setSelectedQuestionForCard(null)} />}
   </div>;
 };
