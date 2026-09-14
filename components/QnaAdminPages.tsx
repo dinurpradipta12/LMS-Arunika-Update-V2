@@ -284,9 +284,6 @@ const createQnaCardImage = async (question: QnaQuestion, session: QnaSession, op
     // Card tetap dapat dibuat bila logo gagal dimuat.
   }
   context.fillStyle = colors.navy;
-  context.font = '700 24px Arial, sans-serif';
-  context.fillText('ARUNIKA LEARNING HUB', 204, 92);
-  context.fillStyle = colors.navy;
   context.font = '700 52px Arial, sans-serif';
   titleLines.forEach((line, index) => context.fillText(line, cardX, 190 + index * 62));
 
