@@ -299,20 +299,22 @@ const reviewStatusLabel = (correct: boolean | null) => {
 
 const reportText = (value: unknown, fallback = '—') => plainText(value) || fallback;
 
-const pdfEscape = (value: unknown) => reportText(value, '')
+const normalizedPdfText = (value: unknown) => reportText(value, '')
   .normalize('NFKD')
   .replace(/[“”]/g, '"')
   .replace(/[‘’]/g, "'")
   .replace(/[–—]/g, '-')
   .replace(/…/g, '...')
   .replace(/[\u0300-\u036f]/g, '')
-  .replace(/[^\x20-\x7E]/g, '?')
+  .replace(/[^\x20-\x7E]/g, '?');
+
+const pdfEscape = (value: unknown) => normalizedPdfText(value)
   .replace(/\\/g, '\\\\')
   .replace(/\(/g, '\\(')
   .replace(/\)/g, '\\)');
 
 const wrapReportText = (value: unknown, maxLength = 88) => {
-  const text = pdfEscape(value);
+  const text = normalizedPdfText(value);
   if (!text) return ['—'];
   const lines: string[] = [];
   text.split(/\r?\n/).forEach(paragraph => {
@@ -336,104 +338,151 @@ const wrapReportText = (value: unknown, maxLength = 88) => {
 };
 
 const createQuizReportPdf = (attempt: QuizAttempt, quiz: CourseQuiz | null, courseTitle: string) => {
-  const lines: Array<{ text: string; size?: number; gapAfter?: number }> = [];
-  const add = (text: unknown, size = 10, gapAfter = 0) => wrapReportText(text).forEach(line => lines.push({ text: line, size, gapAfter }));
-  const addLabel = (label: string, value: unknown) => add(`${label}: ${reportText(value)}`);
-  const addSection = (title: string) => lines.push({ text: title, size: 12, gapAfter: 4 });
   const reportEntries = buildQuizAnswerEntries(attempt, quiz);
   const reportSummary = calculateReviewedAttempt(attempt, quiz, attempt.reviewedAnswers || {});
+  const pageWidth = 842;
+  const pageHeight = 595;
+  const navy = '#173f5f';
+  const teal = '#0f766e';
+  const gold = '#d89b3c';
+  const ink = '#1f3448';
+  const muted = '#667b8f';
+  const border = '#c9d9e4';
+  const surface = '#ffffff';
+  const soft = '#edf4f8';
+  const background = '#f6f9fb';
+  const commands: string[] = [];
+  const rgb = (hex: string) => {
+    const value = hex.replace('#', '');
+    return [0, 2, 4].map(offset => (parseInt(value.slice(offset, offset + 2), 16) / 255).toFixed(3)).join(' ');
+  };
+  const fillRect = (x: number, y: number, width: number, height: number, color: string) => commands.push(`${rgb(color)} rg ${x} ${y} ${width} ${height} re f`);
+  const strokeRect = (x: number, y: number, width: number, height: number, color: string, lineWidth = 1) => commands.push(`${rgb(color)} RG ${lineWidth} w ${x} ${y} ${width} ${height} re S`);
+  const drawLine = (x1: number, y1: number, x2: number, y2: number, color: string, lineWidth = 1) => commands.push(`${rgb(color)} RG ${lineWidth} w ${x1} ${y1} m ${x2} ${y2} l S`);
+  const drawText = (value: unknown, x: number, y: number, size: number, color = ink, align: 'left' | 'center' | 'right' = 'left') => {
+    const clean = normalizedPdfText(value);
+    const approximateWidth = clean.length * size * 0.48;
+    const textX = align === 'center' ? x - approximateWidth / 2 : align === 'right' ? x - approximateWidth : x;
+    commands.push(`${rgb(color)} rg BT /F1 ${size} Tf 1 0 0 1 ${textX.toFixed(2)} ${y.toFixed(2)} Tm (${pdfEscape(clean)}) Tj ET`);
+  };
+  const cellLines = (value: unknown, maxChars: number, maxLines: number) => {
+    const lines = wrapReportText(value, maxChars);
+    if (lines.length <= maxLines) return lines;
+    const truncated = lines[maxLines - 1].slice(0, Math.max(1, maxChars - 3));
+    return [...lines.slice(0, maxLines - 1), `${truncated}...`];
+  };
+  const drawCellText = (value: unknown, x: number, topY: number, maxChars: number, maxLines: number, size: number, color = ink) => {
+    cellLines(value, maxChars, maxLines).forEach((line, index) => drawText(line, x, topY - index * (size + 2), size, color));
+  };
+  const drawField = (label: string, value: unknown, x: number, y: number, maxChars = 42) => {
+    drawText(label.toUpperCase(), x, y, 6.5, muted);
+    drawCellText(value, x, y - 12, maxChars, 1, 8.5, ink);
+  };
 
-  lines.push({ text: 'RAPORT PENILAIAN POST-TEST', size: 16, gapAfter: 8 });
-  add(`Kelas: ${reportText(courseTitle)}`, 10, 2);
-  addLabel('Peserta', attempt.participantName);
-  addLabel('Email', attempt.participantEmail);
-  addLabel('Percobaan', `#${attempt.attemptNumber}`);
-  addLabel('Waktu submit', attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString('id-ID') : '—');
-  addLabel('Nilai akhir', `${reportSummary.score}/100`);
-  addLabel('Status', reportSummary.needsReview ? 'Menunggu review' : reportSummary.passed ? 'Lulus' : 'Belum lulus');
-  if (attempt.reviewedAt) addLabel('Direview', new Date(attempt.reviewedAt).toLocaleString('id-ID'));
-  if (attempt.reviewFeedback) {
-    addSection('CATATAN KOREKTOR');
-    add(attempt.reviewFeedback, 10, 6);
-  }
-  if (attempt.classFeedback) {
-    addSection('FEEDBACK PESERTA');
-    add(attempt.classFeedback, 10, 6);
-  }
-  addSection('RINGKASAN PENILAIAN');
-  addLabel('Jumlah soal', reportSummary.totalQuestions);
-  addLabel('Soal sudah dinilai', `${reportSummary.gradedQuestions}/${reportSummary.totalQuestions}`);
-  addLabel('Total jawaban benar', `${reportSummary.correctAnswers}/${reportSummary.totalQuestions}`);
-  addLabel('Rumus nilai akhir', reportSummary.totalQuestions > 0
-    ? `(${reportSummary.correctAnswers} / ${reportSummary.totalQuestions}) x 100 = ${reportSummary.score}`
-    : 'Belum ada soal');
-  addLabel('Nilai akhir', `${reportSummary.score}/100`);
+  fillRect(0, 0, pageWidth, pageHeight, background);
+  strokeRect(18, 18, pageWidth - 36, pageHeight - 36, navy, 2);
+  strokeRect(27, 27, pageWidth - 54, pageHeight - 54, teal, 0.8);
+  fillRect(44, 542, 74, 5, teal);
+  fillRect(123, 542, 36, 5, gold);
+  drawText('ARUNIKA LEARNING HUB', 44, 528, 8, teal);
+  drawText('LAPORAN PENILAIAN POST-TEST', 44, 498, 22, navy);
+  drawText('Ringkasan penilaian peserta dalam format satu halaman.', 44, 478, 9, muted);
 
-  addSection('DETAIL PENILAIAN PER SOAL');
-  reportEntries.forEach(entry => {
-    const mark = entry.correct === null ? '—' : entry.correct ? '1/1' : '0/1';
-    add(`SOAL ${entry.number}`, 12, 2);
-    add(`Pertanyaan: ${entry.prompt}`, 10, 2);
-    add('JAWABAN PESERTA', 9, 1);
-    add(entry.answer, 10, 3);
-    add('KUNCI JAWABAN', 9, 1);
-    add(entry.correctAnswer || 'Dinilai manual oleh korektor.', 10, 3);
-    add(`PENILAIAN: ${mark} - ${reviewStatusLabel(entry.correct)}`, 10, 2);
-    add('FEEDBACK KOREKTOR', 9, 1);
-    add(entry.feedback || 'Tidak ada feedback untuk soal ini.', 10, 6);
-    lines.push({ text: '----------------------------------------', size: 9, gapAfter: 6 });
-  });
+  fillRect(655, 445, 143, 92, soft);
+  strokeRect(655, 445, 143, 92, border, 1);
+  drawText('NILAI AKHIR', 726.5, 518, 7, muted, 'center');
+  drawText(`${reportSummary.score}/100`, 726.5, 487, 25, navy, 'center');
+  drawText(reportSummary.needsReview ? 'Menunggu review' : reportSummary.passed ? 'Lulus' : 'Belum lulus', 726.5, 463, 8, reportSummary.needsReview ? gold : reportSummary.passed ? teal : '#a84949', 'center');
 
-  const pageHeight = 842;
-  const pageWidth = 595;
-  const marginX = 46;
-  const marginTop = 52;
-  const lineHeight = 14;
-  const pages: Array<Array<{ text: string; size?: number; gapAfter?: number }>> = [];
-  let page: Array<{ text: string; size?: number; gapAfter?: number }> = [];
-  let usedHeight = marginTop;
-  lines.forEach(line => {
-    const height = lineHeight + (line.gapAfter || 0);
-    if (page.length && usedHeight + height > pageHeight - 48) {
-      pages.push(page);
-      page = [];
-      usedHeight = marginTop;
-    }
-    page.push(line);
-    usedHeight += height;
-  });
-  if (page.length || pages.length === 0) pages.push(page);
+  drawField('Peserta', attempt.participantName, 44, 443, 32);
+  drawField('Email', attempt.participantEmail, 260, 443, 34);
+  drawField('Kelas', courseTitle, 480, 443, 28);
+  drawField('Waktu submit', attempt.submittedAt ? new Date(attempt.submittedAt).toLocaleString('id-ID') : '—', 44, 405, 32);
+  drawField('Percobaan', `#${attempt.attemptNumber}`, 260, 405, 18);
+  drawField('Direview', attempt.reviewedAt ? new Date(attempt.reviewedAt).toLocaleString('id-ID') : 'Belum direview', 480, 405, 28);
 
-  const pagesObject = 2;
-  const fontObject = 3;
-  const objects: string[] = [
-    '<< /Type /Catalog /Pages 2 0 R >>',
-    '',
-    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
+  const summaryX = 44;
+  const summaryY = 343;
+  const summaryWidth = 754;
+  const summaryHeight = 45;
+  const summaryCellWidth = summaryWidth / 4;
+  fillRect(summaryX, summaryY, summaryWidth, summaryHeight, soft);
+  strokeRect(summaryX, summaryY, summaryWidth, summaryHeight, border, 1);
+  [1, 2, 3].forEach(index => drawLine(summaryX + summaryCellWidth * index, summaryY, summaryX + summaryCellWidth * index, summaryY + summaryHeight, border, 0.7));
+  const summaryItems = [
+    ['JUMLAH SOAL', `${reportSummary.totalQuestions}`],
+    ['SUDAH DINILAI', `${reportSummary.gradedQuestions}/${reportSummary.totalQuestions}`],
+    ['JAWABAN BENAR', `${reportSummary.correctAnswers}/${reportSummary.totalQuestions}`],
+    ['RUMUS NILAI', reportSummary.totalQuestions > 0 ? `${reportSummary.correctAnswers} / ${reportSummary.totalQuestions} x 100` : 'Belum ada soal']
   ];
-  const catalogObject = 1;
-  while (objects.length < fontObject - 1) objects.push('');
-  const pageObjectIds: number[] = [];
-  const contentObjectIds: number[] = [];
-  pages.forEach(() => {
-    pageObjectIds.push(objects.length + 1);
-    objects.push('');
-    contentObjectIds.push(objects.length + 1);
-    objects.push('');
+  summaryItems.forEach(([label, value], index) => {
+    const centerX = summaryX + summaryCellWidth * index + summaryCellWidth / 2;
+    drawText(label, centerX, summaryY + 29, 6.5, muted, 'center');
+    drawText(value, centerX, summaryY + 13, 11, navy, 'center');
   });
-  pages.forEach((pageLines, pageIndex) => {
-    let cursorY = pageHeight - marginTop;
-    const content = pageLines.map(line => {
-      const y = cursorY;
-      const size = line.size || 10;
-      cursorY -= lineHeight + (line.gapAfter || 0);
-      return `BT /F1 ${size} Tf 1 0 0 1 ${marginX} ${y} Tm (${pdfEscape(line.text)}) Tj ET`;
-    }).join('\n');
-    objects[pageObjectIds[pageIndex] - 1] = `<< /Type /Page /Parent ${pagesObject} 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 ${fontObject} 0 R >> >> /Contents ${contentObjectIds[pageIndex]} 0 R >>`;
-    objects[contentObjectIds[pageIndex] - 1] = `<< /Length ${content.length} >>\nstream\n${content}\nendstream`;
-  });
-  objects[pagesObject - 1] = `<< /Type /Pages /Kids [${pageObjectIds.map(id => `${id} 0 R`).join(' ')}] /Count ${pageObjectIds.length} >>`;
 
+  const tableX = 44;
+  const tableTop = 326;
+  const tableWidth = summaryWidth;
+  const headerHeight = 23;
+  const tableBottom = 86;
+  const tableDataHeight = tableTop - headerHeight - tableBottom;
+  const maxRows = 11;
+  const visibleEntries = reportEntries.slice(0, maxRows);
+  const rows = visibleEntries.length || 1;
+  const rowHeight = Math.max(18, Math.min(45, tableDataHeight / rows));
+  const columns = [44, 258, 258, 72, 122];
+  const headers = ['NO', 'RINGKASAN SOAL', 'JAWABAN PESERTA', 'NILAI', 'FEEDBACK'];
+  fillRect(tableX, tableTop - headerHeight, tableWidth, headerHeight, navy);
+  let headerX = tableX;
+  headers.forEach((header, index) => {
+    drawText(header, headerX + columns[index] / 2, tableTop - 15, 6.5, surface, 'center');
+    headerX += columns[index];
+  });
+  let currentY = tableTop - headerHeight;
+  const rowEntries = visibleEntries.length ? visibleEntries : [{ number: 0, prompt: 'Belum ada jawaban untuk ditampilkan.', answer: '', correct: null, feedback: '' } as QuizAnswerReviewEntry];
+  rowEntries.forEach((entry, index) => {
+    const rowY = currentY - rowHeight;
+    fillRect(tableX, rowY, tableWidth, rowHeight, index % 2 === 0 ? surface : background);
+    strokeRect(tableX, rowY, tableWidth, rowHeight, border, 0.5);
+    let columnX = tableX;
+    columns.slice(0, -1).forEach(width => {
+      columnX += width;
+      drawLine(columnX, rowY, columnX, rowY + rowHeight, border, 0.5);
+    });
+    if (entry.number === 0) {
+      drawText(entry.prompt, tableX + columns[0] + 8, rowY + rowHeight / 2 - 2, 8, muted);
+    } else {
+      const compact = rowHeight < 30;
+      const textTop = rowY + rowHeight - (compact ? 10 : 13);
+      drawText(`${entry.number}`, tableX + columns[0] / 2, rowY + rowHeight / 2 - 2, 8, navy, 'center');
+      drawCellText(entry.prompt, tableX + columns[0] + 8, textTop, compact ? 42 : 50, compact ? 1 : 2, compact ? 6.5 : 7.2, ink);
+      drawCellText(entry.answer, tableX + columns[0] + columns[1] + 8, textTop, compact ? 42 : 50, compact ? 1 : 2, compact ? 6.5 : 7.2, ink);
+      const mark = entry.correct === null ? '-' : entry.correct ? '1/1' : '0/1';
+      const markX = tableX + columns[0] + columns[1] + columns[2] + columns[3] / 2;
+      drawText(mark, markX, rowY + rowHeight / 2 + (compact ? 1 : 4), compact ? 7.5 : 8.5, entry.correct === true ? teal : entry.correct === false ? '#a84949' : gold, 'center');
+      if (!compact) drawText(reviewStatusLabel(entry.correct), markX, rowY + rowHeight / 2 - 8, 5.5, muted, 'center');
+      drawCellText(entry.feedback || '—', tableX + columns[0] + columns[1] + columns[2] + columns[3] + 7, textTop, compact ? 18 : 22, compact ? 1 : 2, compact ? 6.5 : 7.2, muted);
+    }
+    currentY = rowY;
+  });
+
+  const remaining = reportEntries.length - visibleEntries.length;
+  const footerText = remaining > 0
+    ? `+ ${remaining} soal lainnya diringkas di aplikasi. `
+    : '';
+  const reviewerNote = attempt.reviewFeedback ? `Catatan korektor: ${normalizedPdfText(attempt.reviewFeedback).slice(0, 120)}` : '';
+  drawText(`${footerText}${reviewerNote}`, 44, 63, 7, muted);
+  drawText('Dokumen ini merupakan ringkasan penilaian post-test peserta.', 798, 63, 7, muted, 'right');
+
+  const content = commands.join('\n');
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [3 0 R] /Count 1 >>',
+    `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+    `<< /Length ${content.length} >>\nstream\n${content}\nendstream`
+  ];
   let pdf = '%PDF-1.4\n%Arunika\n';
   const offsets = [0];
   objects.forEach((object, index) => {
@@ -442,10 +491,8 @@ const createQuizReportPdf = (attempt: QuizAttempt, quiz: CourseQuiz | null, cour
   });
   const xrefOffset = pdf.length;
   pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n`;
-  for (let index = 1; index <= objects.length; index += 1) {
-    pdf += `${String(offsets[index]).padStart(10, '0')} 00000 n \n`;
-  }
-  pdf += `trailer\n<< /Size ${objects.length + 1} /Root ${catalogObject} 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
+  for (let index = 1; index <= objects.length; index += 1) pdf += `${String(offsets[index]).padStart(10, '0')} 00000 n \n`;
+  pdf += `trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF`;
   return new Blob([pdf], { type: 'application/pdf' });
 };
 
