@@ -236,6 +236,8 @@ export interface LandingPage {
 
 export type CatalogPageStatus = 'draft' | 'published' | 'archived';
 
+export type CatalogImageFit = 'auto' | 'cover' | 'contain' | 'fill' | 'scale-down';
+
 export interface CatalogPageItem {
   id: string;
   landingPageId: string;
@@ -244,6 +246,7 @@ export interface CatalogPageItem {
   description: string;
   imageUrl: string;
   imageAlt?: string;
+  imageFit?: CatalogImageFit;
   buttonLabel: string;
   category?: string;
   format?: string;

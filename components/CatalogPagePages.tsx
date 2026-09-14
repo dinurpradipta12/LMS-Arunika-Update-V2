@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { CatalogBenefit, CatalogContent, CatalogPage, CatalogPageItem, CatalogPageStatus, CatalogProductLayout, CatalogSocialLink, FormThemeKey } from '../types';
+import { CatalogBenefit, CatalogContent, CatalogImageFit, CatalogPage, CatalogPageItem, CatalogPageStatus, CatalogProductLayout, CatalogSocialLink, FormThemeKey } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
 import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
@@ -52,6 +52,7 @@ const slugify = (value: string) => value
 
 const isTheme = (value: unknown): value is FormThemeKey => FORM_THEME_OPTIONS.some(option => option.value === value);
 const isCatalogProductLayout = (value: unknown): value is CatalogProductLayout => value === 'default' || value === 'grid' || value === 'large-image' || value === 'compact';
+const isCatalogImageFit = (value: unknown): value is CatalogImageFit => value === 'auto' || value === 'cover' || value === 'contain' || value === 'fill' || value === 'scale-down';
 
 const normalizeCustomDomain = (value: unknown) => {
   let raw = asText(value).trim().toLowerCase();
@@ -167,6 +168,21 @@ const CATALOG_LAYOUT_OPTIONS: Array<{ value: CatalogProductLayout; label: string
   { value: 'compact', label: 'Compact', description: 'Baris ringkas untuk banyak produk.' }
 ];
 
+const CATALOG_IMAGE_FIT_OPTIONS: Array<{ value: CatalogImageFit; label: string; description: string }> = [
+  { value: 'auto', label: 'Otomatis', description: 'Menyesuaikan layout kartu.' },
+  { value: 'cover', label: 'Cover', description: 'Penuhi area, sisi gambar dapat terpotong.' },
+  { value: 'contain', label: 'Fit', description: 'Tampilkan seluruh gambar tanpa terpotong.' },
+  { value: 'fill', label: 'Fill', description: 'Penuhi area dengan meregangkan gambar.' },
+  { value: 'scale-down', label: 'Ukuran asli', description: 'Jangan memperbesar gambar kecil.' }
+];
+
+const CATALOG_IMAGE_FIT_CLASSES: Record<Exclude<CatalogImageFit, 'auto'>, string> = {
+  cover: 'object-cover',
+  contain: 'object-contain',
+  fill: 'object-fill',
+  'scale-down': 'object-scale-down'
+};
+
 const CatalogLayoutPreview: React.FC<{ layout: CatalogProductLayout }> = ({ layout }) => {
   if (layout === 'grid') return <div className="grid h-full grid-cols-2 gap-1.5"><span className="rounded bg-[var(--accent-soft)]" /><span className="rounded bg-[var(--accent-soft)]" /><span className="rounded bg-[var(--accent-soft)]" /><span className="rounded bg-[var(--accent-soft)]" /></div>;
   if (layout === 'large-image') return <div className="flex h-full flex-col gap-1.5"><span className="h-10 rounded bg-[var(--accent-soft)]" /><span className="h-2 w-3/4 rounded bg-[var(--border-strong)]" /><span className="h-2 w-1/2 rounded bg-[var(--border)]" /></div>;
@@ -197,6 +213,7 @@ const normalizeItem = (value: any, index: number): CatalogPageItem => ({
   description: asText(value?.description),
   imageUrl: asText(value?.imageUrl || value?.image_url),
   imageAlt: asText(value?.imageAlt || value?.image_alt),
+  imageFit: isCatalogImageFit(value?.imageFit || value?.image_fit || value?.objectFit) ? value?.imageFit || value?.image_fit || value?.objectFit : 'auto',
   buttonLabel: asText(value?.buttonLabel || value?.button_label, 'Lihat produk'),
   category: asText(value?.category),
   format: asText(value?.format),
@@ -266,6 +283,7 @@ const catalogWriteRow = (page: CatalogPage) => ({
     description: item.description || '',
     imageUrl: item.imageUrl || '',
     imageAlt: item.imageAlt || '',
+    imageFit: item.imageFit || 'auto',
     buttonLabel: item.buttonLabel || 'Lihat produk',
     category: item.category || '',
     format: item.format || '',
@@ -658,6 +676,7 @@ const CatalogItemEditor: React.FC<{
           <Input label="Badge (opsional)" value={item.badge || ''} onChange={event => onChange({ badge: event.target.value })} placeholder="Best seller atau Baru" />
           <label className="flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-sm"><input type="checkbox" checked={item.featured === true} onChange={event => onChange({ featured: event.target.checked })} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" /><span><span className="block font-semibold">Tandai sebagai produk unggulan</span><span className="mt-1 block text-xs leading-relaxed text-[var(--muted)]">Kartu diberi aksen khusus dan muncul lebih menonjol di etalase.</span></span></label>
           <CatalogImageField label="Gambar produk" value={item.imageUrl} onChange={imageUrl => onChange({ imageUrl })} helper="Upload cover produk digital atau masukkan URL gambar." />
+          <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Penyesuaian gambar</span><select value={item.imageFit || 'auto'} onChange={event => onChange({ imageFit: event.target.value as CatalogImageFit })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]">{CATALOG_IMAGE_FIT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label} — {option.description}</option>)}</select><span className="text-xs leading-relaxed text-[var(--muted)]">Atur cara gambar mengisi area kartu agar tetap rapi di setiap layout.</span></label>
           <Input label="Alt gambar" value={item.imageAlt || ''} onChange={event => onChange({ imageAlt: event.target.value })} placeholder={summary} />
         </div>}
       </div>
@@ -855,6 +874,7 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
       description: '',
       imageUrl: previewImage.length <= 700000 ? previewImage : '',
       imageAlt: landing.title,
+      imageFit: 'auto',
       buttonLabel: 'Lihat produk',
       category: '',
       format: '',
@@ -934,6 +954,10 @@ const safeCatalogCtaHref = (value: unknown) => {
 const CatalogPublicCard: React.FC<{ item: CatalogPageItem; index: number; layout: CatalogProductLayout }> = ({ item, index, layout }) => {
   const href = item.slug ? landingHref(item.slug) : '#catalog-products';
   const isCompact = layout === 'compact';
+  const selectedImageFit = isCatalogImageFit(item.imageFit) ? item.imageFit : 'auto';
+  const imageFit = selectedImageFit === 'auto' ? (isCompact ? 'contain' : 'cover') : selectedImageFit;
+  const imageFitClass = imageFit === 'auto' ? 'object-cover' : CATALOG_IMAGE_FIT_CLASSES[imageFit];
+  const imagePaddingClass = imageFit === 'contain' || imageFit === 'scale-down' ? 'p-2' : '';
   const imageClass = isCompact
     ? 'h-24 w-24 shrink-0 sm:h-28 sm:w-28'
     : layout === 'large-image'
@@ -942,7 +966,7 @@ const CatalogPublicCard: React.FC<{ item: CatalogPageItem; index: number; layout
         ? 'aspect-square w-full'
         : 'aspect-[16/10] w-full';
   return <a href={href} onClick={event => { if (!item.slug) event.preventDefault(); }} className={`group ${isCompact ? 'flex min-h-32 flex-row' : 'flex h-full flex-col'} overflow-hidden rounded-2xl border bg-[var(--surface)] text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ${item.featured ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--accent)]'}`}>
-    <div className={`relative overflow-hidden bg-[var(--surface-soft)] ${imageClass}`}>{item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || item.title || `Produk ${index + 1}`} className={`h-full w-full transition-transform duration-300 group-hover:scale-[1.03] ${isCompact ? 'object-contain p-2' : 'object-cover'}`} /> : <div className="flex h-full items-center justify-center text-[var(--accent-strong)]"><Package size={isCompact ? 30 : 42} strokeWidth={1.5} /></div>}{item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--surface)]/95 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)] shadow-sm"><BadgeCheck size={13} />{item.badge}</span>}{item.featured && !item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)]"><Star size={13} fill="currentColor" /> Unggulan</span>}</div>
+    <div className={`relative overflow-hidden bg-[var(--surface-soft)] ${imageClass}`}>{item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || item.title || `Produk ${index + 1}`} className={`h-full w-full transition-transform duration-300 group-hover:scale-[1.03] ${imageFitClass} ${imagePaddingClass}`} /> : <div className="flex h-full items-center justify-center text-[var(--accent-strong)]"><Package size={isCompact ? 30 : 42} strokeWidth={1.5} /></div>}{item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--surface)]/95 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)] shadow-sm"><BadgeCheck size={13} />{item.badge}</span>}{item.featured && !item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)]"><Star size={13} fill="currentColor" /> Unggulan</span>}</div>
     <div className={`flex min-w-0 flex-1 flex-col ${isCompact ? 'p-3.5 sm:p-4' : 'p-4'}`}><div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{item.category && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2 py-1 text-[var(--accent-strong)]"><Tag size={12} />{item.category}</span>}{item.format && <span className="inline-flex items-center gap-1"><Package size={12} />{item.format}</span>}</div><h2 className={`${isCompact ? 'mt-2' : 'mt-3'} line-clamp-2 text-base font-bold leading-snug text-[var(--text)]`}>{item.title || 'Lihat produk'}</h2><p className={`${isCompact ? 'line-clamp-2' : 'line-clamp-3'} mt-2 text-sm leading-relaxed text-[var(--muted)]`}>{item.description || 'Pelajari detail produk dan penawaran selengkapnya.'}</p><div className={`${isCompact ? 'mt-4' : 'mt-auto pt-5'} flex flex-wrap items-end justify-between gap-3`}>{(item.price || item.compareAtPrice) && <div>{item.price && <p className="text-base font-bold text-[var(--text)]">{item.price}</p>}{item.compareAtPrice && <p className="mt-0.5 text-xs text-[var(--muted)] line-through">{item.compareAtPrice}</p>}</div>}<span className="inline-flex min-h-10 min-w-[6.5rem] shrink-0 items-center justify-center rounded-lg bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-white transition-colors group-hover:bg-[var(--accent-hover)]">{item.buttonLabel || 'Lihat produk'}</span></div></div>
   </a>;
 };
