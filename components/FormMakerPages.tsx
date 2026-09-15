@@ -256,13 +256,11 @@ const createResponderFollowUpLink = (response: FormResponse, form: FormDefinitio
   if (!phone) return '';
   const name = response.responderName.trim() || 'Kak';
   const message = [
-    `Halo ${name}, saya dari ${form.eventName || form.title}.`,
+    `Halo ${name}, berikut detail pendaftaran Anda:`,
     '',
-    'Saya ingin follow up terkait pendaftaran Anda.',
-    `Status pendaftaran saat ini: ${statusLabel(response.status)}.`,
-    'Apakah ada yang bisa kami bantu untuk proses selanjutnya?',
-    '',
-    'Silakan balas pesan ini jika ada pertanyaan. Terima kasih.'
+    `Acara: ${form.eventName || form.title}`,
+    `Nominal pendaftaran: ${form.paymentAmount || 'Belum ditentukan'}`,
+    `Transfer ke: ${form.paymentAccountNumber || 'Belum diatur'}`
   ].join('\n');
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 };
