@@ -216,6 +216,7 @@ let publicSupabaseInstance: any = null;
 let publicSupabaseConfig: SupabaseConfig | null = null;
 let adminSupabaseInstance: any = null;
 let adminSupabaseConfig: SupabaseConfig | null = null;
+const ADMIN_SESSION_STORAGE_KEY = 'arunika-admin-session-v1';
 
 const isSameSupabaseConfig = (left: SupabaseConfig | null, right: SupabaseConfig) => (
   left?.url === right.url && left?.anonKey === right.anonKey
@@ -245,7 +246,23 @@ const getPublicSupabaseClient = (config: SupabaseConfig = PUBLIC_SUPABASE_CONFIG
   }
 };
 
-// Client admin menyimpan sesi hanya selama tab/browser session masih hidup.
+const migrateAdminSessionToPersistentStorage = () => {
+  try {
+    // Preserve an existing login created by the previous sessionStorage-based
+    // client when the app is upgraded to persistent admin sessions.
+    if (!window.localStorage.getItem(ADMIN_SESSION_STORAGE_KEY)) {
+      const tabSession = window.sessionStorage.getItem(ADMIN_SESSION_STORAGE_KEY);
+      if (tabSession) window.localStorage.setItem(ADMIN_SESSION_STORAGE_KEY, tabSession);
+    }
+  } catch (error) {
+    // Storage can be blocked by browser privacy settings. Supabase will still
+    // keep the in-memory session for the current tab in that case.
+    console.warn('Admin session storage is unavailable', error);
+  }
+};
+
+// Client admin menyimpan sesi secara persisten dan memperbarui token otomatis
+// sampai admin memilih Logout atau sesi benar-benar tidak valid.
 const getAdminSupabaseClient = (config: SupabaseConfig = PUBLIC_SUPABASE_CONFIG) => {
   if (!config.url || !config.anonKey) return null;
   if (adminSupabaseInstance && isSameSupabaseConfig(adminSupabaseConfig, config)) {
@@ -253,13 +270,14 @@ const getAdminSupabaseClient = (config: SupabaseConfig = PUBLIC_SUPABASE_CONFIG)
   }
 
   try {
+    migrateAdminSessionToPersistentStorage();
     adminSupabaseInstance = createClient(config.url, config.anonKey, {
       auth: {
         persistSession: true,
         autoRefreshToken: true,
         detectSessionInUrl: false,
-        storage: window.sessionStorage,
-        storageKey: 'arunika-admin-session-v1'
+        storage: window.localStorage,
+        storageKey: ADMIN_SESSION_STORAGE_KEY
       }
     });
     adminSupabaseConfig = config;
