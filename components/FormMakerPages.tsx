@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ArrowLeft, Check, CheckCircle2, ClipboardList, Copy, Download, ExternalLink, FileDown, ImagePlus, Link as LinkIcon, Loader2, Mail, MoveDown, MoveUp, Phone, Plus, RefreshCw, Save, Trash2, Upload, Users, X, XCircle } from 'lucide-react';
+import { ArrowLeft, Check, CheckCircle2, ClipboardList, Copy, Download, ExternalLink, FileDown, ImagePlus, Link as LinkIcon, Loader2, Mail, MessageCircle, MoveDown, MoveUp, Phone, Plus, RefreshCw, Save, Trash2, Upload, Users, X, XCircle } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
 import {
@@ -72,6 +72,8 @@ const RESPONSE_STATUSES: Array<{ value: FormResponseStatus; label: string }> = [
   { value: 'paid', label: 'Paid' },
   { value: 'cancelled', label: 'Dibatalkan' }
 ];
+
+type FormResponseFilter = 'all' | FormResponseStatus;
 
 const allowedFieldTypes = new Set(FIELD_TYPES.map(item => item.value));
 
@@ -231,6 +233,38 @@ const statusClass = (status: FormResponseStatus) => {
   if (status === 'paid' || status === 'confirmed') return 'bg-[var(--success-soft)] text-[var(--success-text)]';
   if (status === 'cancelled') return 'bg-[var(--danger-soft)] text-[var(--danger-text)]';
   return 'bg-[var(--accent-soft)] text-[var(--accent-strong)]';
+};
+
+const whatsappFieldLabelPattern = /whats?\s*app|\bwa\b|nomor\s*(hp|wa|whatsapp|telepon|handphone)|no\.?\s*(hp|wa|telp|telepon)|telepon|handphone|phone|mobile/i;
+
+const normalizeResponderWhatsApp = (value: unknown) => {
+  const digits = String(value ?? '').replace(/\D/g, '');
+  if (!digits) return '';
+  if (digits.startsWith('0')) return digits.length >= 10 ? `62${digits.slice(1)}` : '';
+  if (digits.startsWith('62')) return digits.length >= 11 ? digits : '';
+  if (digits.startsWith('8')) return digits.length >= 10 ? `62${digits}` : '';
+  return digits.length >= 11 ? digits : '';
+};
+
+const getResponderWhatsApp = (response: FormResponse, form: FormDefinition) => {
+  const phoneField = form.fields.find(field => whatsappFieldLabelPattern.test(field.label) || whatsappFieldLabelPattern.test(field.id));
+  return phoneField ? normalizeResponderWhatsApp(response.answers[phoneField.id]) : '';
+};
+
+const createResponderFollowUpLink = (response: FormResponse, form: FormDefinition) => {
+  const phone = getResponderWhatsApp(response, form);
+  if (!phone) return '';
+  const name = response.responderName.trim() || 'Kak';
+  const message = [
+    `Halo ${name}, saya dari ${form.eventName || form.title}.`,
+    '',
+    'Saya ingin follow up terkait pendaftaran Anda.',
+    `Status pendaftaran saat ini: ${statusLabel(response.status)}.`,
+    'Apakah ada yang bisa kami bantu untuk proses selanjutnya?',
+    '',
+    'Silakan balas pesan ini jika ada pertanyaan. Terima kasih.'
+  ].join('\n');
+  return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 };
 
 const FormFieldEditor: React.FC<{
@@ -815,6 +849,7 @@ export const FormResponsesPage: React.FC<{ client: any }> = ({ client }) => {
   const [responses, setResponses] = useState<FormResponse[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [responseFilter, setResponseFilter] = useState<FormResponseFilter>('all');
   const [selectedResponse, setSelectedResponse] = useState<FormResponse | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<FormResponse | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -870,6 +905,11 @@ export const FormResponsesPage: React.FC<{ client: any }> = ({ client }) => {
     confirmed: responses.filter(response => response.status === 'confirmed').length,
     paid: responses.filter(response => response.status === 'paid').length
   }), [responses]);
+
+  const filteredResponses = useMemo(
+    () => responseFilter === 'all' ? responses : responses.filter(response => response.status === responseFilter),
+    [responses, responseFilter]
+  );
 
   const updateResponse = async (response: FormResponse, status: FormResponseStatus) => {
     if (!client) return;
@@ -928,7 +968,23 @@ export const FormResponsesPage: React.FC<{ client: any }> = ({ client }) => {
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><Link to="/admin/forms" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {FORM_MAKER_SPACE_LABEL}</Link><h1 className="text-3xl font-bold">Responder Form</h1><p className="mt-1 text-sm text-[var(--muted)]">{form.title} · {form.eventName}</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => navigate(`/admin/forms/${form.id}`)}>Edit Form</Button><Button icon={FileDown} disabled={!responses.length} onClick={exportCsv}>Export CSV</Button></div></div>
       <NoticeBanner notice={notice} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Card><p className="text-xs text-[var(--muted)]">Total Responder</p><p className="mt-2 text-3xl font-bold">{stats.total}</p></Card><Card><p className="text-xs text-[var(--muted)]">Menunggu</p><p className="mt-2 text-3xl font-bold">{stats.pending}</p></Card><Card><p className="text-xs text-[var(--muted)]">Terkonfirmasi</p><p className="mt-2 text-3xl font-bold">{stats.confirmed}</p></Card><Card><p className="text-xs text-[var(--muted)]">Paid</p><p className="mt-2 text-3xl font-bold">{stats.paid}</p></Card></div>
-      {responses.length === 0 ? <Card className="py-14 text-center"><Users size={32} className="mx-auto mb-3 text-[var(--muted)]" /><p className="font-semibold">Belum ada responder</p><p className="mt-1 text-sm text-[var(--muted)]">Data akan muncul setelah form publik dikirim.</p></Card> : <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]"><table className="w-full min-w-[1020px] text-left text-sm"><thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]"><tr><th className="p-4">Responder</th><th className="p-4">Status</th><th className="p-4">Jawaban</th><th className="p-4">Dikirim</th><th className="p-4">Ubah Status</th><th className="p-4">Aksi</th></tr></thead><tbody>{responses.map(response => <tr key={response.id} className="border-t border-[var(--border)] align-top"><td className="p-4"><p className="font-semibold">{response.responderName}</p><p className="mt-1 text-xs text-[var(--muted)]">{response.responderEmail}</p></td><td className="p-4"><span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${statusClass(response.status)}`}>{statusLabel(response.status)}</span></td><td className="max-w-md p-4"><button type="button" onClick={() => openAnswerSheet(response)} className="inline-flex items-center gap-2 text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline" aria-label={`Lihat jawaban ${response.responderName}`}><span aria-hidden="true">▸</span>Lihat jawaban</button></td><td className="p-4 text-xs text-[var(--muted)]">{formatDate(response.submittedAt)}</td><td className="p-4"><select value={response.status} onChange={event => void updateResponse(response, event.target.value as FormResponseStatus)} className="min-h-[40px] rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none focus:border-[var(--accent)]">{RESPONSE_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}</select></td><td className="p-4"><Button type="button" variant="danger" icon={Trash2} className="px-3 py-2 text-xs" aria-label={`Hapus responder ${response.responderName}`} onClick={() => setDeleteTarget(response)}>Hapus</Button></td></tr>)}</tbody></table></div>}
+      <Card className="space-y-3 !p-4">
+        <div className="flex flex-col justify-between gap-2 sm:flex-row sm:items-center">
+          <div>
+            <p className="text-sm font-semibold">Filter status responder</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">Menampilkan {filteredResponses.length} dari {responses.length} responder.</p>
+          </div>
+          <p className="text-xs text-[var(--muted)]">Follow up aktif jika jawaban form memiliki nomor WhatsApp, WA, HP, atau telepon.</p>
+        </div>
+        <div className="flex flex-wrap gap-2" role="group" aria-label="Filter status responder">
+          <button type="button" aria-pressed={responseFilter === 'all'} onClick={() => setResponseFilter('all')} className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${responseFilter === 'all' ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--border-strong)]'}`}>Semua <span className="ml-1 opacity-70">{responses.length}</span></button>
+          {RESPONSE_STATUSES.map(status => {
+            const count = responses.filter(response => response.status === status.value).length;
+            return <button key={status.value} type="button" aria-pressed={responseFilter === status.value} onClick={() => setResponseFilter(status.value)} className={`rounded-xl border px-3 py-2 text-xs font-semibold transition-colors ${responseFilter === status.value ? `${statusClass(status.value)} border-[var(--border-strong)]` : 'border-[var(--border)] text-[var(--muted)] hover:border-[var(--border-strong)]'}`}>{status.label} <span className="ml-1 opacity-70">{count}</span></button>;
+          })}
+        </div>
+      </Card>
+      {responses.length === 0 ? <Card className="py-14 text-center"><Users size={32} className="mx-auto mb-3 text-[var(--muted)]" /><p className="font-semibold">Belum ada responder</p><p className="mt-1 text-sm text-[var(--muted)]">Data akan muncul setelah form publik dikirim.</p></Card> : filteredResponses.length === 0 ? <Card className="py-14 text-center"><Users size={32} className="mx-auto mb-3 text-[var(--muted)]" /><p className="font-semibold">Tidak ada responder dengan status ini</p><p className="mt-1 text-sm text-[var(--muted)]">Pilih filter status lain untuk melihat responder.</p></Card> : <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]"><table className="w-full min-w-[1180px] text-left text-sm"><thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]"><tr><th className="p-4">Responder</th><th className="p-4">Status</th><th className="p-4">Jawaban</th><th className="p-4">Dikirim</th><th className="p-4">Ubah Status</th><th className="p-4">Aksi</th></tr></thead><tbody>{filteredResponses.map(response => { const followUpLink = createResponderFollowUpLink(response, form); return <tr key={response.id} className="border-t border-[var(--border)] align-top"><td className="p-4"><p className="font-semibold">{response.responderName}</p><p className="mt-1 text-xs text-[var(--muted)]">{response.responderEmail}</p></td><td className="p-4"><span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${statusClass(response.status)}`}>{statusLabel(response.status)}</span></td><td className="max-w-md p-4"><button type="button" onClick={() => openAnswerSheet(response)} className="inline-flex items-center gap-2 text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline" aria-label={`Lihat jawaban ${response.responderName}`}><span aria-hidden="true">▸</span>Lihat jawaban</button></td><td className="p-4 text-xs text-[var(--muted)]">{formatDate(response.submittedAt)}</td><td className="p-4"><select value={response.status} onChange={event => void updateResponse(response, event.target.value as FormResponseStatus)} className="min-h-[40px] rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none focus:border-[var(--accent)]">{RESPONSE_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}</select></td><td className="p-4"><div className="flex flex-wrap gap-2">{followUpLink ? <a href={followUpLink} target="_blank" rel="noreferrer" className="inline-flex min-h-[40px] items-center justify-center gap-2 rounded-xl border border-[#128c7e] bg-[#128c7e] px-3 py-2 text-xs font-semibold text-white transition-colors hover:brightness-95" aria-label={`Follow up WhatsApp ${response.responderName}`}><MessageCircle size={16} /> Follow up</a> : <button type="button" disabled title="Nomor WhatsApp tidak ditemukan di jawaban form" className="inline-flex min-h-[40px] cursor-not-allowed items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-3 py-2 text-xs font-semibold text-[var(--muted)]"><MessageCircle size={16} /> Follow up</button>}<Button type="button" variant="danger" icon={Trash2} className="px-3 py-2 text-xs" aria-label={`Hapus responder ${response.responderName}`} onClick={() => setDeleteTarget(response)}>Hapus</Button></div></td></tr>; })}</tbody></table></div>}
       {selectedResponse && <FormResponseAnswerSheet response={selectedResponse} form={form} isClosing={isAnswerSheetClosing} onClose={closeAnswerSheet} />}
       <ConfirmModal
         open={Boolean(deleteTarget)}
