@@ -816,6 +816,8 @@ export const FormResponsesPage: React.FC<{ client: any }> = ({ client }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [selectedResponse, setSelectedResponse] = useState<FormResponse | null>(null);
+  const [deleteTarget, setDeleteTarget] = useState<FormResponse | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [isAnswerSheetClosing, setIsAnswerSheetClosing] = useState(false);
   const closeAnswerSheetTimer = useRef<number | null>(null);
 
@@ -884,6 +886,27 @@ export const FormResponsesPage: React.FC<{ client: any }> = ({ client }) => {
     }
   };
 
+  const handleDeleteResponse = async () => {
+    if (!client || !deleteTarget) return;
+    const target = deleteTarget;
+    setIsDeleting(true);
+    const { error } = await client.from('form_responses').delete().eq('id', target.id);
+    if (error) {
+      setNotice({ tone: 'error', message: errorMessage(error) });
+    } else {
+      setResponses(current => current.filter(response => response.id !== target.id));
+      if (selectedResponse?.id === target.id) {
+        if (closeAnswerSheetTimer.current) window.clearTimeout(closeAnswerSheetTimer.current);
+        closeAnswerSheetTimer.current = null;
+        setSelectedResponse(null);
+        setIsAnswerSheetClosing(false);
+      }
+      setDeleteTarget(null);
+      setNotice({ tone: 'success', message: `Responder ${target.responderName} berhasil dihapus.` });
+    }
+    setIsDeleting(false);
+  };
+
   const exportCsv = () => {
     if (!form) return;
     const headers = ['Nama Responder', 'Email Responder', 'Status', 'Waktu Submit', ...form.fields.map(field => field.label)];
@@ -905,8 +928,17 @@ export const FormResponsesPage: React.FC<{ client: any }> = ({ client }) => {
       <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><Link to="/admin/forms" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {FORM_MAKER_SPACE_LABEL}</Link><h1 className="text-3xl font-bold">Responder Form</h1><p className="mt-1 text-sm text-[var(--muted)]">{form.title} · {form.eventName}</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" onClick={() => navigate(`/admin/forms/${form.id}`)}>Edit Form</Button><Button icon={FileDown} disabled={!responses.length} onClick={exportCsv}>Export CSV</Button></div></div>
       <NoticeBanner notice={notice} />
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4"><Card><p className="text-xs text-[var(--muted)]">Total Responder</p><p className="mt-2 text-3xl font-bold">{stats.total}</p></Card><Card><p className="text-xs text-[var(--muted)]">Menunggu</p><p className="mt-2 text-3xl font-bold">{stats.pending}</p></Card><Card><p className="text-xs text-[var(--muted)]">Terkonfirmasi</p><p className="mt-2 text-3xl font-bold">{stats.confirmed}</p></Card><Card><p className="text-xs text-[var(--muted)]">Paid</p><p className="mt-2 text-3xl font-bold">{stats.paid}</p></Card></div>
-      {responses.length === 0 ? <Card className="py-14 text-center"><Users size={32} className="mx-auto mb-3 text-[var(--muted)]" /><p className="font-semibold">Belum ada responder</p><p className="mt-1 text-sm text-[var(--muted)]">Data akan muncul setelah form publik dikirim.</p></Card> : <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]"><table className="w-full min-w-[900px] text-left text-sm"><thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]"><tr><th className="p-4">Responder</th><th className="p-4">Status</th><th className="p-4">Jawaban</th><th className="p-4">Dikirim</th><th className="p-4">Ubah Status</th></tr></thead><tbody>{responses.map(response => <tr key={response.id} className="border-t border-[var(--border)] align-top"><td className="p-4"><p className="font-semibold">{response.responderName}</p><p className="mt-1 text-xs text-[var(--muted)]">{response.responderEmail}</p></td><td className="p-4"><span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${statusClass(response.status)}`}>{statusLabel(response.status)}</span></td><td className="max-w-md p-4"><button type="button" onClick={() => openAnswerSheet(response)} className="inline-flex items-center gap-2 text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline" aria-label={`Lihat jawaban ${response.responderName}`}><span aria-hidden="true">▸</span>Lihat jawaban</button></td><td className="p-4 text-xs text-[var(--muted)]">{formatDate(response.submittedAt)}</td><td className="p-4"><select value={response.status} onChange={event => void updateResponse(response, event.target.value as FormResponseStatus)} className="min-h-[40px] rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none focus:border-[var(--accent)]">{RESPONSE_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}</select></td></tr>)}</tbody></table></div>}
+      {responses.length === 0 ? <Card className="py-14 text-center"><Users size={32} className="mx-auto mb-3 text-[var(--muted)]" /><p className="font-semibold">Belum ada responder</p><p className="mt-1 text-sm text-[var(--muted)]">Data akan muncul setelah form publik dikirim.</p></Card> : <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]"><table className="w-full min-w-[1020px] text-left text-sm"><thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]"><tr><th className="p-4">Responder</th><th className="p-4">Status</th><th className="p-4">Jawaban</th><th className="p-4">Dikirim</th><th className="p-4">Ubah Status</th><th className="p-4">Aksi</th></tr></thead><tbody>{responses.map(response => <tr key={response.id} className="border-t border-[var(--border)] align-top"><td className="p-4"><p className="font-semibold">{response.responderName}</p><p className="mt-1 text-xs text-[var(--muted)]">{response.responderEmail}</p></td><td className="p-4"><span className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold ${statusClass(response.status)}`}>{statusLabel(response.status)}</span></td><td className="max-w-md p-4"><button type="button" onClick={() => openAnswerSheet(response)} className="inline-flex items-center gap-2 text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline" aria-label={`Lihat jawaban ${response.responderName}`}><span aria-hidden="true">▸</span>Lihat jawaban</button></td><td className="p-4 text-xs text-[var(--muted)]">{formatDate(response.submittedAt)}</td><td className="p-4"><select value={response.status} onChange={event => void updateResponse(response, event.target.value as FormResponseStatus)} className="min-h-[40px] rounded-lg border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-xs outline-none focus:border-[var(--accent)]">{RESPONSE_STATUSES.map(status => <option key={status.value} value={status.value}>{status.label}</option>)}</select></td><td className="p-4"><Button type="button" variant="danger" icon={Trash2} className="px-3 py-2 text-xs" aria-label={`Hapus responder ${response.responderName}`} onClick={() => setDeleteTarget(response)}>Hapus</Button></td></tr>)}</tbody></table></div>}
       {selectedResponse && <FormResponseAnswerSheet response={selectedResponse} form={form} isClosing={isAnswerSheetClosing} onClose={closeAnswerSheet} />}
+      <ConfirmModal
+        open={Boolean(deleteTarget)}
+        title="Hapus responder ini?"
+        description={deleteTarget ? <>Responder <strong className="text-[var(--text)]">{deleteTarget.responderName}</strong> ({deleteTarget.responderEmail}) beserta seluruh jawaban dan data statusnya akan dihapus permanen.</> : null}
+        confirmLabel="Hapus responder"
+        isLoading={isDeleting}
+        onCancel={() => { if (!isDeleting) setDeleteTarget(null); }}
+        onConfirm={() => void handleDeleteResponse()}
+      />
     </div>
   );
 };
