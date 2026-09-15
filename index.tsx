@@ -2129,6 +2129,72 @@ const App: React.FC = () => {
     }
   };
 
+  const handleDuplicateRecordedClass = async (sourceCourse: Course): Promise<Course> => {
+    const client = getAdminSupabaseClient();
+    if (!client) throw new Error('Database belum terhubung.');
+
+    // Load the post-test before creating the copy so a missing/failed quiz
+    // request never leaves a half-created class behind.
+    const { data: sourceQuiz, error: quizLoadError } = await client
+      .from('course_quizzes')
+      .select('*')
+      .eq('course_id', sourceCourse.id)
+      .maybeSingle();
+    if (quizLoadError) throw quizLoadError;
+
+    const createCopyId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const duplicatedCourse: Course = {
+      ...sourceCourse,
+      id: createCopyId('course'),
+      title: `${sourceCourse.title} (Salinan)`,
+      published: false,
+      modules: (sourceCourse.modules || []).map(module => ({
+        ...module,
+        id: createCopyId('module')
+      })),
+      assets: (sourceCourse.assets || []).map(asset => ({
+        ...asset,
+        id: createCopyId('asset')
+      })),
+      categories: sourceCourse.categories?.map(category => ({ ...category })),
+      spaceType: 'recorded_class'
+    };
+
+    try {
+      await handleUpdateCourse(duplicatedCourse);
+
+      if (sourceQuiz) {
+        const quizData: Record<string, any> = { ...sourceQuiz };
+        delete quizData.id;
+        delete quizData.course_id;
+        delete quizData.created_at;
+        delete quizData.updated_at;
+        quizData.course_id = duplicatedCourse.id;
+        quizData.questions = Array.isArray(sourceQuiz.questions)
+          ? sourceQuiz.questions.map((question: any) => ({
+            ...question,
+            id: createCopyId('question')
+          }))
+          : [];
+
+        const { error: quizCopyError } = await client.from('course_quizzes').insert(quizData);
+        if (quizCopyError) throw quizCopyError;
+      }
+
+      return duplicatedCourse;
+    } catch (error) {
+      // Keep the list and database consistent if copying the post-test fails
+      // after the course row was created.
+      try {
+        await client.from('courses').delete().eq('id', duplicatedCourse.id);
+      } catch (cleanupError) {
+        console.error('Recorded class duplication cleanup failed', cleanupError);
+      }
+      setCourses(previous => previous.filter(course => course.id !== duplicatedCourse.id));
+      throw error;
+    }
+  };
+
   const renderAdminPage = (content: React.ReactNode) => {
     if (authStatus === 'loading') return <AuthLoading />;
     if (!isAdmin) return <Navigate to="/login" replace />;
@@ -2162,7 +2228,7 @@ const App: React.FC = () => {
         <Route path="/admin" element={renderAdminPage(<SpacesDashboard courses={courses} />)} />
         <Route path="/admin/products" element={renderAdminPage(<AdminDashboard courses={courses} setCourses={setCourses} onDeleteCourse={handleDeleteCourse} />)} />
         <Route path="/admin/course/:id" element={renderAdminPage(<CourseEditor courses={courses} onSave={handleUpdateCourse} mentor={mentor} setMentor={setMentor} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} />)} />
-        <Route path="/admin/classes" element={renderAdminPage(<RecordedClassesPage courses={courses} onCreateCourse={handleUpdateCourse} onDeleteCourse={handleDeleteCourse} generateShareLink={courseId => generateShareLink(courseId, 'class')} copyText={copyTextToClipboard} />)} />
+        <Route path="/admin/classes" element={renderAdminPage(<RecordedClassesPage courses={courses} onCreateCourse={handleUpdateCourse} onDuplicateCourse={handleDuplicateRecordedClass} onDeleteCourse={handleDeleteCourse} generateShareLink={courseId => generateShareLink(courseId, 'class')} copyText={copyTextToClipboard} />)} />
         <Route path="/admin/classes/:id" element={renderAdminPage(<RecordedClassEditor courses={courses} client={getAdminSupabaseClient()} onSaveCourse={handleUpdateCourse} onLocalEdit={() => { lastLocalUpdateRef.current = Date.now(); }} />)} />
         <Route path="/admin/classes/:id/results" element={renderAdminPage(<ClassResultsPage courses={courses} client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/forms" element={renderAdminPage(<FormMakerPage client={getAdminSupabaseClient()} />)} />

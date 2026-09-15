@@ -1322,14 +1322,16 @@ export const SpacesDashboard: React.FC<{ courses: Course[] }> = ({ courses }) =>
 export const RecordedClassesPage: React.FC<{
   courses: Course[];
   onCreateCourse: (course: Course) => Promise<void>;
+  onDuplicateCourse: (course: Course) => Promise<Course>;
   onDeleteCourse: (id: string) => Promise<void>;
   generateShareLink: (courseId: string) => string;
   copyText: (text: string) => Promise<void>;
-}> = ({ courses, onCreateCourse, onDeleteCourse, generateShareLink, copyText }) => {
+}> = ({ courses, onCreateCourse, onDuplicateCourse, onDeleteCourse, generateShareLink, copyText }) => {
   const navigate = useNavigate();
   const recordedClasses = courses.filter(course => course.spaceType === 'recorded_class');
   const [copiedId, setCopiedId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<{ tone: NoticeTone; title: string; message: string } | null>(null);
   const [copyFallbackUrl, setCopyFallbackUrl] = useState<string | null>(null);
 
@@ -1367,6 +1369,19 @@ export const RecordedClassesPage: React.FC<{
     } catch (error) {
       console.error('Class link copy failed', error);
       setCopyFallbackUrl(url);
+    }
+  };
+
+  const handleDuplicate = async (course: Course) => {
+    setDuplicatingId(course.id);
+    try {
+      const duplicatedCourse = await onDuplicateCourse(course);
+      navigate(`/admin/classes/${duplicatedCourse.id}`);
+    } catch (error) {
+      console.error('Recorded class duplication failed', error);
+      setNotice({ tone: 'error', title: 'Kelas belum dapat diduplikasi', message: databaseErrorMessage(error) });
+    } finally {
+      setDuplicatingId(null);
     }
   };
 
@@ -1422,6 +1437,16 @@ export const RecordedClassesPage: React.FC<{
                 </Button>
                 <Button className="text-xs px-2" icon={Share2} disabled={!course.published} title={!course.published ? 'Publikasikan kelas terlebih dahulu' : undefined} onClick={() => window.open(generateShareLink(course.id), '_blank', 'noopener,noreferrer')}>
                   Buka Publik
+                </Button>
+                <Button
+                  variant="secondary"
+                  className="col-span-2 text-xs px-2"
+                  icon={Copy}
+                  isLoading={duplicatingId === course.id}
+                  disabled={duplicatingId !== null}
+                  onClick={() => { void handleDuplicate(course); }}
+                >
+                  Duplikasi kelas
                 </Button>
               </div>
             </div>
