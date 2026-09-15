@@ -2,6 +2,23 @@
 @tailwind components;
 @tailwind utilities;
 
+/* Admin pages use the available workspace width with a small, consistent gutter. */
+.admin-page-scroll > * {
+  width: 100%;
+  max-width: none !important;
+  margin-left: 0 !important;
+  margin-right: 0 !important;
+  padding-left: 1rem !important;
+  padding-right: 1rem !important;
+}
+
+@media (min-width: 768px) {
+  .admin-page-scroll > * {
+    padding-left: 1.5rem !important;
+    padding-right: 1.5rem !important;
+  }
+}
+
 /* Keep the presenter list scrollbar inside its framed Q&A panel. */
 .qna-presenter-scroll {
   scrollbar-width: thin;

@@ -835,7 +835,7 @@ const AdminLayout: React.FC<{
         </div>
         <div className="w-10"></div>
       </header>
-      <div className="min-h-0 flex-1 overflow-y-auto">
+      <div className="admin-page-scroll min-h-0 flex-1 overflow-y-auto">
         {children}
       </div>
     </main>
