@@ -255,12 +255,22 @@ const createResponderFollowUpLink = (response: FormResponse, form: FormDefinitio
   const phone = getResponderWhatsApp(response, form);
   if (!phone) return '';
   const name = response.responderName.trim() || 'Kak';
+  const paymentAction = response.status === 'paid'
+    ? 'Pembayaran Anda sudah tercatat. Terima kasih, dan simpan bukti transfer untuk arsip Anda.'
+    : response.status === 'confirmed'
+      ? 'Pendaftaran Anda sudah terkonfirmasi. Jika pembayaran belum dilakukan, silakan segera transfer sesuai nominal di atas lalu kirim bukti pembayaran melalui chat ini.'
+      : response.status === 'cancelled'
+        ? 'Pendaftaran Anda saat ini berstatus dibatalkan. Hubungi kami melalui chat ini jika ingin mengaktifkan kembali pendaftaran.'
+        : 'Silakan segera lakukan pembayaran sesuai nominal di atas. Setelah transfer, kirim bukti pembayaran melalui chat ini agar pendaftaran Anda dapat segera kami proses.';
   const message = [
     `Halo ${name}, berikut detail pendaftaran Anda:`,
     '',
     `Acara: ${form.eventName || form.title}`,
     `Nominal pendaftaran: ${form.paymentAmount || 'Belum ditentukan'}`,
-    `Transfer ke: ${form.paymentAccountNumber || 'Belum diatur'}`
+    `Transfer ke: ${form.paymentAccountNumber || 'Belum diatur'}`,
+    '',
+    paymentAction,
+    'Terima kasih.'
   ].join('\n');
   return `https://wa.me/${phone}?text=${encodeURIComponent(message)}`;
 };
