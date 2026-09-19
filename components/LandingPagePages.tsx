@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
   BarChart3,
+  Bold,
   Check,
   Copy,
   CreditCard,
@@ -10,9 +11,14 @@ import {
   ExternalLink,
   Gift,
   GripVertical,
+  Heading2,
+  Heading3,
+  Italic,
   ImagePlus,
   Layout,
   Link as LinkIcon,
+  List,
+  ListOrdered,
   Loader2,
   ChevronLeft,
   ChevronRight,
@@ -574,6 +580,163 @@ const ActionLink: React.FC<{ label: string; href?: string; className?: string; o
   </a>
 ) : null;
 
+const INLINE_MARKDOWN_PATTERN = /(\*\*[^*]+\*\*|__[^_]+__|~~[^~]+~~|\*[^*]+\*|_[^_]+_|\[[^\]]+\]\((?:https?:\/\/|mailto:)[^)\s]+\))/g;
+
+const renderRichTextInline = (value: string, keyPrefix: string): React.ReactNode[] => value.split(INLINE_MARKDOWN_PATTERN).filter(Boolean).map((part, index) => {
+  const key = `${keyPrefix}-${index}`;
+  if ((part.startsWith('**') && part.endsWith('**')) || (part.startsWith('__') && part.endsWith('__'))) {
+    return <strong key={key} className="font-bold text-[var(--text)]">{part.slice(2, -2)}</strong>;
+  }
+  if ((part.startsWith('~~') && part.endsWith('~~'))) {
+    return <del key={key}>{part.slice(2, -2)}</del>;
+  }
+  if ((part.startsWith('*') && part.endsWith('*')) || (part.startsWith('_') && part.endsWith('_'))) {
+    return <em key={key}>{part.slice(1, -1)}</em>;
+  }
+  const linkMatch = part.match(/^\[([^\]]+)\]\(((?:https?:\/\/|mailto:)[^)\s]+)\)$/i);
+  if (linkMatch) {
+    return <a key={key} href={linkMatch[2]} target="_blank" rel="noreferrer" className="font-semibold text-[var(--accent-strong)] underline underline-offset-2">{linkMatch[1]}</a>;
+  }
+  return <React.Fragment key={key}>{part}</React.Fragment>;
+});
+
+const renderRichText = (value: string): React.ReactNode[] => {
+  const lines = value.replace(/\r\n?/g, '\n').split('\n');
+  const blocks: React.ReactNode[] = [];
+  let paragraphLines: string[] = [];
+  let listType: 'ul' | 'ol' | null = null;
+  let listItems: string[] = [];
+
+  const flushParagraph = () => {
+    if (!paragraphLines.length) return;
+    const paragraphIndex = blocks.length;
+    blocks.push(<p key={`rich-paragraph-${paragraphIndex}`}>{paragraphLines.map((line, index) => <React.Fragment key={`rich-line-${paragraphIndex}-${index}`}>{index > 0 && <br />}{renderRichTextInline(line, `rich-inline-${paragraphIndex}-${index}`)}</React.Fragment>)}</p>);
+    paragraphLines = [];
+  };
+
+  const flushList = () => {
+    if (!listType || !listItems.length) return;
+    const listIndex = blocks.length;
+    const ListTag = listType;
+    blocks.push(<ListTag key={`rich-list-${listIndex}`} className={`space-y-2 pl-5 ${listType === 'ul' ? 'list-disc' : 'list-decimal'}`}>{listItems.map((item, index) => <li key={`rich-list-item-${listIndex}-${index}`}>{renderRichTextInline(item, `rich-list-inline-${listIndex}-${index}`)}</li>)}</ListTag>);
+    listType = null;
+    listItems = [];
+  };
+
+  lines.forEach(line => {
+    const trimmedLine = line.trim();
+    if (!trimmedLine) {
+      flushParagraph();
+      flushList();
+      return;
+    }
+
+    const headingMatch = line.match(/^\s*(#{2,3})\s+(.+)$/);
+    if (headingMatch) {
+      flushParagraph();
+      flushList();
+      const HeadingTag = headingMatch[1].length === 2 ? 'h3' : 'h4';
+      blocks.push(<HeadingTag key={`rich-heading-${blocks.length}`} className={HeadingTag === 'h3' ? 'text-xl font-bold text-[var(--text)]' : 'text-lg font-semibold text-[var(--text)]'}>{renderRichTextInline(headingMatch[2], `rich-heading-inline-${blocks.length}`)}</HeadingTag>);
+      return;
+    }
+
+    const unorderedMatch = line.match(/^\s*[-*•]\s+(.+)$/);
+    const orderedMatch = line.match(/^\s*\d+[.)]\s+(.+)$/);
+    if (unorderedMatch || orderedMatch) {
+      flushParagraph();
+      const nextListType = unorderedMatch ? 'ul' : 'ol';
+      if (listType && listType !== nextListType) flushList();
+      listType = nextListType;
+      listItems.push((unorderedMatch || orderedMatch)?.[1] || '');
+      return;
+    }
+
+    const quoteMatch = line.match(/^\s*>\s?(.+)$/);
+    if (quoteMatch) {
+      flushParagraph();
+      flushList();
+      blocks.push(<blockquote key={`rich-quote-${blocks.length}`} className="border-l-4 border-[var(--accent)] pl-4 italic text-[var(--muted)]">{renderRichTextInline(quoteMatch[1], `rich-quote-inline-${blocks.length}`)}</blockquote>);
+      return;
+    }
+
+    if (/^\s*---+\s*$/.test(line)) {
+      flushParagraph();
+      flushList();
+      blocks.push(<hr key={`rich-rule-${blocks.length}`} className="border-[var(--border)]" />);
+      return;
+    }
+
+    flushList();
+    paragraphLines.push(line);
+  });
+
+  flushParagraph();
+  flushList();
+  return blocks;
+};
+
+const RichTextToolbarButton: React.FC<{ label: string; title: string; icon: React.ComponentType<any>; onClick: () => void }> = ({ label, title, icon: Icon, onClick }) => (
+  <button type="button" title={title} aria-label={title} onClick={onClick} className="inline-flex min-h-9 items-center gap-1.5 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 text-xs font-semibold text-[var(--text)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-soft)]">
+    <Icon size={15} />{label && <span>{label}</span>}
+  </button>
+);
+
+const RichTextEditor: React.FC<{ label: string; value: string; onChange: (value: string) => void; className?: string }> = ({ label, value, onChange, className = '' }) => {
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const wrapSelection = (prefix: string, suffix = prefix) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = value.slice(start, end);
+    const replacement = selected ? `${prefix}${selected}${suffix}` : `${prefix}${suffix}`;
+    const nextCursor = selected ? start + replacement.length : start + prefix.length;
+    onChange(`${value.slice(0, start)}${replacement}${value.slice(end)}`);
+    window.requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(selected ? start + replacement.length : nextCursor, selected ? start + replacement.length : nextCursor);
+    });
+  };
+
+  const prefixLines = (prefix: string) => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+    const nextBreak = value.indexOf('\n', end);
+    const lineEnd = nextBreak === -1 ? value.length : nextBreak;
+    const selectedLines = value.slice(lineStart, lineEnd).split('\n');
+    const formattedLines = selectedLines.map(line => line.startsWith(prefix) ? line : `${prefix}${line}`);
+    const replacement = formattedLines.join('\n');
+    onChange(`${value.slice(0, lineStart)}${replacement}${value.slice(lineEnd)}`);
+    window.requestAnimationFrame(() => {
+      if (!textareaRef.current) return;
+      textareaRef.current.focus();
+      textareaRef.current.setSelectionRange(lineStart, lineStart + replacement.length);
+    });
+  };
+
+  return (
+    <div className="flex flex-col gap-2">
+      <span className="text-xs font-semibold text-[var(--muted)]">{label}</span>
+      <div className="flex flex-wrap items-center gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-2">
+        <RichTextToolbarButton label="Tebal" title="Tebalkan teks yang dipilih" icon={Bold} onClick={() => wrapSelection('**')} />
+        <RichTextToolbarButton label="Miring" title="Miringkan teks yang dipilih" icon={Italic} onClick={() => wrapSelection('*')} />
+        <RichTextToolbarButton label="Subjudul" title="Jadikan baris sebagai subjudul" icon={Heading2} onClick={() => prefixLines('## ')} />
+        <RichTextToolbarButton label="Judul kecil" title="Jadikan baris sebagai judul kecil" icon={Heading3} onClick={() => prefixLines('### ')} />
+        <RichTextToolbarButton label="Bullet" title="Buat daftar bullet" icon={List} onClick={() => prefixLines('- ')} />
+        <RichTextToolbarButton label="Nomor" title="Buat daftar bernomor" icon={ListOrdered} onClick={() => prefixLines('1. ')} />
+        <RichTextToolbarButton label="Kutipan" title="Jadikan baris sebagai kutipan" icon={Quote} onClick={() => prefixLines('> ')} />
+      </div>
+      <textarea ref={textareaRef} aria-label={label} value={value} onChange={event => onChange(event.target.value)} className={`min-h-[220px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm leading-relaxed text-[var(--text)] outline-none transition-colors focus:border-[var(--accent)] ${className}`} placeholder="Tulis isi teks di sini..." />
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Pilih teks lalu gunakan toolbar. Baris kosong menjadi paragraf baru; format aman seperti tebal, subjudul, bullet, nomor, dan kutipan akan tampil di halaman publik.</p>
+    </div>
+  );
+};
+
 const getVideoEmbedUrl = (value: unknown) => {
   const url = safeHref(value);
   if (!url) return '';
@@ -869,7 +1032,7 @@ export const LandingBlockRenderer: React.FC<{
       return (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm md:p-8">
           <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Tentang produk')}</h2>
-          <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{textBody || 'Tambahkan penjelasan produk Anda.'}</p>
+          <div className="mt-4 space-y-4 text-sm leading-relaxed text-[var(--muted)]">{renderRichText(textBody || 'Tambahkan penjelasan produk Anda.')}</div>
         </section>
       );
     case 'image':
@@ -1346,7 +1509,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
     case 'hero':
       return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} />{headingColorField}<Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><HeroImageControls imageUrl={asText(data.imageUrl)} boxScale={normalizeHeroImageScale(data.imageBoxScale, 1)} boxOffsetX={normalizeHeroImageBoxOffset(data.imageBoxOffsetX)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
     case 'text':
-      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Isi teks" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} className="min-h-[180px]" /></div>;
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<RichTextEditor label="Isi teks" value={asText(data.body)} onChange={body => patch({ body })} /></div>;
     case 'image': {
       const items = normalizeImageItems(data.images, data);
       const layout = (['slider', 'marquee', 'row'].includes(data.layout) ? data.layout : 'row') as LandingImageLayout;
