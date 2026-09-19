@@ -2,17 +2,21 @@ import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
+  Bell,
+  BookOpen,
   CalendarDays,
   Check,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
   Copy,
+  Clock3,
   ExternalLink,
   FileText,
   Link as LinkIcon,
   Loader2,
   LockKeyhole,
+  MessageCircle,
   PlayCircle,
   Plus,
   Save,
@@ -26,6 +30,8 @@ import {
 
 import {
   OneToOneNote,
+  OneToOneConsultationHours,
+  OneToOneWeekday,
   OneToOnePortal,
   OneToOneRecording,
   OneToOneScheduleEvent,
@@ -48,6 +54,37 @@ const themeOptions: Array<{ value: OneToOneTheme; label: string; color: string }
   { value: 'violet', label: 'Violet', color: '#6c55a4' },
   { value: 'amber', label: 'Amber', color: '#9b6a20' }
 ];
+
+const consultationDays: Array<{ key: OneToOneWeekday; label: string }> = [
+  { key: 'mon', label: 'Senin' },
+  { key: 'tue', label: 'Selasa' },
+  { key: 'wed', label: 'Rabu' },
+  { key: 'thu', label: 'Kamis' },
+  { key: 'fri', label: 'Jumat' },
+  { key: 'sat', label: 'Sabtu' },
+  { key: 'sun', label: 'Minggu' }
+];
+
+const defaultConsultationHours: OneToOneConsultationHours = {
+  mon: { enabled: true, start: '09:00', end: '17:00' },
+  tue: { enabled: true, start: '09:00', end: '17:00' },
+  wed: { enabled: true, start: '09:00', end: '17:00' },
+  thu: { enabled: true, start: '09:00', end: '17:00' },
+  fri: { enabled: true, start: '09:00', end: '17:00' },
+  sat: { enabled: false, start: '09:00', end: '12:00' },
+  sun: { enabled: false, start: '09:00', end: '12:00' }
+};
+
+const normaliseConsultationHours = (value: any): OneToOneConsultationHours => consultationDays.reduce((result, day) => {
+  const source = value?.[day.key] || {};
+  const fallback = defaultConsultationHours[day.key];
+  result[day.key] = {
+    enabled: source.enabled !== false && Boolean(source.enabled ?? fallback.enabled),
+    start: /^\d{2}:\d{2}$/.test(String(source.start || '')) ? source.start : fallback.start,
+    end: /^\d{2}:\d{2}$/.test(String(source.end || '')) ? source.end : fallback.end
+  };
+  return result;
+}, {} as OneToOneConsultationHours);
 
 const oneToOneLink = (token: string) => {
   try {
@@ -79,6 +116,9 @@ const mapPortal = (row: any): OneToOnePortal => ({
   welcomeMessage: row.welcome_message || '',
   theme: row.theme || 'navy',
   accentColor: row.accent_color || '#16436b',
+  consultationPhone: row.consultation_phone || '',
+  consultationTimezone: row.consultation_timezone || 'Asia/Makassar',
+  consultationHours: normaliseConsultationHours(row.consultation_hours),
   isActive: row.is_active !== false,
   publicTokenHint: row.public_token_hint || '',
   createdAt: row.created_at,
@@ -441,6 +481,9 @@ export const OneToOneEditorPage: React.FC<{ client: any }> = ({ client }) => {
       welcome_message: portal.welcomeMessage,
       theme: portal.theme,
       accent_color: portal.accentColor,
+      consultation_phone: portal.consultationPhone,
+      consultation_timezone: portal.consultationTimezone,
+      consultation_hours: portal.consultationHours,
       is_active: portal.isActive
     }).eq('id', id);
     setNotice(error ? { tone: 'error', message: databaseErrorMessage(error) } : { tone: 'success', message: 'Tampilan ruang berhasil disimpan.' });
@@ -476,6 +519,17 @@ export const OneToOneEditorPage: React.FC<{ client: any }> = ({ client }) => {
     const { error } = await client.from(table).insert({ ...payload, portal_id: id });
     setNotice(error ? { tone: 'error', message: databaseErrorMessage(error) } : { tone: 'success', message: 'Item baru ditambahkan.' });
     if (!error) await fetchAll();
+  };
+
+  const updateConsultationDay = (day: OneToOneWeekday, values: Partial<OneToOneConsultationHours[OneToOneWeekday]>) => {
+    if (!portal) return;
+    setPortal({
+      ...portal,
+      consultationHours: {
+        ...portal.consultationHours,
+        [day]: { ...portal.consultationHours[day], ...values }
+      }
+    });
   };
 
   const accent = portal?.accentColor || themeOptions.find(option => option.value === portal?.theme)?.color || '#16436b';
@@ -548,6 +602,39 @@ export const OneToOneEditorPage: React.FC<{ client: any }> = ({ client }) => {
               <Input label="Warna aksen" type="color" value={portal.accentColor} onChange={event => setPortal({ ...portal, accentColor: event.target.value })} className="h-[46px] p-1" />
             </div>
           </Card>
+
+          <Card className="space-y-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Konsultasi mentor</p>
+              <h2 className="mt-2 text-xl font-bold">Atur tombol WhatsApp dan jam layanan</h2>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Tombol konsultasi di halaman mentee otomatis aktif hanya pada jam yang dicentang.</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input label="Nomor WhatsApp mentor" type="tel" value={portal.consultationPhone} onChange={event => setPortal({ ...portal, consultationPhone: event.target.value })} placeholder="Contoh: 62812xxxxxxx" />
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-semibold text-[var(--muted)]">Zona waktu</span>
+                <select value={portal.consultationTimezone} onChange={event => setPortal({ ...portal, consultationTimezone: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 text-sm outline-none focus:border-[var(--accent)]">
+                  <option value="Asia/Jakarta">WIB — Asia/Jakarta</option>
+                  <option value="Asia/Makassar">WITA — Asia/Makassar</option>
+                  <option value="Asia/Jayapura">WIT — Asia/Jayapura</option>
+                </select>
+              </label>
+            </div>
+            <div className="space-y-2">
+              <p className="text-xs font-semibold text-[var(--muted)]">Jam konsultasi per hari</p>
+              <div className="divide-y divide-[var(--border)] overflow-hidden rounded-xl border border-[var(--border)]">
+                {consultationDays.map(day => {
+                  const hours = portal.consultationHours[day.key];
+                  return <div key={day.key} className="grid items-center gap-3 bg-[var(--surface)] px-3 py-3 sm:grid-cols-[minmax(100px,1fr)_auto_auto_auto]">
+                    <label className="flex items-center gap-3 text-sm font-semibold"><input type="checkbox" checked={hours.enabled} onChange={event => updateConsultationDay(day.key, { enabled: event.target.checked })} />{day.label}</label>
+                    <span className="text-xs text-[var(--muted)]">Dari</span>
+                    <input aria-label={`${day.label} mulai`} type="time" value={hours.start} disabled={!hours.enabled} onChange={event => updateConsultationDay(day.key, { start: event.target.value })} className="min-h-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50" />
+                    <input aria-label={`${day.label} selesai`} type="time" value={hours.end} disabled={!hours.enabled} onChange={event => updateConsultationDay(day.key, { end: event.target.value })} className="min-h-10 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 text-sm disabled:cursor-not-allowed disabled:opacity-50" />
+                  </div>;
+                })}
+              </div>
+            </div>
+          </Card>
         </div>
 
         <div className="min-w-0 space-y-5">
@@ -614,7 +701,7 @@ const publicTheme: Record<OneToOneTheme, { background: string; surface: string }
   amber: { background: '#fff8e8', surface: '#ffffff' }
 };
 
-export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string }> = ({ client, tokenOverride }) => {
+const LegacyPublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string }> = ({ client, tokenOverride }) => {
   const { token: routeToken } = useParams();
   const token = tokenOverride || routeToken || '';
   const [data, setData] = useState<any>(null);
@@ -691,7 +778,185 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
   </main>;
 };
 
+const publicWeekdayMap: Record<string, OneToOneWeekday> = {
+  Mon: 'mon', Tue: 'tue', Wed: 'wed', Thu: 'thu', Fri: 'fri', Sat: 'sat', Sun: 'sun'
+};
+
+const consultationMinutes = (value: string) => {
+  const [hours, minutes] = String(value || '').split(':').map(Number);
+  if (!Number.isFinite(hours) || !Number.isFinite(minutes)) return null;
+  return (hours * 60) + minutes;
+};
+
+const getCurrentConsultationState = (hours: OneToOneConsultationHours, timezone: string) => {
+  const options: Intl.DateTimeFormatOptions = { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone || 'Asia/Makassar' };
+  let parts: Record<string, string> = {};
+  try {
+    parts = new Intl.DateTimeFormat('en-US', options).formatToParts(new Date()).reduce<Record<string, string>>((result, part) => {
+      result[part.type] = part.value;
+      return result;
+    }, {});
+  } catch {
+    parts = new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date()).reduce<Record<string, string>>((result, part) => {
+      result[part.type] = part.value;
+      return result;
+    }, {});
+  }
+  const day = publicWeekdayMap[parts.weekday] || 'mon';
+  const dayHours = hours[day];
+  const currentMinutes = (Number(parts.hour === '24' ? '0' : parts.hour || '0') * 60) + Number(parts.minute || '0');
+  const start = consultationMinutes(dayHours?.start || '');
+  const end = consultationMinutes(dayHours?.end || '');
+  const isOpen = Boolean(dayHours?.enabled && start !== null && end !== null && end > start && currentMinutes >= start && currentMinutes < end);
+  return { day, dayHours, isOpen, currentTime: `${parts.hour || '00'}:${parts.minute || '00'}` };
+};
+
+const getPublicGreeting = (menteeName: string, timezone: string) => {
+  let hour = new Date().getHours();
+  try {
+    const hourText = new Intl.DateTimeFormat('en-US', { hour: '2-digit', hour12: false, timeZone: timezone || 'Asia/Makassar' }).format(new Date());
+    hour = Number(hourText === '24' ? '0' : hourText);
+  } catch { /* fall back to the browser's local time */ }
+  const greeting = hour < 11 ? 'Selamat pagi' : hour < 15 ? 'Selamat siang' : hour < 18 ? 'Selamat sore' : 'Selamat malam';
+  return `${greeting}, ${menteeName || 'mentee'}`;
+};
+
+const PublicDashboardPanel: React.FC<{ title: string; icon: React.ComponentType<any>; accent: string; children: React.ReactNode; className?: string }> = ({ title, icon: Icon, accent, children, className = '' }) => (
+  <Card className={`!p-4 space-y-3 md:!p-5 ${className}`}>
+    <div className="flex items-center gap-2">
+      <span className="flex h-8 w-8 items-center justify-center rounded-lg" style={{ backgroundColor: `${accent}15`, color: accent }}><Icon size={16} /></span>
+      <h2 className="text-sm font-bold text-slate-900">{title}</h2>
+    </div>
+    {children}
+  </Card>
+);
+
+const PublicConsultationPanel: React.FC<{ portal: any; accent: string }> = ({ portal, accent }) => {
+  const [, setClock] = useState(() => Date.now());
+  useEffect(() => {
+    const timer = window.setInterval(() => setClock(Date.now()), 30_000);
+    return () => window.clearInterval(timer);
+  }, []);
+  const hours = normaliseConsultationHours(portal.consultationHours);
+  const state = getCurrentConsultationState(hours, portal.consultationTimezone);
+  const rawPhone = String(portal.consultationPhone || '').replace(/\D/g, '');
+  const phone = rawPhone.startsWith('0') ? `62${rawPhone.slice(1)}` : rawPhone.startsWith('8') ? `62${rawPhone}` : rawPhone;
+  const canChat = Boolean(phone && state.isOpen);
+  const message = `Halo ${portal.mentorName || 'Kak Mentor'}, saya ${portal.menteeName || 'mentee'} ingin berkonsultasi terkait ruang ${portal.title || '1:1'} ini.`;
+  const whatsappUrl = phone ? `https://wa.me/${phone}?text=${encodeURIComponent(message)}` : '';
+  const activeHours = consultationDays.filter(day => hours[day.key]?.enabled).map(day => `${day.label.slice(0, 3)} ${hours[day.key].start}–${hours[day.key].end}`).join(' · ');
+
+  return <PublicDashboardPanel title="Konsultasi mentor" icon={MessageCircle} accent={accent}>
+    <div className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 p-3">
+      <div><p className="text-sm font-semibold text-slate-800">{state.isOpen ? 'Mentor sedang tersedia' : 'Di luar jam konsultasi'}</p><p className="mt-1 text-xs text-slate-500">Sekarang {state.currentTime} · {portal.consultationTimezone || 'Asia/Makassar'}</p></div>
+      <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${state.isOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{state.isOpen ? 'Online' : 'Offline'}</span>
+    </div>
+    <p className="text-xs leading-relaxed text-slate-500">{activeHours || 'Jam konsultasi belum diatur oleh mentor.'}</p>
+    {canChat ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white" style={{ backgroundColor: accent }}><MessageCircle size={16} /> Chat via WhatsApp</a> : <button type="button" disabled className="inline-flex min-h-10 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-200 px-4 text-sm font-semibold text-slate-500"><Clock3 size={16} />{phone ? 'Tersedia saat jam konsultasi' : 'Nomor WhatsApp belum diatur'}</button>}
+  </PublicDashboardPanel>;
+};
+
 const EmptyPublic: React.FC<{ label: string; icon: React.ComponentType<any> }> = ({ label, icon: Icon }) => <div className="rounded-2xl border border-dashed border-slate-200 p-10 text-center text-sm text-slate-500"><Icon size={28} className="mx-auto mb-3 opacity-60" />{label}</div>;
+
+export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string }> = ({ client, tokenOverride }) => {
+  const { token: routeToken } = useParams();
+  const token = tokenOverride || routeToken || '';
+  const [data, setData] = useState<any>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  useEffect(() => {
+    let cancelled = false;
+    const load = async () => {
+      if (!client || !token) { setError('Link 1:1 tidak lengkap.'); setIsLoading(false); return; }
+      setIsLoading(true);
+      const { data: result, error: requestError } = await client.rpc('get_one_to_one_portal', { p_token: token });
+      if (cancelled) return;
+      if (requestError || !result) setError('Link 1:1 tidak ditemukan atau sudah tidak aktif.');
+      else {
+        setData({ ...result, consultationHours: normaliseConsultationHours(result.consultationHours) });
+        setPublicMetadata({ title: `${result.title || 'Ruang 1:1'} | Arunika`, description: result.welcomeMessage || `Ruang personal untuk ${result.menteeName || 'mentee'}.`, image: result.coverImageUrl || result.logoUrl || logoUtama });
+      }
+      setIsLoading(false);
+    };
+    void load();
+    return () => { cancelled = true; };
+  }, [client, token]);
+
+  if (isLoading) return <main className="flex min-h-screen items-center justify-center gap-3 p-6 text-sm text-[var(--muted)]"><Loader2 size={20} className="animate-spin" /> Membuka ruang personal...</main>;
+  if (error || !data) return <main className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md space-y-4 text-center"><LockKeyhole size={34} className="mx-auto text-[var(--accent-strong)]" /><h1 className="text-xl font-bold">Ruang tidak tersedia</h1><p className="text-sm leading-relaxed text-[var(--muted)]">{error || 'Link ini tidak dapat digunakan.'}</p></Card></main>;
+
+  const theme = publicTheme[data.theme as OneToOneTheme] || publicTheme.navy;
+  const accent = data.accentColor || '#16436b';
+  const recordings = data.recordings || [];
+  const schedule = data.schedule || [];
+  const tasks = data.tasks || [];
+  const notes = data.notes || [];
+  const greeting = getPublicGreeting(data.menteeName, data.consultationTimezone);
+  const notifications: Array<{ title: string; detail: string }> = [];
+  const upcoming = schedule.filter((item: any) => item.startsAt && new Date(item.startsAt).getTime() >= Date.now()).slice(0, 1);
+  if (upcoming[0]) notifications.push({ title: 'Jadwal berikutnya', detail: `${upcoming[0].title} · ${formatDate(upcoming[0].startsAt, true)}` });
+  const pendingTask = tasks.find((item: any) => item.status !== 'done');
+  if (pendingTask) notifications.push({ title: 'Task yang perlu diperhatikan', detail: pendingTask.title });
+  if (notes[0]) notifications.push({ title: 'Catatan terbaru dari mentor', detail: notes[0].title });
+
+  return <main className="min-h-screen px-2 py-4 sm:px-4 md:px-5 md:py-6" style={{ background: theme.background, ['--one-to-one-accent' as any]: accent }}>
+    <div className="mx-auto w-full max-w-[1180px] space-y-4">
+      <section className="overflow-hidden rounded-3xl border border-white/70 bg-white shadow-sm" style={{ borderTopColor: accent }}>
+        <div className="px-4 pb-6 pt-7 sm:px-6 md:px-8 md:pb-7 md:pt-8">
+          <div className="flex flex-wrap items-center justify-center gap-3" aria-label="Branding Arunika">
+            <img src={logoUtama} alt="Arunika" className="h-11 w-auto object-contain md:h-12" />
+            {data.logoUrl && <span className="h-7 w-px bg-slate-200" aria-hidden="true" />}
+            {data.logoUrl && <img src={data.logoUrl} alt="Logo ruang" className="h-11 max-w-[140px] object-contain md:h-12" />}
+          </div>
+          <div className="mt-4 text-center">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: accent }}>Ruang 1:1 personal</p>
+            <h1 className="mx-auto mt-1 max-w-2xl text-xl font-bold tracking-tight text-slate-900 md:text-2xl">{data.title}</h1>
+            <p className="mt-1 text-sm text-slate-500">Untuk {data.menteeName || 'mentee'}{data.menteeEmail ? ` · ${data.menteeEmail}` : ''}</p>
+          </div>
+          <div className="mt-5 overflow-hidden rounded-2xl" style={{ background: `linear-gradient(115deg, ${accent}24, ${accent}08)` }}>
+            {data.coverImageUrl ? <img src={data.coverImageUrl} alt="Banner ruang 1:1" className="h-28 w-full object-cover sm:h-36 md:h-40" /> : <div className="h-16 w-full sm:h-20 md:h-24" aria-label="Banner ruang 1:1" />}
+          </div>
+          <div className="mt-5 text-center">
+            <h2 className="text-base font-semibold text-slate-900">{greeting}</h2>
+            {data.welcomeTitle && data.welcomeTitle !== greeting && <p className="mt-1 text-sm font-medium text-slate-700">{data.welcomeTitle}</p>}
+            {data.welcomeMessage && <p className="mx-auto mt-2 max-w-2xl whitespace-pre-line text-sm leading-relaxed text-slate-600">{data.welcomeMessage}</p>}
+          </div>
+          {data.mentorName && <div className="mt-4 flex items-center justify-center gap-3 text-center">{data.mentorAvatarUrl ? <img src={data.mentorAvatarUrl} alt={data.mentorName} className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100"><UserRound size={16} /></div>}<div><p className="text-sm font-bold text-slate-800">{data.mentorName}</p><p className="text-xs text-slate-500">{data.mentorRole || 'Mentor'}</p></div></div>}
+        </div>
+      </section>
+
+      <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(270px,0.8fr)]">
+        <div className="min-w-0 space-y-4">
+          <PublicDashboardPanel title="Kalender & jadwal" icon={CalendarDays} accent={accent}>
+            <PublicScheduleCalendar items={schedule} accent={accent} />
+            {schedule.length === 0 ? <p className="text-sm text-slate-500">Belum ada jadwal mentoring.</p> : <div className="space-y-2">{schedule.slice(0, 4).map((item: any) => <article key={item.id} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3"><div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg text-white" style={{ backgroundColor: accent }}><span className="text-[9px] font-bold uppercase">{item.startsAt ? new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(new Date(item.startsAt)) : '—'}</span><span className="text-sm font-bold">{item.startsAt ? new Date(item.startsAt).getDate() : '—'}</span></div><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{item.title}</p><p className="mt-0.5 truncate text-xs text-slate-500">{formatDate(item.startsAt, true)}{item.location ? ` · ${item.location}` : ''}</p></div></article>)}</div>}
+          </PublicDashboardPanel>
+          <PublicConsultationPanel portal={data} accent={accent} />
+        </div>
+
+        <aside className="min-w-0 space-y-4">
+          <PublicDashboardPanel title="Catatan mentor" icon={FileText} accent={accent}>
+            {notes.length === 0 ? <p className="text-sm text-slate-500">Belum ada catatan mentor.</p> : <div className="space-y-3">{notes.slice(0, 3).map((item: any) => <article key={item.id} className="border-b border-slate-100 pb-3 last:border-0 last:pb-0"><p className="text-[10px] font-semibold uppercase tracking-wide" style={{ color: accent }}>{item.noteDate ? formatDate(item.noteDate) : 'Catatan mentor'}</p><h3 className="mt-1 text-sm font-semibold text-slate-800">{item.title}</h3><p className="mt-1 line-clamp-3 whitespace-pre-line text-xs leading-relaxed text-slate-500">{item.body}</p></article>)}</div>}
+          </PublicDashboardPanel>
+
+          <PublicDashboardPanel title="Notifikasi" icon={Bell} accent={accent}>
+            {notifications.length === 0 ? <p className="text-sm text-slate-500">Belum ada notifikasi baru.</p> : <div className="space-y-3">{notifications.map(item => <div key={`${item.title}-${item.detail}`} className="flex gap-2.5"><span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: accent }} /><div><p className="text-xs font-semibold text-slate-800">{item.title}</p><p className="mt-0.5 text-xs leading-relaxed text-slate-500">{item.detail}</p></div></div>)}</div>}
+          </PublicDashboardPanel>
+
+          <PublicDashboardPanel title="Materi & rekaman" icon={BookOpen} accent={accent}>
+            {recordings.length === 0 ? <p className="text-sm text-slate-500">Belum ada materi recording.</p> : <div className="space-y-2">{recordings.slice(0, 4).map((item: any) => <div key={item.id} className="flex items-center justify-between gap-3 rounded-xl bg-slate-50 p-3"><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{item.title}</p>{item.duration && <p className="mt-0.5 text-xs text-slate-500">{item.duration}</p>}</div>{item.videoUrl ? <a href={item.videoUrl} target="_blank" rel="noreferrer" className="shrink-0 text-xs font-semibold" style={{ color: accent }}>Buka</a> : <span className="text-xs text-slate-400">Belum ada link</span>}</div>)}</div>}
+          </PublicDashboardPanel>
+
+          <PublicDashboardPanel title="Task mentee" icon={CheckCircle2} accent={accent}>
+            {tasks.length === 0 ? <p className="text-sm text-slate-500">Belum ada task.</p> : <div className="space-y-2">{tasks.slice(0, 5).map((item: any) => <div key={item.id} className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3"><span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${item.status === 'done' ? 'bg-emerald-100 text-emerald-700' : 'bg-white text-slate-400'}`}><Check size={13} /></span><div className="min-w-0"><p className={`text-sm font-semibold ${item.status === 'done' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{item.title}</p>{item.dueAt && <p className="mt-0.5 text-xs text-slate-500">Deadline: {formatDate(item.dueAt, true)}</p>}</div></div>)}</div>}
+          </PublicDashboardPanel>
+        </aside>
+      </div>
+      <p className="text-center text-xs text-slate-500">Link ini bersifat privat. Jangan bagikan kepada orang lain.</p>
+    </div>
+  </main>;
+};
 
 const PublicScheduleCalendar: React.FC<{ items: any[]; accent: string }> = ({ items, accent }) => {
   const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));

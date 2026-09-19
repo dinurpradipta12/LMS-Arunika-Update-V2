@@ -160,6 +160,16 @@ export interface Branding {
 
 export type OneToOneTheme = 'navy' | 'emerald' | 'coral' | 'violet' | 'amber';
 
+export type OneToOneWeekday = 'mon' | 'tue' | 'wed' | 'thu' | 'fri' | 'sat' | 'sun';
+
+export interface OneToOneConsultationDay {
+  enabled: boolean;
+  start: string;
+  end: string;
+}
+
+export type OneToOneConsultationHours = Record<OneToOneWeekday, OneToOneConsultationDay>;
+
 export interface OneToOnePortal {
   id: string;
   title: string;
@@ -174,6 +184,9 @@ export interface OneToOnePortal {
   welcomeMessage: string;
   theme: OneToOneTheme;
   accentColor: string;
+  consultationPhone: string;
+  consultationTimezone: string;
+  consultationHours: OneToOneConsultationHours;
   isActive: boolean;
   publicTokenHint?: string;
   createdAt?: string;
