@@ -1458,9 +1458,15 @@ export const LandingBlockRenderer: React.FC<{
               <ActionLink label={asText(data.buttonLabel, 'Pelajari lebih lanjut')} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('hero')} className="mt-6" />
             </div>
             {asText(data.imageUrl) ? (
-              <div className={`relative aspect-video w-full overflow-hidden transition-transform duration-200 ease-out ${heroImageFrame === 'boxed' ? 'rounded-2xl bg-[var(--surface-soft)] shadow-sm' : ''}`} style={{ transform: `translateX(${heroImageBoxOffsetX}%) scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
-                <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="absolute inset-0 h-full w-full object-cover transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `scale(${heroImageScale})` }} />
-              </div>
+              heroImageFrame === 'none' ? (
+                <div className="relative flex min-h-40 w-full items-center justify-center overflow-visible transition-transform duration-200 ease-out">
+                  <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="max-h-64 max-w-full object-contain transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `scale(${heroImageScale})` }} />
+                </div>
+              ) : (
+                <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm transition-transform duration-200 ease-out" style={{ transform: `translateX(${heroImageBoxOffsetX}%) scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
+                  <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="absolute inset-0 h-full w-full object-cover transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `scale(${heroImageScale})` }} />
+                </div>
+              )
             ) : (
               <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-center text-xs text-[var(--muted)]">Visual produk dapat ditambahkan dari pengaturan blok.</div>
             )}
@@ -1673,18 +1679,19 @@ const ImageUploader: React.FC<{ label: string; value: string; onChange: (value: 
       setIsProcessing(false);
     }
   };
-  return <div className="space-y-3"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-[var(--muted)]">{label}</p>{value && <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus gambar</button>}</div><div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">{value ? <img src={value} alt={`Preview ${label}`} className="max-h-48 w-full rounded-lg object-contain" /> : <div className="flex min-h-28 items-center justify-center gap-2 text-sm text-[var(--muted)]"><ImagePlus size={22} /> Belum ada gambar</div>}</div><input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} /><Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing}>Upload gambar</Button>{error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}</div>;
+  return <div className="space-y-3"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-[var(--muted)]">{label}</p>{value && <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus gambar</button>}</div><div className="overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">{value ? <img src={value} alt={`Preview ${label}`} className="max-h-48 w-full rounded-lg object-contain" /> : <div className="flex min-h-28 items-center justify-center gap-2 text-sm text-[var(--muted)]"><ImagePlus size={22} /> Belum ada gambar</div>}</div><input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} /><Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing}>Upload gambar</Button>{preservePng && <p className="text-[11px] leading-relaxed text-[var(--muted)]">PNG transparan akan dipertahankan saat disimpan dan dicrop.</p>}{error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}</div>;
 };
 
 const HeroImageControls: React.FC<{
   imageUrl: string;
+  frame: 'boxed' | 'none';
   boxScale: number;
   boxOffsetX: number;
   scale: number;
   positionX: number;
   positionY: number;
   onChange: (values: Record<string, number>) => void;
-}> = ({ imageUrl, boxScale, boxOffsetX, scale, positionX, positionY, onChange }) => {
+}> = ({ imageUrl, frame, boxScale, boxOffsetX, scale, positionX, positionY, onChange }) => {
   const boxSizePercent = Math.round(normalizeHeroImageScale(boxScale, 1) * 100);
   const boxOffsetPercent = Math.round(normalizeHeroImageBoxOffset(boxOffsetX));
   const sizePercent = Math.round(normalizeHeroImageScale(scale) * 100);
@@ -1699,16 +1706,18 @@ const HeroImageControls: React.FC<{
         <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Geser posisi dan ubah ukuran gambar yang tampil di Hero.</p>
       </div>
       {imageUrl ? <>
-        <label className="flex flex-col gap-2">
-          <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Ukuran box media</span><span className="text-[var(--text)]">{boxSizePercent}%</span></span>
-          <input type="range" min="75" max="150" step="5" value={boxSizePercent} onChange={event => onChange({ imageBoxScale: Number(event.target.value) / 100 })} className={rangeClass} aria-label="Ukuran box media Hero" />
-          <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Kecil</span><span>Besar</span></span>
-        </label>
-        <label className="flex flex-col gap-2">
-          <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Geser box media</span><span className="text-[var(--text)]">{boxOffsetPercent > 0 ? `+${boxOffsetPercent}` : boxOffsetPercent}%</span></span>
-          <input type="range" min="-50" max="50" step="5" value={boxOffsetPercent} onChange={event => onChange({ imageBoxOffsetX: Number(event.target.value) })} className={rangeClass} aria-label="Posisi horizontal box media Hero" />
-          <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Kiri</span><span>Tengah</span><span>Kanan</span></span>
-        </label>
+        {frame === 'boxed' && <>
+          <label className="flex flex-col gap-2">
+            <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Ukuran box media</span><span className="text-[var(--text)]">{boxSizePercent}%</span></span>
+            <input type="range" min="75" max="150" step="5" value={boxSizePercent} onChange={event => onChange({ imageBoxScale: Number(event.target.value) / 100 })} className={rangeClass} aria-label="Ukuran box media Hero" />
+            <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Kecil</span><span>Besar</span></span>
+          </label>
+          <label className="flex flex-col gap-2">
+            <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Geser box media</span><span className="text-[var(--text)]">{boxOffsetPercent > 0 ? `+${boxOffsetPercent}` : boxOffsetPercent}%</span></span>
+            <input type="range" min="-50" max="50" step="5" value={boxOffsetPercent} onChange={event => onChange({ imageBoxOffsetX: Number(event.target.value) })} className={rangeClass} aria-label="Posisi horizontal box media Hero" />
+            <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Kiri</span><span>Tengah</span><span>Kanan</span></span>
+          </label>
+        </>}
         <label className="flex flex-col gap-2">
           <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Zoom / crop gambar</span><span className="text-[var(--text)]">{sizePercent}%</span></span>
           <input type="range" min="70" max="250" step="5" value={sizePercent} onChange={event => onChange({ imageScale: Number(event.target.value) / 100 })} className={rangeClass} aria-label="Zoom dan crop gambar Hero" />
@@ -1726,7 +1735,111 @@ const HeroImageControls: React.FC<{
             <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Atas</span><span>Bawah</span></span>
           </label>
         </div>
+        {frame === 'none' && <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-2 text-[11px] leading-relaxed text-[var(--muted)]">Tanpa frame: box media tidak digunakan. Gunakan crop tools di atas untuk memotong PNG secara permanen.</p>}
       </> : <p className="rounded-lg border border-dashed border-[var(--border-strong)] px-3 py-3 text-[11px] leading-relaxed text-[var(--muted)]">Upload visual Hero terlebih dahulu untuk mengatur ukuran dan posisinya.</p>}
+    </div>
+  );
+};
+
+type HeroCropValues = { top: number; right: number; bottom: number; left: number };
+
+const cropImageToPng = (imageUrl: string, crop: HeroCropValues): Promise<string> => new Promise((resolve, reject) => {
+  const image = new Image();
+  image.onerror = () => reject(new Error('Gambar tidak dapat diproses untuk crop.'));
+  image.onload = () => {
+    const sourceWidth = image.naturalWidth || image.width;
+    const sourceHeight = image.naturalHeight || image.height;
+    const left = Math.round(sourceWidth * crop.left / 100);
+    const top = Math.round(sourceHeight * crop.top / 100);
+    const width = Math.max(1, sourceWidth - left - Math.round(sourceWidth * crop.right / 100));
+    const height = Math.max(1, sourceHeight - top - Math.round(sourceHeight * crop.bottom / 100));
+    if (width < 2 || height < 2) {
+      reject(new Error('Area crop terlalu kecil. Sisakan bagian gambar yang cukup.'));
+      return;
+    }
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    const context = canvas.getContext('2d');
+    if (!context) {
+      reject(new Error('Canvas crop tidak tersedia di browser ini.'));
+      return;
+    }
+    try {
+      context.drawImage(image, left, top, width, height, 0, 0, width, height);
+      const croppedUrl = canvas.toDataURL('image/png');
+      if (croppedUrl.length > 2_000_000) {
+        reject(new Error('Hasil crop masih terlalu besar. Kurangi ukuran gambar atau area crop.'));
+        return;
+      }
+      resolve(croppedUrl);
+    } catch {
+      reject(new Error('Gambar tidak dapat dicrop. Gunakan file PNG/JPG yang diupload langsung.'));
+    }
+  };
+  image.src = imageUrl;
+});
+
+const HeroImageCropControls: React.FC<{ imageUrl: string; onChange: (value: string) => void }> = ({ imageUrl, onChange }) => {
+  const [crop, setCrop] = useState<HeroCropValues>({ top: 0, right: 0, bottom: 0, left: 0 });
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    setCrop({ top: 0, right: 0, bottom: 0, left: 0 });
+    setError(null);
+  }, [imageUrl]);
+
+  const updateCrop = (side: keyof HeroCropValues, value: number) => {
+    setCrop(current => {
+      const nextValue = Math.min(90, Math.max(0, Math.round(Number.isFinite(value) ? value : 0)));
+      const next = { ...current, [side]: nextValue };
+      if (side === 'left' || side === 'right') {
+        next.left = Math.min(next.left, 89 - next.right);
+        next.right = Math.min(next.right, 89 - next.left);
+      } else {
+        next.top = Math.min(next.top, 89 - next.bottom);
+        next.bottom = Math.min(next.bottom, 89 - next.top);
+      }
+      return next;
+    });
+    setError(null);
+  };
+
+  const applyCrop = async () => {
+    setIsProcessing(true);
+    setError(null);
+    try {
+      onChange(await cropImageToPng(imageUrl, crop));
+    } catch (cropError: any) {
+      setError(cropError?.message || 'Crop gambar gagal diproses.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const cropStyle = { clipPath: `inset(${crop.top}% ${crop.right}% ${crop.bottom}% ${crop.left}%)` };
+  const cropFields: Array<{ key: keyof HeroCropValues; label: string; start: string; end: string }> = [
+    { key: 'top', label: 'Potong atas', start: 'Atas', end: 'Bawah' },
+    { key: 'right', label: 'Potong kanan', start: 'Sedikit', end: 'Banyak' },
+    { key: 'bottom', label: 'Potong bawah', start: 'Atas', end: 'Bawah' },
+    { key: 'left', label: 'Potong kiri', start: 'Sedikit', end: 'Banyak' }
+  ];
+
+  return (
+    <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div><p className="text-xs font-semibold text-[var(--muted)]">Crop foto Hero</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur potongan tiap sisi secara bebas. Hasilnya akan disimpan sebagai PNG agar transparansi tetap terjaga.</p></div>
+        <button type="button" onClick={() => setCrop({ top: 0, right: 0, bottom: 0, left: 0 })} className="shrink-0 text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Reset crop</button>
+      </div>
+      <div className="relative flex aspect-video items-center justify-center overflow-hidden rounded-lg border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-2">
+        <img src={imageUrl} alt="Preview crop foto Hero" className="max-h-full max-w-full object-contain" style={cropStyle} />
+      </div>
+      <div className="grid gap-3 sm:grid-cols-2">
+        {cropFields.map(field => <label key={field.key} className="flex flex-col gap-2"><span className="flex items-center justify-between gap-2 text-xs font-semibold text-[var(--muted)]"><span>{field.label}</span><span className="text-[var(--text)]">{crop[field.key]}%</span></span><input type="range" min="0" max="90" step="1" value={crop[field.key]} onChange={event => updateCrop(field.key, Number(event.target.value))} className="h-2 w-full cursor-pointer accent-[var(--accent)]" aria-label={field.label} /><span className="flex justify-between text-[10px] text-[var(--muted)]"><span>{field.start}</span><span>{field.end}</span></span></label>)}
+      </div>
+      <Button type="button" variant="secondary" icon={Check} onClick={() => void applyCrop()} isLoading={isProcessing}>Terapkan crop &amp; simpan PNG</Button>
+      {error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}
     </div>
   );
 };
@@ -2203,7 +2316,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero':
-      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} />{headingColorField}<Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} preservePng /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Frame foto Hero</span><select value={normalizeHeroImageFrame(data.imageFrame)} onChange={event => patch({ imageFrame: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"><option value="boxed">Dengan frame kotak</option><option value="none">Tanpa frame</option></select><span className="text-[11px] leading-relaxed text-[var(--muted)]">Pilih apakah visual Hero tampil di dalam kotak dengan latar dan bayangan, atau tanpa frame.</span></label><HeroImageControls imageUrl={asText(data.imageUrl)} boxScale={normalizeHeroImageScale(data.imageBoxScale, 1)} boxOffsetX={normalizeHeroImageBoxOffset(data.imageBoxOffsetX)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
+      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} />{headingColorField}<Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} preservePng />{asText(data.imageUrl) && <HeroImageCropControls imageUrl={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} />}<label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Frame foto Hero</span><select value={normalizeHeroImageFrame(data.imageFrame)} onChange={event => patch({ imageFrame: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"><option value="boxed">Dengan frame kotak</option><option value="none">Tanpa frame</option></select><span className="text-[11px] leading-relaxed text-[var(--muted)]">Pilih apakah visual Hero tampil di dalam kotak dengan latar dan bayangan, atau tanpa frame.</span></label><HeroImageControls imageUrl={asText(data.imageUrl)} frame={normalizeHeroImageFrame(data.imageFrame)} boxScale={normalizeHeroImageScale(data.imageBoxScale, 1)} boxOffsetX={normalizeHeroImageBoxOffset(data.imageBoxOffsetX)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
     case 'text':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<RichTextEditor label="Isi teks" value={asText(data.body)} onChange={body => patch({ body })} /></div>;
     case 'image': {
