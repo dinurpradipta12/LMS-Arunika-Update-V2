@@ -183,6 +183,16 @@ const normalizeHeroImageBoxOffset = (value: unknown) => {
   return Number.isFinite(numericValue) ? Math.min(50, Math.max(-50, numericValue)) : 0;
 };
 
+const normalizeProfilePhotoScale = (value: unknown, fallback = 1) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? Math.min(2.5, Math.max(1, numericValue)) : fallback;
+};
+
+const normalizeProfilePhotoPosition = (value: unknown) => {
+  const numericValue = Number(value);
+  return Number.isFinite(numericValue) ? Math.min(100, Math.max(0, numericValue)) : 50;
+};
+
 const LANDING_IMAGE_LAYOUT_OPTIONS: Array<{ value: LandingImageLayout; label: string; description: string }> = [
   { value: 'slider', label: 'Foto slider', description: 'Satu foto utama dengan navigasi dan indikator.' },
   { value: 'marquee', label: 'Gallery otomatis', description: 'Bergerak dari kanan ke kiri dan berulang.' },
@@ -320,6 +330,9 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       bio: 'Tulis biografi singkat, pengalaman, dan alasan pengunjung perlu mengenal Anda.',
       photoUrl: '',
       photoAlt: 'Foto profil',
+      photoScale: 1,
+      photoPositionX: 50,
+      photoPositionY: 50,
       layout: 'split'
     },
     faq: {
@@ -610,7 +623,12 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
     data.layout = normalizeVideoLayout(rawData.layout);
   }
   if (type === 'testimonial') data.items = normalizeTestimonialItems(rawData.items, rawData);
-  if (type === 'profile') data.layout = normalizeProfileLayout(rawData.layout);
+  if (type === 'profile') {
+    data.layout = normalizeProfileLayout(rawData.layout);
+    data.photoScale = normalizeProfilePhotoScale(rawData.photoScale, fallback.data.photoScale);
+    data.photoPositionX = normalizeProfilePhotoPosition(rawData.photoPositionX);
+    data.photoPositionY = normalizeProfilePhotoPosition(rawData.photoPositionY);
+  }
   if (type === 'bonus') data.items = normalizeBonusItems(rawData.items, rawData);
   return {
     id: asText(value?.id, fallback.id),
@@ -1383,6 +1401,9 @@ const LandingProfileBlock: React.FC<{ data: Record<string, any> }> = ({ data }) 
   const role = asText(data.role).trim();
   const bio = asText(data.bio).trim();
   const photoUrl = asText(data.photoUrl).trim();
+  const photoScale = normalizeProfilePhotoScale(data.photoScale);
+  const photoPositionX = normalizeProfilePhotoPosition(data.photoPositionX);
+  const photoPositionY = normalizeProfilePhotoPosition(data.photoPositionY);
   const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'P';
   const isCentered = layout === 'centered';
 
@@ -1391,7 +1412,7 @@ const LandingProfileBlock: React.FC<{ data: Record<string, any> }> = ({ data }) 
       {heading && <div className="mb-6"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{eyebrow}</p><h2 className="mt-2 text-2xl font-bold" style={{ color: headingColorValue(data.headingColor) }}>{heading}</h2></div>}
       <div className={`${isCentered ? 'mx-auto max-w-2xl text-center' : 'grid gap-6 md:grid-cols-[150px_minmax(0,1fr)] md:items-center'}`}>
         <div className={`${isCentered ? 'mx-auto h-36 w-36 md:h-44 md:w-44' : 'mx-auto h-32 w-32 md:mx-0 md:h-36 md:w-36'} overflow-hidden rounded-full border-4 border-[var(--accent-soft)] bg-[var(--surface-soft)] shadow-sm`}>
-          {photoUrl ? <img src={photoUrl} alt={asText(data.photoAlt, `Foto ${name}`)} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-[var(--accent-strong)]" aria-label={`Inisial ${name}`}>{initials}</div>}
+          {photoUrl ? <img src={photoUrl} alt={asText(data.photoAlt, `Foto ${name}`)} className="h-full w-full object-cover transition-transform duration-200" style={{ objectPosition: `${photoPositionX}% ${photoPositionY}%`, transform: `scale(${photoScale})` }} /> : <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-[var(--accent-strong)]" aria-label={`Inisial ${name}`}>{initials}</div>}
         </div>
         <div className={isCentered ? 'mt-5' : 'min-w-0'}>
           <h3 className="text-2xl font-bold">{name}</h3>
@@ -1980,6 +2001,50 @@ const LandingVideoFileField: React.FC<{ value: string; onChange: (value: string)
   );
 };
 
+const ProfilePhotoCropControls: React.FC<{
+  photoUrl: string;
+  scale: number;
+  positionX: number;
+  positionY: number;
+  onChange: (values: Record<string, number>) => void;
+}> = ({ photoUrl, scale, positionX, positionY, onChange }) => {
+  const normalizedScale = normalizeProfilePhotoScale(scale);
+  const normalizedPositionX = normalizeProfilePhotoPosition(positionX);
+  const normalizedPositionY = normalizeProfilePhotoPosition(positionY);
+  const rangeClass = 'h-2 w-full cursor-pointer accent-[var(--accent)]';
+
+  if (!photoUrl) return <p className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-3 py-3 text-[11px] leading-relaxed text-[var(--muted)]">Upload foto terlebih dahulu untuk mengatur crop, zoom, dan posisinya.</p>;
+
+  return (
+    <div className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+      <div className="flex items-start justify-between gap-3">
+        <div><p className="text-xs font-semibold text-[var(--muted)]">Atur crop foto</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Sesuaikan bagian wajah atau objek yang masuk ke frame profil.</p></div>
+        <button type="button" onClick={() => onChange({ photoScale: 1, photoPositionX: 50, photoPositionY: 50 })} className="shrink-0 text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Reset crop</button>
+      </div>
+      <div className="mx-auto h-36 w-36 overflow-hidden rounded-full border-4 border-[var(--accent-soft)] bg-[var(--surface)] shadow-sm">
+        <img src={photoUrl} alt="Preview crop foto profil" className="h-full w-full object-cover" style={{ objectPosition: `${normalizedPositionX}% ${normalizedPositionY}%`, transform: `scale(${normalizedScale})` }} />
+      </div>
+      <label className="flex flex-col gap-2">
+        <span className="flex items-center justify-between gap-3 text-xs font-semibold text-[var(--muted)]"><span>Zoom crop</span><span className="text-[var(--text)]">{Math.round(normalizedScale * 100)}%</span></span>
+        <input type="range" min="100" max="250" step="5" value={Math.round(normalizedScale * 100)} onChange={event => onChange({ photoScale: Number(event.target.value) / 100 })} className={rangeClass} aria-label="Zoom crop foto profil" />
+        <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Tampilkan lebih luas</span><span>Perbesar</span></span>
+      </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="flex flex-col gap-2">
+          <span className="flex items-center justify-between gap-2 text-xs font-semibold text-[var(--muted)]"><span>Geser horizontal</span><span className="text-[var(--text)]">{Math.round(normalizedPositionX)}%</span></span>
+          <input type="range" min="0" max="100" step="1" value={normalizedPositionX} onChange={event => onChange({ photoPositionX: Number(event.target.value) })} className={rangeClass} aria-label="Posisi horizontal crop foto profil" />
+          <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Kiri</span><span>Kanan</span></span>
+        </label>
+        <label className="flex flex-col gap-2">
+          <span className="flex items-center justify-between gap-2 text-xs font-semibold text-[var(--muted)]"><span>Geser vertikal</span><span className="text-[var(--text)]">{Math.round(normalizedPositionY)}%</span></span>
+          <input type="range" min="0" max="100" step="1" value={normalizedPositionY} onChange={event => onChange({ photoPositionY: Number(event.target.value) })} className={rangeClass} aria-label="Posisi vertikal crop foto profil" />
+          <span className="flex justify-between text-[10px] text-[var(--muted)]"><span>Atas</span><span>Bawah</span></span>
+        </label>
+      </div>
+    </div>
+  );
+};
+
 const LandingProfileEditor: React.FC<{
   data: Record<string, any>;
   onChange: (values: Record<string, any>) => void;
@@ -1999,7 +2064,8 @@ const LandingProfileEditor: React.FC<{
           <option value="centered">Foto di atas, teks di tengah</option>
         </select>
       </label>
-      <ImageUploader label="Foto profil (opsional)" value={asText(data.photoUrl)} onChange={photoUrl => patch({ photoUrl })} />
+      <ImageUploader label="Foto profil (opsional)" value={asText(data.photoUrl)} onChange={photoUrl => patch({ photoUrl, photoScale: 1, photoPositionX: 50, photoPositionY: 50 })} />
+      <ProfilePhotoCropControls photoUrl={asText(data.photoUrl)} scale={normalizeProfilePhotoScale(data.photoScale)} positionX={normalizeProfilePhotoPosition(data.photoPositionX)} positionY={normalizeProfilePhotoPosition(data.photoPositionY)} onChange={patch} />
       <Input label="Alt foto" value={asText(data.photoAlt)} onChange={event => patch({ photoAlt: event.target.value })} placeholder="Foto profil" />
       <Input label="Nama" value={asText(data.name)} onChange={event => patch({ name: event.target.value })} placeholder="Nama Anda" />
       <Input label="Jabatan / label" value={asText(data.role)} onChange={event => patch({ role: event.target.value })} placeholder="Mentor / Founder" />
