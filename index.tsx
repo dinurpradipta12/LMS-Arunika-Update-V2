@@ -66,7 +66,8 @@ import {
   Sun,
   MessageCircle,
   PanelLeftClose,
-  PanelLeftOpen
+  PanelLeftOpen,
+  Scissors
 } from 'lucide-react';
 import { createClient } from '@supabase/supabase-js';
 
@@ -103,6 +104,7 @@ import {
 } from './components/CatalogPagePages';
 import { PublicQnaPage, QNA_SPACE_LABEL } from './components/QnaPages';
 import { QnaAdminCreatePage, QnaAdminDetailPage, QnaAdminListPage } from './components/QnaAdminPages';
+import { VideoClipperPage } from './components/VideoClipperPages';
 import logoUtama from './src/logo-utama.png';
 import faviconLogo from './src/favicon.png';
 
@@ -785,6 +787,9 @@ const Sidebar: React.FC<{
           </Link>
           <Link to="/admin/catalog-pages" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/catalog-pages'))} title={CATALOG_PAGE_SPACE_LABEL}>
             <LayoutGrid size={18} /><span className={labelClassName}>{CATALOG_PAGE_SPACE_LABEL}</span>
+          </Link>
+          <Link to="/admin/video-clipper" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/video-clipper'))} title="Video Clipper">
+            <Scissors size={18} /><span className={labelClassName}>Video Clipper</span>
           </Link>
           <Link to="/admin/qna" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/qna'))} title={QNA_SPACE_LABEL}>
             <MessageCircle size={18} /><span className={labelClassName}>{QNA_SPACE_LABEL}</span>
@@ -2238,6 +2243,7 @@ const App: React.FC = () => {
         <Route path="/admin/landing-pages/:id" element={renderAdminPage(<LandingPageEditor client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/catalog-pages" element={renderAdminPage(<CatalogPagesPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/catalog-pages/:id" element={renderAdminPage(<CatalogPageEditor client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/video-clipper" element={renderAdminPage(<VideoClipperPage />)} />
         <Route path="/admin/qna/new" element={renderAdminPage(<QnaAdminCreatePage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna/:id" element={renderAdminPage(<QnaAdminDetailPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna" element={renderAdminPage(<QnaAdminListPage client={getAdminSupabaseClient()} />)} />

@@ -140,9 +140,12 @@ const LANDING_BLOCK_TYPES = new Set<LandingBlockType>(LANDING_BLOCK_OPTIONS.map(
 type LandingImageLayout = 'slider' | 'marquee' | 'row';
 type LandingImageItem = { url: string; alt: string; caption: string };
 type LandingVideoLayout = 'grid' | 'slider' | 'row';
+type LandingVideoSourceType = 'youtube' | 'upload';
 type LandingVideoItem = {
   id: string;
+  sourceType: LandingVideoSourceType;
   url: string;
+  fileUrl: string;
   title: string;
   caption: string;
   startSeconds: number;
@@ -466,7 +469,9 @@ const normalizeVideoSeconds = (value: unknown, fallback = 0) => {
 
 const createVideoItem = (index = 0): LandingVideoItem => ({
   id: `landing-video-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+  sourceType: 'youtube',
   url: '',
+  fileUrl: '',
   title: `Video ${index + 1}`,
   caption: '',
   startSeconds: 0,
@@ -481,7 +486,9 @@ const normalizeVideoItems = (value: unknown, legacyData: Record<string, any> = {
       const parsedEnd = endValue ? normalizeVideoSeconds(endValue, 0) : null;
       return {
         id: asText(item?.id, `landing-video-${index}`),
+        sourceType: item?.sourceType === 'upload' ? 'upload' : 'youtube',
         url: asText(item?.url).trim(),
+        fileUrl: asText(item?.fileUrl || item?.file_url).trim(),
         title: asText(item?.title, `Video ${index + 1}`),
         caption: asText(item?.caption),
         startSeconds,
@@ -497,7 +504,9 @@ const normalizeVideoItems = (value: unknown, legacyData: Record<string, any> = {
   const parsedEnd = endValue ? normalizeVideoSeconds(endValue, 0) : null;
   return [{
     id: 'landing-video-legacy',
+    sourceType: 'youtube',
     url: legacyUrl,
+    fileUrl: '',
     title: asText(legacyData.title, 'Video produk'),
     caption: asText(legacyData.caption),
     startSeconds,
@@ -720,6 +729,33 @@ const readImageDataUrl = (file: File, maxWidth = 1600, preservePng = false): Pro
   };
   reader.readAsDataURL(file);
 });
+
+const readVideoDataUrl = (file: File, maxBytes = 15 * 1024 * 1024): Promise<string> => new Promise((resolve, reject) => {
+  if (!file.type.startsWith('video/')) {
+    reject(new Error('Pilih file video yang valid.'));
+    return;
+  }
+  if (file.size > maxBytes) {
+    reject(new Error(`Ukuran video maksimal ${Math.round(maxBytes / 1024 / 1024)} MB. Gunakan hasil clip yang lebih pendek atau masukkan URL file video.`));
+    return;
+  }
+  const reader = new FileReader();
+  reader.onerror = () => reject(new Error('Video gagal dibaca.'));
+  reader.onload = () => resolve(String(reader.result || ''));
+  reader.readAsDataURL(file);
+});
+
+const isVideoSourceUrl = (value: unknown) => {
+  const url = asText(value).trim();
+  if (/^data:video\//i.test(url)) return true;
+  if (!/^https?:\/\//i.test(url)) return false;
+  try {
+    const parsed = new URL(url);
+    return !parsed.hostname.toLowerCase().replace(/^www\./, '').endsWith('youtube.com') && parsed.hostname.toLowerCase() !== 'youtu.be';
+  } catch {
+    return false;
+  }
+};
 
 const NoticeBanner: React.FC<{ notice: Notice | null }> = ({ notice }) => notice ? (
   <div className={`rounded-xl border p-4 text-sm ${notice.tone === 'success' ? 'border-[var(--border)] bg-[var(--success-soft)] text-[var(--success-text)]' : 'border-[var(--border)] bg-[var(--danger-soft)] text-[var(--danger-text)]'}`}>
@@ -1060,8 +1096,30 @@ const formatVideoSeconds = (value: number) => {
   return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
 };
 
+const UploadedVideoPreview: React.FC<{ item: LandingVideoItem; title: string }> = ({ item, title }) => {
+  const videoRef = useRef<HTMLVideoElement>(null);
+  const seekToStart = () => {
+    if (videoRef.current && item.startSeconds > 0) videoRef.current.currentTime = item.startSeconds;
+  };
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return undefined;
+    const handleTimeUpdate = () => {
+      if (item.endSeconds !== null && video.currentTime >= item.endSeconds) {
+        video.pause();
+        video.currentTime = item.startSeconds;
+      }
+    };
+    video.addEventListener('timeupdate', handleTimeUpdate);
+    return () => video.removeEventListener('timeupdate', handleTimeUpdate);
+  }, [item.endSeconds, item.startSeconds]);
+
+  return <video ref={videoRef} src={item.fileUrl} title={title} className="h-full w-full bg-black object-contain" controls controlsList="nodownload noplaybackrate noremoteplayback" disablePictureInPicture preload="metadata" onLoadedMetadata={seekToStart} onContextMenu={event => event.preventDefault()} />;
+};
+
 const LandingVideoGalleryBlock: React.FC<{ data: Record<string, any> }> = ({ data }) => {
-  const items = normalizeVideoItems(data.videos, data).filter(item => Boolean(getYouTubeVideoId(item.url)));
+  const items = normalizeVideoItems(data.videos, data).filter(item => item.sourceType === 'upload' ? Boolean(item.fileUrl) : Boolean(getYouTubeVideoId(item.url)));
   const [activeIndex, setActiveIndex] = useState(0);
 
   useEffect(() => {
@@ -1083,14 +1141,7 @@ const LandingVideoGalleryBlock: React.FC<{ data: Record<string, any> }> = ({ dat
     return (
       <article key={`${item.id}-${index}`} className={`overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm ${className}`}>
         <div className="aspect-video bg-black">
-          <iframe
-            title={title}
-            src={getVideoEmbedUrl(item.url, item.startSeconds, item.endSeconds)}
-            className="h-full w-full"
-            loading="lazy"
-            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
-            allowFullScreen
-          />
+          {item.sourceType === 'upload' ? <UploadedVideoPreview item={item} title={title} /> : <iframe title={title} src={getVideoEmbedUrl(item.url, item.startSeconds, item.endSeconds)} className="h-full w-full" loading="lazy" allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen />}
         </div>
         <div className="space-y-1.5 p-4">
           <h3 className="font-semibold text-[var(--text)]">{title}</h3>
@@ -1719,7 +1770,7 @@ const LandingVideoEditor: React.FC<{
         <span className="text-[11px] leading-relaxed text-[var(--muted)]">{LANDING_VIDEO_LAYOUT_OPTIONS.find(option => option.value === layout)?.description}</span>
       </label>
       <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-[11px] leading-relaxed text-[var(--muted)]">
-        Masukkan link video YouTube penuh. Isi waktu mulai dan selesai dalam detik untuk menampilkan potongan tertentu, misalnya mulai <strong className="text-[var(--text)]">45</strong> dan selesai <strong className="text-[var(--text)]">90</strong>. Kosongkan waktu selesai jika preview berjalan sampai akhir video.
+        Pilih <strong className="text-[var(--text)]">YouTube clip</strong> untuk preview cepat dari video YouTube, atau <strong className="text-[var(--text)]">Upload video preview</strong> agar pengunjung hanya menerima file potongan yang Anda siapkan. YouTube tetap dapat mengarahkan penonton ke sumber full.
       </div>
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-semibold text-[var(--muted)]">Daftar video</p>
@@ -1731,17 +1782,24 @@ const LandingVideoEditor: React.FC<{
             <p className="text-sm font-semibold">Video {index + 1}</p>
             <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus video ${index + 1}`} title={`Hapus video ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
           </div>
-          <Input label="Link YouTube" value={item.url} onChange={event => updateItem(index, { url: event.target.value })} icon={LinkIcon} placeholder="https://youtube.com/watch?v=..." />
+          <label className="flex flex-col gap-2">
+            <span className="text-xs font-semibold text-[var(--muted)]">Mode sumber video</span>
+            <select value={item.sourceType} onChange={event => updateItem(index, { sourceType: event.target.value as LandingVideoSourceType })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">
+              <option value="youtube">YouTube clip</option>
+              <option value="upload">Upload video preview</option>
+            </select>
+          </label>
+          {item.sourceType === 'upload' ? <LandingVideoFileField value={item.fileUrl} onChange={fileUrl => updateItem(index, { fileUrl })} /> : <Input label="Link YouTube" value={item.url} onChange={event => updateItem(index, { url: event.target.value })} icon={LinkIcon} placeholder="https://youtube.com/watch?v=..." />}
           <Input label="Judul video (opsional)" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Cara menggunakan produk" />
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Mulai pada detik" type="number" min="0" step="1" value={item.startSeconds} onChange={event => updateItem(index, { startSeconds: normalizeVideoSeconds(event.target.value, 0) })} />
+            <Input label={item.sourceType === 'upload' ? 'Mulai pada detik (opsional)' : 'Mulai pada detik'} type="number" min="0" step="1" value={item.startSeconds} onChange={event => updateItem(index, { startSeconds: normalizeVideoSeconds(event.target.value, 0) })} />
             <Input label="Selesai pada detik (opsional)" type="number" min="1" step="1" value={item.endSeconds ?? ''} onChange={event => updateItem(index, { endSeconds: event.target.value ? normalizeVideoSeconds(event.target.value, 0) : null })} placeholder="Sampai akhir video" />
           </div>
           <Textarea label="Keterangan video (opsional)" value={item.caption} onChange={event => updateItem(index, { caption: event.target.value })} placeholder="Jelaskan isi potongan video ini." className="min-h-[90px]" />
         </div>
       )) : <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada video. Tambahkan link YouTube pertama untuk membuat galeri.</div>}
       <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxVideos}>Tambah video</Button>
-      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Video tetap diputar dari YouTube melalui embed; aplikasi tidak mengunduh atau menyimpan ulang videonya. Link private, live, atau video yang dibatasi YouTube mungkin tidak bisa dipratinjau.</p>
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Untuk preview yang tidak mengarah ke video full, gunakan mode Upload video preview dari hasil Video Clipper. File lokal dibatasi 15 MB atau gunakan URL file video langsung.</p>
     </div>
   );
 };
@@ -1822,6 +1880,54 @@ const LandingWorkflowEditor: React.FC<{
         </div>
       )) : <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada tahap. Tambahkan tahap pertama untuk membuat alur kerja.</div>}
       <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxSteps}>Tambah tahap</Button>
+    </div>
+  );
+};
+
+const LandingVideoFileField: React.FC<{ value: string; onChange: (value: string) => void }> = ({ value, onChange }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setError(null);
+    setIsProcessing(true);
+    try {
+      onChange(await readVideoDataUrl(file));
+    } catch (uploadError: any) {
+      setError(uploadError?.message || 'Video gagal diproses.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const inputValue = value.startsWith('data:video/') ? '' : value;
+  const updateUrl = (nextValue: string) => {
+    if (nextValue.trim() && !isVideoSourceUrl(nextValue)) {
+      setError('Masukkan URL file video langsung (MP4/WebM), bukan URL halaman YouTube.');
+      return;
+    }
+    setError(null);
+    onChange(nextValue);
+  };
+
+  return (
+    <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-[var(--muted)]">File video preview</p>
+        {value && <button type="button" onClick={() => onChange('')} className="text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus video</button>}
+      </div>
+      <div className="overflow-hidden rounded-xl border border-[var(--border)] bg-black">
+        {value ? <video src={value} className="aspect-video w-full object-contain" controls controlsList="nodownload noplaybackrate noremoteplayback" disablePictureInPicture preload="metadata" /> : <div className="flex aspect-video items-center justify-center px-4 text-center text-xs text-white/70">Belum ada video preview</div>}
+      </div>
+      <input ref={inputRef} type="file" accept="video/*" className="hidden" onChange={handleFile} />
+      <Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing}>Upload video preview</Button>
+      <Input label="URL file video langsung (opsional)" value={inputValue} onChange={event => updateUrl(event.target.value)} placeholder="https://.../preview.webm atau .mp4" />
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Upload lokal dibatasi 15 MB agar konfigurasi landing tetap ringan. Untuk file lebih besar, gunakan URL file video langsung dari storage Anda.</p>
+      {error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}
     </div>
   );
 };
@@ -1990,7 +2096,9 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
         const first = nextItems[0];
         patch({
           videos: nextItems,
+          sourceType: first?.sourceType || 'youtube',
           url: first?.url || '',
+          fileUrl: first?.fileUrl || '',
           title: first?.title || '',
           caption: first?.caption || '',
           startSeconds: first?.startSeconds || 0,
