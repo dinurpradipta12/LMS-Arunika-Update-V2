@@ -34,6 +34,7 @@ import {
 } from '../types';
 import { Badge, Button, Card, Input, Textarea } from './UI';
 import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
+import logoUtama from '../src/logo-utama.png';
 
 export const ONE_TO_ONE_SPACE_LABEL = '1:1 Mentorship';
 
@@ -655,8 +656,30 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
   return <main className="min-h-screen px-4 py-6 md:px-8 md:py-10" style={{ background: theme.background, ['--one-to-one-accent' as any]: accent }}>
     <div className="mx-auto w-full max-w-5xl space-y-6">
       <section className="overflow-hidden rounded-3xl border border-white/70 bg-white shadow-sm" style={{ borderTopColor: accent }}>
-        {data.coverImageUrl && <img src={data.coverImageUrl} alt="" className="h-40 w-full object-cover md:h-56" />}
-        <div className="p-6 md:p-10"><div className="flex flex-col gap-6 sm:flex-row sm:items-start sm:justify-between"> <div className="flex items-center gap-4">{data.logoUrl ? <img src={data.logoUrl} alt="Logo" className="h-14 w-14 rounded-2xl object-contain" /> : <div className="flex h-14 w-14 items-center justify-center rounded-2xl" style={{ backgroundColor: `${accent}18`, color: accent }}><Users size={26} /></div>}<div><p className="text-xs font-bold uppercase tracking-[0.16em]" style={{ color: accent }}>Ruang 1:1 personal</p><h1 className="mt-2 text-2xl font-bold tracking-tight md:text-3xl">{data.title}</h1><p className="mt-1 text-sm text-slate-500">Untuk {data.menteeName || 'mentee'}{data.menteeEmail ? ` · ${data.menteeEmail}` : ''}</p></div></div>{data.mentorName && <div className="flex items-center gap-3 sm:max-w-xs sm:justify-end">{data.mentorAvatarUrl ? <img src={data.mentorAvatarUrl} alt={data.mentorName} className="h-11 w-11 rounded-full object-cover" /> : <div className="flex h-11 w-11 items-center justify-center rounded-full bg-slate-100"><UserRound size={19} /></div>}<div className="text-left sm:text-right"><p className="text-sm font-bold text-slate-800">{data.mentorName}</p><p className="text-xs text-slate-500">{data.mentorRole || 'Mentor'}</p></div></div>}</div><div className="mt-8 rounded-2xl p-5" style={{ backgroundColor: `${accent}0d` }}><h2 className="text-lg font-bold text-slate-900">{data.welcomeTitle || 'Selamat datang di ruang personal Anda'}</h2>{data.welcomeMessage && <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-600">{data.welcomeMessage}</p>}</div></div>
+        <div className="px-6 pb-7 pt-8 md:px-10 md:pb-9 md:pt-10">
+          <div className="flex flex-wrap items-center justify-center gap-3" aria-label="Branding Arunika">
+            <img src={logoUtama} alt="Arunika" className="h-12 w-auto object-contain md:h-14" />
+            {data.logoUrl && <span className="h-8 w-px bg-slate-200" aria-hidden="true" />}
+            {data.logoUrl && <img src={data.logoUrl} alt="Logo ruang" className="h-12 max-w-[150px] object-contain md:h-14" />}
+          </div>
+
+          <div className="mt-5 text-center">
+            <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: accent }}>Ruang 1:1 personal</p>
+            <h1 className="mx-auto mt-1 max-w-2xl text-xl font-bold tracking-tight text-slate-900 md:text-2xl">{data.title}</h1>
+            <p className="mt-1 text-sm text-slate-500">Untuk {data.menteeName || 'mentee'}{data.menteeEmail ? ` · ${data.menteeEmail}` : ''}</p>
+          </div>
+
+          <div className="mt-6 overflow-hidden rounded-2xl" style={{ background: `linear-gradient(115deg, ${accent}24, ${accent}08)` }}>
+            {data.coverImageUrl ? <img src={data.coverImageUrl} alt="Banner ruang 1:1" className="h-32 w-full object-cover md:h-44" /> : <div className="h-20 w-full md:h-28" aria-label="Banner ruang 1:1" />}
+          </div>
+
+          {data.mentorName && <div className="mt-5 flex items-center justify-center gap-3 text-center">{data.mentorAvatarUrl ? <img src={data.mentorAvatarUrl} alt={data.mentorName} className="h-10 w-10 rounded-full object-cover" /> : <div className="flex h-10 w-10 items-center justify-center rounded-full bg-slate-100"><UserRound size={17} /></div>}<div><p className="text-sm font-bold text-slate-800">{data.mentorName}</p><p className="text-xs text-slate-500">{data.mentorRole || 'Mentor'}</p></div></div>}
+
+          <div className="mt-5 text-center">
+            <h2 className="text-base font-semibold text-slate-900">{data.welcomeTitle || 'Halo, selamat datang'}</h2>
+            {data.welcomeMessage && <p className="mx-auto mt-2 max-w-2xl whitespace-pre-line text-sm leading-relaxed text-slate-600">{data.welcomeMessage}</p>}
+          </div>
+        </div>
       </section>
       <section className="rounded-3xl border border-white/70 bg-white p-4 shadow-sm md:p-6"><div className="flex gap-2 overflow-x-auto pb-2">{tabs.map(tab => <button key={tab.value} type="button" onClick={() => setActiveTab(tab.value)} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold ${activeTab === tab.value ? 'text-white' : 'text-slate-600 hover:bg-slate-50'}`} style={activeTab === tab.value ? { backgroundColor: accent } : undefined}><tab.icon size={17} />{tab.label}</button>)}</div><div className="mt-6 space-y-4">
         {activeTab === 'recordings' && (recordings.length === 0 ? <EmptyPublic label="Belum ada materi recording." icon={Video} /> : recordings.map((item: any) => <article key={item.id} className="rounded-2xl border border-slate-200 p-5"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><h2 className="font-bold text-slate-900">{item.title}</h2>{item.duration && <p className="mt-1 text-xs text-slate-500">{item.duration}</p>}</div>{item.videoUrl && <a href={item.videoUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white" style={{ backgroundColor: accent }}><PlayCircle size={16} /> Buka recording</a>}</div>{item.description && <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-600">{item.description}</p>}{item.materialUrl && <a href={item.materialUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold" style={{ color: accent }}><LinkIcon size={15} /> Buka materi unduhan <ExternalLink size={14} /></a>}</article>))}
