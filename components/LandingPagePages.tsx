@@ -1460,7 +1460,7 @@ export const LandingBlockRenderer: React.FC<{
             {asText(data.imageUrl) ? (
               heroImageFrame === 'none' ? (
                 <div className="relative flex min-h-40 w-full items-center justify-center overflow-visible transition-transform duration-200 ease-out">
-                  <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="max-h-64 max-w-full object-contain transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `scale(${heroImageScale})` }} />
+                  <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="max-h-64 max-w-full object-contain transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `translate(${(heroImagePositionX - 50) / 2}%, ${(heroImagePositionY - 50) / 2}%) scale(${heroImageScale})` }} />
                 </div>
               ) : (
                 <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm transition-transform duration-200 ease-out" style={{ transform: `translateX(${heroImageBoxOffsetX}%) scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
