@@ -137,6 +137,15 @@ const LANDING_BLOCK_TYPES = new Set<LandingBlockType>(LANDING_BLOCK_OPTIONS.map(
 
 type LandingImageLayout = 'slider' | 'marquee' | 'row';
 type LandingImageItem = { url: string; alt: string; caption: string };
+type LandingVideoLayout = 'grid' | 'slider' | 'row';
+type LandingVideoItem = {
+  id: string;
+  url: string;
+  title: string;
+  caption: string;
+  startSeconds: number;
+  endSeconds: number | null;
+};
 type LandingTestimonialItem = { quote: string; name: string; role: string; rating: number };
 type LandingBonusItem = { title: string; body: string; imageUrl: string; imageAlt: string; caption: string };
 type LandingPricingPackage = {
@@ -167,6 +176,12 @@ const LANDING_IMAGE_LAYOUT_OPTIONS: Array<{ value: LandingImageLayout; label: st
   { value: 'slider', label: 'Foto slider', description: 'Satu foto utama dengan navigasi dan indikator.' },
   { value: 'marquee', label: 'Gallery otomatis', description: 'Bergerak dari kanan ke kiri dan berulang.' },
   { value: 'row', label: 'Gallery satu baris', description: 'Semua foto tampil statis dalam satu baris.' }
+];
+
+const LANDING_VIDEO_LAYOUT_OPTIONS: Array<{ value: LandingVideoLayout; label: string; description: string }> = [
+  { value: 'grid', label: 'Video grid', description: 'Beberapa video tampil sebagai card dalam grid.' },
+  { value: 'slider', label: 'Video slider', description: 'Satu video utama dengan navigasi dan indikator.' },
+  { value: 'row', label: 'Video satu baris', description: 'Semua video tampil dalam satu baris yang bisa digeser.' }
 ];
 
 const DEFAULT_HEADING_COLOR = '#17283a';
@@ -211,7 +226,9 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
     },
     video: {
       url: '',
-      caption: 'Lihat cara kerja produk ini.'
+      caption: 'Lihat cara kerja produk ini.',
+      videos: [],
+      layout: 'grid'
     },
     features: {
       heading: 'Kenapa memilih produk ini?',
@@ -365,6 +382,57 @@ const normalizeImageItems = (value: unknown, legacyData: Record<string, any> = {
   return legacyUrl ? [{ url: legacyUrl, alt: asText(legacyData.alt, 'Visual produk'), caption: asText(legacyData.caption) }] : [];
 };
 
+const normalizeVideoSeconds = (value: unknown, fallback = 0) => {
+  const numericValue = Number(value);
+  if (!Number.isFinite(numericValue) || numericValue < 0) return fallback;
+  return Math.min(86400, Math.floor(numericValue));
+};
+
+const createVideoItem = (index = 0): LandingVideoItem => ({
+  id: `landing-video-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+  url: '',
+  title: `Video ${index + 1}`,
+  caption: '',
+  startSeconds: 0,
+  endSeconds: null
+});
+
+const normalizeVideoItems = (value: unknown, legacyData: Record<string, any> = {}): LandingVideoItem[] => {
+  if (Array.isArray(value) && value.length) {
+    return value.slice(0, 12).map((item, index) => {
+      const endValue = asText(item?.endSeconds ?? item?.end_seconds).trim();
+      const startSeconds = normalizeVideoSeconds(item?.startSeconds ?? item?.start_seconds, 0);
+      const parsedEnd = endValue ? normalizeVideoSeconds(endValue, 0) : null;
+      return {
+        id: asText(item?.id, `landing-video-${index}`),
+        url: asText(item?.url).trim(),
+        title: asText(item?.title, `Video ${index + 1}`),
+        caption: asText(item?.caption),
+        startSeconds,
+        endSeconds: parsedEnd !== null && parsedEnd > startSeconds ? parsedEnd : null
+      };
+    });
+  }
+
+  const legacyUrl = asText(legacyData.url).trim();
+  if (!legacyUrl) return [];
+  const startSeconds = normalizeVideoSeconds(legacyData.startSeconds ?? legacyData.start_seconds, 0);
+  const endValue = asText(legacyData.endSeconds ?? legacyData.end_seconds).trim();
+  const parsedEnd = endValue ? normalizeVideoSeconds(endValue, 0) : null;
+  return [{
+    id: 'landing-video-legacy',
+    url: legacyUrl,
+    title: asText(legacyData.title, 'Video produk'),
+    caption: asText(legacyData.caption),
+    startSeconds,
+    endSeconds: parsedEnd !== null && parsedEnd > startSeconds ? parsedEnd : null
+  }];
+};
+
+const normalizeVideoLayout = (value: unknown): LandingVideoLayout => (
+  ['grid', 'slider', 'row'].includes(asText(value)) ? asText(value) as LandingVideoLayout : 'grid'
+);
+
 const normalizeTestimonialRating = (value: unknown) => Math.min(5, Math.max(1, Math.round(Number(value) || 5)));
 
 const normalizeTestimonialItems = (value: unknown, legacyData: Record<string, any> = {}): LandingTestimonialItem[] => {
@@ -429,6 +497,10 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   if (type === 'image') {
     data.images = normalizeImageItems(rawData.images, rawData);
     data.layout = (['slider', 'marquee', 'row'].includes(rawData.layout) ? rawData.layout : fallback.data.layout) as LandingImageLayout;
+  }
+  if (type === 'video') {
+    data.videos = normalizeVideoItems(rawData.videos, rawData);
+    data.layout = normalizeVideoLayout(rawData.layout);
   }
   if (type === 'testimonial') data.items = normalizeTestimonialItems(rawData.items, rawData);
   if (type === 'bonus') data.items = normalizeBonusItems(rawData.items, rawData);
@@ -737,20 +809,35 @@ const RichTextEditor: React.FC<{ label: string; value: string; onChange: (value:
   );
 };
 
-const getVideoEmbedUrl = (value: unknown) => {
+const getYouTubeVideoId = (value: unknown) => {
   const url = safeHref(value);
   if (!url) return '';
   try {
     const parsed = new URL(url, window.location.origin);
-    if (parsed.hostname.includes('youtube.com')) {
-      const id = parsed.searchParams.get('v');
-      return id ? `https://www.youtube.com/embed/${encodeURIComponent(id)}` : '';
+    const hostname = parsed.hostname.toLowerCase().replace(/^www\./, '');
+    if (hostname === 'youtu.be') {
+      return decodeURIComponent(parsed.pathname.split('/').filter(Boolean)[0] || '');
     }
-    if (parsed.hostname === 'youtu.be') return `https://www.youtube.com/embed/${encodeURIComponent(parsed.pathname.slice(1))}`;
+    if (hostname.endsWith('youtube.com')) {
+      if (parsed.pathname === '/watch') return parsed.searchParams.get('v') || '';
+      const pathParts = parsed.pathname.split('/').filter(Boolean);
+      if (['embed', 'shorts', 'live'].includes(pathParts[0])) return pathParts[1] || '';
+    }
   } catch {
     return '';
   }
   return '';
+};
+
+const getVideoEmbedUrl = (value: unknown, startSeconds = 0, endSeconds: number | null = null) => {
+  const videoId = getYouTubeVideoId(value);
+  if (!videoId) return '';
+  const params = new URLSearchParams({ rel: '0', modestbranding: '1' });
+  const start = normalizeVideoSeconds(startSeconds, 0);
+  const end = endSeconds !== null ? normalizeVideoSeconds(endSeconds, 0) : null;
+  if (start > 0) params.set('start', String(start));
+  if (end !== null && end > start) params.set('end', String(end));
+  return `https://www.youtube.com/embed/${encodeURIComponent(videoId)}?${params.toString()}`;
 };
 
 const LandingImageLightbox: React.FC<{
@@ -883,6 +970,80 @@ const LandingImageGalleryBlock: React.FC<{ data: Record<string, any> }> = ({ dat
       )}
       <LandingImageLightbox items={items} activeIndex={lightboxIndex} onClose={() => setLightboxIndex(null)} onChange={setLightboxIndex} />
     </>
+  );
+};
+
+const formatVideoSeconds = (value: number) => {
+  const seconds = Math.max(0, Math.floor(value));
+  const minutes = Math.floor(seconds / 60);
+  return `${minutes}:${String(seconds % 60).padStart(2, '0')}`;
+};
+
+const LandingVideoGalleryBlock: React.FC<{ data: Record<string, any> }> = ({ data }) => {
+  const items = normalizeVideoItems(data.videos, data).filter(item => Boolean(getYouTubeVideoId(item.url)));
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveIndex(current => Math.min(current, Math.max(0, items.length - 1)));
+  }, [items.length]);
+
+  if (!items.length) {
+    return <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-center text-sm text-[var(--muted)]">Tambahkan satu atau beberapa link YouTube untuk menampilkan galeri video.</div>;
+  }
+
+  const layout = normalizeVideoLayout(data.layout);
+  const renderVideoCard = (item: LandingVideoItem, index: number, className = '') => {
+    const title = item.title.trim() || `Video ${index + 1}`;
+    const caption = item.caption.trim();
+    const hasClip = item.startSeconds > 0 || item.endSeconds !== null;
+    const clipLabel = hasClip
+      ? `Preview ${formatVideoSeconds(item.startSeconds)}${item.endSeconds !== null ? `–${formatVideoSeconds(item.endSeconds)}` : '+'}`
+      : '';
+    return (
+      <article key={`${item.id}-${index}`} className={`overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm ${className}`}>
+        <div className="aspect-video bg-black">
+          <iframe
+            title={title}
+            src={getVideoEmbedUrl(item.url, item.startSeconds, item.endSeconds)}
+            className="h-full w-full"
+            loading="lazy"
+            allow="accelerometer; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+            allowFullScreen
+          />
+        </div>
+        <div className="space-y-1.5 p-4">
+          <h3 className="font-semibold text-[var(--text)]">{title}</h3>
+          {caption && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{caption}</p>}
+          {clipLabel && <p className="text-[11px] font-semibold text-[var(--accent-strong)]">{clipLabel}</p>}
+        </div>
+      </article>
+    );
+  };
+
+  return layout === 'slider' ? (
+    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 shadow-sm" aria-label="Galeri video">
+      <div className="relative">
+        {renderVideoCard(items[activeIndex], activeIndex, 'rounded-xl')}
+        {items.length > 1 && (
+          <>
+            <button type="button" onClick={() => setActiveIndex((activeIndex - 1 + items.length) % items.length)} aria-label="Video sebelumnya" title="Video sebelumnya" className="absolute left-3 top-[calc(50%-1.75rem)] -translate-y-1/2 rounded-full bg-slate-950/70 p-2 text-white transition-colors hover:bg-slate-800"><ChevronLeft size={18} /></button>
+            <button type="button" onClick={() => setActiveIndex((activeIndex + 1) % items.length)} aria-label="Video berikutnya" title="Video berikutnya" className="absolute right-3 top-[calc(50%-1.75rem)] -translate-y-1/2 rounded-full bg-slate-950/70 p-2 text-white transition-colors hover:bg-slate-800"><ChevronRight size={18} /></button>
+          </>
+        )}
+      </div>
+      {items.length > 1 && <div className="flex items-center justify-center gap-1.5 px-2 pt-3" aria-label="Pilih video">{items.map((item, index) => <button key={`${item.id}-dot-${index}`} type="button" onClick={() => setActiveIndex(index)} aria-label={`Tampilkan video ${index + 1}`} aria-current={index === activeIndex ? 'true' : undefined} className={`h-2 w-2 rounded-full transition-colors ${index === activeIndex ? 'bg-[var(--accent)]' : 'bg-[var(--border-strong)] hover:bg-[var(--muted)]'}`} />)}</div>}
+    </section>
+  ) : layout === 'row' ? (
+    <div className="overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 shadow-sm">
+      <div className="flex min-w-max gap-3">
+        {items.map((item, index) => renderVideoCard(item, index, 'w-[min(320px,82vw)] shrink-0'))}
+      </div>
+      <p className="px-1 pb-1 pt-3 text-xs text-[var(--muted)]">Galeri video satu baris. Geser untuk melihat video lainnya.</p>
+    </div>
+  ) : (
+    <div className="grid gap-4 md:grid-cols-2" aria-label="Galeri video">
+      {items.map((item, index) => renderVideoCard(item, index))}
+    </div>
   );
 };
 
@@ -1037,15 +1198,8 @@ export const LandingBlockRenderer: React.FC<{
       );
     case 'image':
       return <LandingImageGalleryBlock data={data} />;
-    case 'video': {
-      const embedUrl = getVideoEmbedUrl(data.url);
-      return (
-        <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
-          {embedUrl ? <div className="aspect-video bg-black"><iframe title={asText(data.caption, 'Video produk')} src={embedUrl} className="h-full w-full" loading="lazy" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowFullScreen /></div> : <div className="flex aspect-video items-center justify-center bg-[var(--surface-soft)] text-sm text-[var(--muted)]">Tambahkan link YouTube untuk menampilkan video.</div>}
-          {asText(data.caption) && <p className="px-5 py-3 text-sm text-[var(--muted)]">{asText(data.caption)}</p>}
-        </section>
-      );
-    }
+    case 'video':
+      return <LandingVideoGalleryBlock data={data} />;
     case 'features':
       return (
         <section className="space-y-4">
@@ -1383,6 +1537,56 @@ const ImageGalleryUploader: React.FC<{ items: LandingImageItem[]; onChange: (ite
   );
 };
 
+const LandingVideoEditor: React.FC<{
+  items: LandingVideoItem[];
+  layout: LandingVideoLayout;
+  onChange: (items: LandingVideoItem[]) => void;
+  onLayoutChange: (layout: LandingVideoLayout) => void;
+}> = ({ items, layout, onChange, onLayoutChange }) => {
+  const maxVideos = 12;
+  const updateItem = (index: number, patch: Partial<LandingVideoItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const addItem = () => {
+    if (items.length >= maxVideos) return;
+    onChange([...items, createVideoItem(items.length)]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <label className="flex flex-col gap-2">
+        <span className="text-xs font-semibold text-[var(--muted)]">Tampilan galeri video</span>
+        <select value={layout} onChange={event => onLayoutChange(event.target.value as LandingVideoLayout)} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">
+          {LANDING_VIDEO_LAYOUT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <span className="text-[11px] leading-relaxed text-[var(--muted)]">{LANDING_VIDEO_LAYOUT_OPTIONS.find(option => option.value === layout)?.description}</span>
+      </label>
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-[11px] leading-relaxed text-[var(--muted)]">
+        Masukkan link video YouTube penuh. Isi waktu mulai dan selesai dalam detik untuk menampilkan potongan tertentu, misalnya mulai <strong className="text-[var(--text)]">45</strong> dan selesai <strong className="text-[var(--text)]">90</strong>. Kosongkan waktu selesai jika preview berjalan sampai akhir video.
+      </div>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-[var(--muted)]">Daftar video</p>
+        <span className="text-[11px] text-[var(--muted)]">{items.length}/{maxVideos} video</span>
+      </div>
+      {items.length ? items.map((item, index) => (
+        <div key={`${item.id}-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Video {index + 1}</p>
+            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus video ${index + 1}`} title={`Hapus video ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+          </div>
+          <Input label="Link YouTube" value={item.url} onChange={event => updateItem(index, { url: event.target.value })} icon={LinkIcon} placeholder="https://youtube.com/watch?v=..." />
+          <Input label="Judul video (opsional)" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Cara menggunakan produk" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Mulai pada detik" type="number" min="0" step="1" value={item.startSeconds} onChange={event => updateItem(index, { startSeconds: normalizeVideoSeconds(event.target.value, 0) })} />
+            <Input label="Selesai pada detik (opsional)" type="number" min="1" step="1" value={item.endSeconds ?? ''} onChange={event => updateItem(index, { endSeconds: event.target.value ? normalizeVideoSeconds(event.target.value, 0) : null })} placeholder="Sampai akhir video" />
+          </div>
+          <Textarea label="Keterangan video (opsional)" value={item.caption} onChange={event => updateItem(index, { caption: event.target.value })} placeholder="Jelaskan isi potongan video ini." className="min-h-[90px]" />
+        </div>
+      )) : <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada video. Tambahkan link YouTube pertama untuk membuat galeri.</div>}
+      <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxVideos}>Tambah video</Button>
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Video tetap diputar dari YouTube melalui embed; aplikasi tidak mengunduh atau menyimpan ulang videonya. Link private, live, atau video yang dibatasi YouTube mungkin tidak bisa dipratinjau.</p>
+    </div>
+  );
+};
+
 const LandingTestimonialEditor: React.FC<{ items: LandingTestimonialItem[]; onChange: (items: LandingTestimonialItem[]) => void }> = ({ items, onChange }) => {
   const maxTestimonials = 20;
   const updateItem = (index: number, patch: Partial<LandingTestimonialItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
@@ -1540,8 +1744,22 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
         </div>
       );
     }
-    case 'video':
-      return <div className="space-y-4"><Input label="Link YouTube" value={asText(data.url)} onChange={event => patch({ url: event.target.value })} icon={LinkIcon} placeholder="https://youtube.com/watch?v=..." /><Textarea label="Keterangan video" value={asText(data.caption)} onChange={event => patch({ caption: event.target.value })} /></div>;
+    case 'video': {
+      const items = normalizeVideoItems(data.videos, data);
+      const layout = normalizeVideoLayout(data.layout);
+      const updateItems = (nextItems: LandingVideoItem[]) => {
+        const first = nextItems[0];
+        patch({
+          videos: nextItems,
+          url: first?.url || '',
+          title: first?.title || '',
+          caption: first?.caption || '',
+          startSeconds: first?.startSeconds || 0,
+          endSeconds: first?.endSeconds ?? null
+        });
+      };
+      return <LandingVideoEditor items={items} layout={layout} onChange={updateItems} onLayoutChange={nextLayout => patch({ layout: nextLayout })} />;
+    }
     case 'features':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Manfaat (satu per baris, format: Judul | Deskripsi)" value={pipeItemsToText(normalizeLineItems(data.items, []))} onChange={event => patch({ items: textToPipeItems(event.target.value) })} className="min-h-[180px]" /></div>;
     case 'pricing': {
