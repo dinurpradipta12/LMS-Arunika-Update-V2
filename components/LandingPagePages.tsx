@@ -183,6 +183,8 @@ const normalizeHeroImageBoxOffset = (value: unknown) => {
   return Number.isFinite(numericValue) ? Math.min(50, Math.max(-50, numericValue)) : 0;
 };
 
+const normalizeHeroImageFrame = (value: unknown) => value === 'none' ? 'none' : 'boxed';
+
 const normalizeProfilePhotoScale = (value: unknown, fallback = 1) => {
   const numericValue = Number(value);
   return Number.isFinite(numericValue) ? Math.min(2.5, Math.max(1, numericValue)) : fallback;
@@ -228,6 +230,7 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       body: 'Jelaskan manfaat utama produk Anda dengan kalimat singkat yang mudah dipahami.',
       imageBoxScale: 1,
       imageBoxOffsetX: 0,
+      imageFrame: 'boxed',
       imageScale: 1.15,
       imagePositionX: 50,
       imagePositionY: 50,
@@ -597,6 +600,7 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   if (type === 'hero') {
     data.imageBoxScale = normalizeHeroImageScale(rawData.imageBoxScale, fallback.data.imageBoxScale);
     data.imageBoxOffsetX = normalizeHeroImageBoxOffset(rawData.imageBoxOffsetX);
+    data.imageFrame = normalizeHeroImageFrame(rawData.imageFrame);
     data.imageScale = normalizeHeroImageScale(rawData.imageScale, fallback.data.imageScale);
     data.imagePositionX = normalizeHeroImagePosition(rawData.imagePositionX);
     data.imagePositionY = normalizeHeroImagePosition(rawData.imagePositionY);
@@ -1439,6 +1443,7 @@ export const LandingBlockRenderer: React.FC<{
     case 'hero':
       const heroImageBoxScale = normalizeHeroImageScale(data.imageBoxScale, 1);
       const heroImageBoxOffsetX = normalizeHeroImageBoxOffset(data.imageBoxOffsetX);
+      const heroImageFrame = normalizeHeroImageFrame(data.imageFrame);
       const heroImageScale = normalizeHeroImageScale(data.imageScale);
       const heroImagePositionX = normalizeHeroImagePosition(data.imagePositionX);
       const heroImagePositionY = normalizeHeroImagePosition(data.imagePositionY);
@@ -1453,7 +1458,7 @@ export const LandingBlockRenderer: React.FC<{
               <ActionLink label={asText(data.buttonLabel, 'Pelajari lebih lanjut')} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('hero')} className="mt-6" />
             </div>
             {asText(data.imageUrl) ? (
-              <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm transition-transform duration-200 ease-out" style={{ transform: `translateX(${heroImageBoxOffsetX}%) scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
+              <div className={`relative aspect-video w-full overflow-hidden transition-transform duration-200 ease-out ${heroImageFrame === 'boxed' ? 'rounded-2xl bg-[var(--surface-soft)] shadow-sm' : ''}`} style={{ transform: `translateX(${heroImageBoxOffsetX}%) scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
                 <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="absolute inset-0 h-full w-full object-cover transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `scale(${heroImageScale})` }} />
               </div>
             ) : (
@@ -2198,7 +2203,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero':
-      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} />{headingColorField}<Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><HeroImageControls imageUrl={asText(data.imageUrl)} boxScale={normalizeHeroImageScale(data.imageBoxScale, 1)} boxOffsetX={normalizeHeroImageBoxOffset(data.imageBoxOffsetX)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
+      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} />{headingColorField}<Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Frame foto Hero</span><select value={normalizeHeroImageFrame(data.imageFrame)} onChange={event => patch({ imageFrame: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"><option value="boxed">Dengan frame kotak</option><option value="none">Tanpa frame</option></select><span className="text-[11px] leading-relaxed text-[var(--muted)]">Pilih apakah visual Hero tampil di dalam kotak dengan latar dan bayangan, atau tanpa frame.</span></label><HeroImageControls imageUrl={asText(data.imageUrl)} boxScale={normalizeHeroImageScale(data.imageBoxScale, 1)} boxOffsetX={normalizeHeroImageBoxOffset(data.imageBoxOffsetX)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
     case 'text':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<RichTextEditor label="Isi teks" value={asText(data.body)} onChange={body => patch({ body })} /></div>;
     case 'image': {
