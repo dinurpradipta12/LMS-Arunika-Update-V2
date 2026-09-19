@@ -903,24 +903,29 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
   return <main className="min-h-screen px-2 py-4 sm:px-4 md:px-5 md:py-6" style={{ background: theme.background, ['--one-to-one-accent' as any]: accent }}>
     <div className="mx-auto w-full max-w-[1180px] space-y-4">
       <section className="overflow-hidden rounded-3xl border border-white/70 bg-white shadow-sm" style={{ borderTopColor: accent }}>
-        <div className="px-4 pb-6 pt-7 sm:px-6 md:px-8 md:pb-7 md:pt-8">
-          <div className="flex flex-wrap items-center justify-center gap-3" aria-label="Branding Arunika">
-            <img src={logoUtama} alt="Arunika" className="h-11 w-auto object-contain md:h-12" />
-            {data.logoUrl && <span className="h-7 w-px bg-slate-200" aria-hidden="true" />}
-            {data.logoUrl && <img src={data.logoUrl} alt="Logo ruang" className="h-11 max-w-[140px] object-contain md:h-12" />}
-          </div>
-          <div className="mt-4 text-center">
-            <p className="text-[10px] font-bold uppercase tracking-[0.18em]" style={{ color: accent }}>Ruang 1:1 personal</p>
-            <h1 className="mx-auto mt-1 max-w-2xl text-xl font-bold tracking-tight text-slate-900 md:text-2xl">{data.title}</h1>
-            <p className="mt-1 text-sm text-slate-500">Untuk {data.menteeName || 'mentee'}{data.menteeEmail ? ` · ${data.menteeEmail}` : ''}</p>
-          </div>
-          <div className="mt-5 overflow-hidden rounded-2xl" style={{ background: `linear-gradient(115deg, ${accent}24, ${accent}08)` }}>
-            {data.coverImageUrl ? <img src={data.coverImageUrl} alt="Banner ruang 1:1" className="h-28 w-full object-cover sm:h-36 md:h-40" /> : <div className="h-16 w-full sm:h-20 md:h-24" aria-label="Banner ruang 1:1" />}
-          </div>
-          <div className="mt-5 text-center">
-            <h2 className="text-base font-semibold text-slate-900">{greeting}</h2>
-            {data.welcomeTitle && data.welcomeTitle !== greeting && <p className="mt-1 text-sm font-medium text-slate-700">{data.welcomeTitle}</p>}
-            {data.welcomeMessage && <p className="mx-auto mt-2 max-w-2xl whitespace-pre-line text-sm leading-relaxed text-slate-600">{data.welcomeMessage}</p>}
+        <div className="px-3 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-4 md:px-6">
+          <div className="relative isolate min-h-[300px] overflow-hidden rounded-2xl bg-slate-100 shadow-inner md:min-h-[360px]">
+            {data.coverImageUrl ? <img src={data.coverImageUrl} alt="Banner ruang 1:1" className="absolute inset-0 h-full w-full object-cover" /> : <div className="absolute inset-0" style={{ background: `linear-gradient(120deg, ${accent}35, ${accent}0d)` }} aria-label="Banner ruang 1:1" />}
+            <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.16) 0%, rgba(255, 255, 255, 0.02) 38%, rgba(255, 255, 255, 0.86) 82%, rgba(255, 255, 255, 1) 100%)' }} aria-hidden="true" />
+            <div className="relative z-10 flex min-h-[300px] flex-col items-center px-4 pb-6 pt-5 text-center md:min-h-[360px] md:px-8 md:pb-8 md:pt-6">
+              <div className="flex flex-wrap items-center justify-center gap-3" aria-label="Branding Arunika">
+                <div className="rounded-xl bg-white/90 p-2 shadow-sm backdrop-blur-sm">
+                  <img src={logoUtama} alt="Arunika" className="h-9 w-auto object-contain md:h-11" />
+                </div>
+                {data.logoUrl && <span className="h-7 w-px bg-white/80" aria-hidden="true" />}
+                {data.logoUrl && <div className="rounded-xl bg-white/90 p-2 shadow-sm backdrop-blur-sm"><img src={data.logoUrl} alt="Logo ruang" className="h-9 max-w-[130px] object-contain md:h-11" /></div>}
+              </div>
+              <div className="mt-4 max-w-2xl">
+                <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700">Ruang 1:1 personal</p>
+                <h1 className="mx-auto mt-1 text-lg font-bold tracking-tight text-slate-900 md:text-2xl">{data.title}</h1>
+                <p className="mt-1 text-xs text-slate-600 md:text-sm">Untuk {data.menteeName || 'mentee'}{data.menteeEmail ? ` · ${data.menteeEmail}` : ''}</p>
+              </div>
+              <div className="mt-auto max-w-3xl pt-10">
+                <h2 className="text-3xl font-extrabold tracking-tight text-slate-950 md:text-5xl">{greeting}</h2>
+                {data.welcomeTitle && data.welcomeTitle !== greeting && <p className="mt-2 text-base font-semibold text-slate-800 md:text-lg">{data.welcomeTitle}</p>}
+                {data.welcomeMessage && <p className="mx-auto mt-2 max-w-2xl whitespace-pre-line text-sm leading-relaxed text-slate-700 md:text-base">{data.welcomeMessage}</p>}
+              </div>
+            </div>
           </div>
           {data.mentorName && <div className="mt-4 flex items-center justify-center gap-3 text-center">{data.mentorAvatarUrl ? <img src={data.mentorAvatarUrl} alt={data.mentorName} className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100"><UserRound size={16} /></div>}<div><p className="text-sm font-bold text-slate-800">{data.mentorName}</p><p className="text-xs text-slate-500">{data.mentorRole || 'Mentor'}</p></div></div>}
         </div>
