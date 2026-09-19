@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
@@ -17,6 +17,7 @@ import {
   Plus,
   Save,
   Trash2,
+  Upload,
   UserRound,
   Users,
   Video,
@@ -172,6 +173,100 @@ const PortalSummary: React.FC<{ portal: OneToOnePortal }> = ({ portal }) => (
     </div>
   </div>
 );
+
+const readOneToOneImageDataUrl = (file: File, maxDimension = 1600): Promise<string> => new Promise((resolve, reject) => {
+  if (!file.type.startsWith('image/')) {
+    reject(new Error('Pilih file gambar yang valid.'));
+    return;
+  }
+
+  const reader = new FileReader();
+  reader.onerror = () => reject(new Error('Gambar gagal dibaca.'));
+  reader.onload = () => {
+    const image = new Image();
+    image.onerror = () => reject(new Error('Format gambar tidak didukung.'));
+    image.onload = () => {
+      const scale = Math.min(1, maxDimension / Math.max(image.width, image.height));
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(image.width * scale));
+      canvas.height = Math.max(1, Math.round(image.height * scale));
+      const context = canvas.getContext('2d');
+      if (!context) {
+        reject(new Error('Gambar gagal diproses.'));
+        return;
+      }
+
+      const keepsTransparency = ['image/png', 'image/webp', 'image/gif'].includes(file.type.toLowerCase());
+      context.imageSmoothingEnabled = !keepsTransparency;
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const dataUrl = canvas.toDataURL(keepsTransparency ? 'image/png' : 'image/jpeg', keepsTransparency ? undefined : 0.84);
+      if (dataUrl.length > 2_400_000) {
+        reject(new Error('Ukuran gambar terlalu besar. Gunakan gambar yang lebih kecil.'));
+        return;
+      }
+      resolve(dataUrl);
+    };
+    image.src = String(reader.result || '');
+  };
+  reader.readAsDataURL(file);
+});
+
+type OneToOneImageKind = 'avatar' | 'logo' | 'cover';
+
+const OneToOneImageField: React.FC<{
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  description: string;
+  kind: OneToOneImageKind;
+}> = ({ label, value, onChange, description, kind }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState('');
+
+  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    setError('');
+    setIsProcessing(true);
+    try {
+      onChange(await readOneToOneImageDataUrl(file));
+    } catch (uploadError: any) {
+      setError(uploadError?.message || 'Gambar belum dapat digunakan.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const previewClass = kind === 'cover'
+    ? 'aspect-[3/1]'
+    : kind === 'avatar'
+      ? 'mx-auto aspect-square max-w-[150px]'
+      : 'h-28';
+  const imageClass = kind === 'cover' ? 'object-cover' : 'object-contain';
+
+  return (
+    <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-sm font-bold">{label}</p>
+          <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">{description}</p>
+        </div>
+        {value && <button type="button" className="shrink-0 text-xs font-semibold text-[var(--danger-text)] hover:underline" onClick={() => { onChange(''); setError(''); }}>Hapus</button>}
+      </div>
+      <div className={`flex w-full items-center justify-center overflow-hidden rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-2 ${previewClass}`}>
+        {value ? <img src={value} alt="" className={`h-full w-full ${imageClass}`} /> : <div className="px-4 text-center text-xs text-[var(--muted)]">Belum ada gambar</div>}
+      </div>
+      <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
+      <Button type="button" variant="secondary" icon={Upload} className="w-full" onClick={() => inputRef.current?.click()} disabled={isProcessing} isLoading={isProcessing}>
+        {isProcessing ? 'Memproses gambar...' : 'Upload dari komputer'}
+      </Button>
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Gambar diproses di browser dan disimpan bersama ruang ini. PNG transparan tetap dipertahankan.</p>
+      {error && <p className="text-xs font-semibold text-red-700" role="alert">{error}</p>}
+    </div>
+  );
+};
 
 export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
   const navigate = useNavigate();
@@ -388,13 +483,110 @@ export const OneToOneEditorPage: React.FC<{ client: any }> = ({ client }) => {
   if (isLoading) return <div className="flex min-h-[70vh] items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={20} className="animate-spin" /> Memuat ruang 1:1...</div>;
   if (!portal) return <div className="mx-auto max-w-xl p-8"><Card className="space-y-4 text-center"><XCircle size={34} className="mx-auto text-[var(--danger-text)]" /><p>Ruang 1:1 tidak ditemukan.</p><Button variant="secondary" onClick={() => navigate('/admin/one-to-one')}>Kembali</Button></Card></div>;
 
-  return <div className="mx-auto w-full max-w-[1600px] space-y-6 p-4 md:p-6 lg:p-8">
+  return <div className="mx-auto w-full max-w-[1440px] space-y-6 p-4 md:p-6 lg:p-8">
     <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><Link to="/admin/one-to-one" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> Semua ruang 1:1</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">{portal.title}</h1><Badge color={portal.isActive ? 'var(--success-soft)' : 'var(--surface-soft)'}>{portal.isActive ? 'Aktif' : 'Nonaktif'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Dashboard personal untuk {portal.menteeName || 'mentee ini'}.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={token ? Copy : LinkIcon} onClick={() => token ? void copyText(publicUrl) : void rotateToken()}>{token ? 'Salin link privat' : 'Buat link privat'}</Button>{token && <Button variant="secondary" icon={ExternalLink} onClick={() => window.open(publicUrl, '_blank', 'noopener,noreferrer')}>Preview publik</Button>}<Button icon={Save} onClick={() => void savePortal()} isLoading={isSaving}>Simpan tampilan</Button></div></div>
     <NoticeMessage notice={notice} />
     {token && <div className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm sm:flex-row sm:items-center sm:justify-between"><span className="min-w-0 truncate text-[var(--muted)]"><LockKeyhole size={15} className="mr-2 inline text-[var(--accent-strong)]" />{publicUrl}</span><Button type="button" variant="secondary" className="shrink-0" onClick={() => void rotateToken()}>Ganti link</Button></div>}
     <SectionTabs active={activeTab} onChange={setActiveTab} />
 
-    {activeTab === 'overview' && <Card className="space-y-6"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Kustomisasi halaman</p><h2 className="mt-2 text-xl font-bold">Identitas, welcome, dan tampilan</h2><p className="mt-1 text-sm text-[var(--muted)]">Semua field di sini hanya berlaku untuk link mentee ini, tidak mengubah ruang mentee lain.</p></div><div className="grid gap-4 md:grid-cols-2"><Input label="Judul ruang" value={portal.title} onChange={event => setPortal({ ...portal, title: event.target.value })} /><Input label="Nama mentee" value={portal.menteeName} onChange={event => setPortal({ ...portal, menteeName: event.target.value })} /><Input label="Email mentee" type="email" value={portal.menteeEmail} onChange={event => setPortal({ ...portal, menteeEmail: event.target.value })} /><Input label="Nama mentor" value={portal.mentorName} onChange={event => setPortal({ ...portal, mentorName: event.target.value })} /><Input label="Jabatan / label mentor" value={portal.mentorRole} onChange={event => setPortal({ ...portal, mentorRole: event.target.value })} /><Input label="URL foto mentor" value={portal.mentorAvatarUrl} onChange={event => setPortal({ ...portal, mentorAvatarUrl: event.target.value })} placeholder="https://..." /><Input label="URL logo" value={portal.logoUrl} onChange={event => setPortal({ ...portal, logoUrl: event.target.value })} placeholder="https://..." /><Input label="URL cover (opsional)" value={portal.coverImageUrl} onChange={event => setPortal({ ...portal, coverImageUrl: event.target.value })} placeholder="https://..." /></div><div className="grid gap-4 md:grid-cols-2"><Input label="Judul sambutan" value={portal.welcomeTitle} onChange={event => setPortal({ ...portal, welcomeTitle: event.target.value })} /><Textarea label="Pesan sambutan" value={portal.welcomeMessage} onChange={event => setPortal({ ...portal, welcomeMessage: event.target.value })} className="min-h-[100px]" /></div><div className="grid gap-4 md:grid-cols-3"><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Tema</span><select value={portal.theme} onChange={event => setPortal({ ...portal, theme: event.target.value as OneToOneTheme })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 text-sm outline-none focus:border-[var(--accent)]">{themeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><Input label="Warna aksen" type="color" value={portal.accentColor} onChange={event => setPortal({ ...portal, accentColor: event.target.value })} className="h-[46px] p-1" /><label className="flex items-center gap-3 self-end rounded-xl border border-[var(--border)] px-4 py-3 text-sm font-semibold"><input type="checkbox" checked={portal.isActive} onChange={event => setPortal({ ...portal, isActive: event.target.checked })} /> Link aktif untuk mentee</label></div><div className="rounded-2xl border border-[var(--border)] p-5" style={{ borderTopColor: accent }}><p className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: accent }}>Preview identitas</p><div className="mt-3 flex items-center gap-3">{portal.logoUrl ? <img src={portal.logoUrl} alt="Logo" className="h-10 w-10 rounded-xl object-contain" /> : <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-soft)]"><UserRound size={18} /></div>}<div><p className="font-bold">{portal.welcomeTitle || portal.title}</p><p className="text-xs text-[var(--muted)]">{portal.mentorName || 'Nama mentor'}{portal.mentorRole ? ` · ${portal.mentorRole}` : ''}</p></div></div></div></Card>}
+    {activeTab === 'overview' && (
+      <div className="grid min-w-0 gap-5 xl:grid-cols-[minmax(0,1.35fr)_minmax(310px,0.65fr)]">
+        <div className="min-w-0 space-y-5">
+          <Card className="space-y-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Identitas ruang</p>
+              <h2 className="mt-2 text-xl font-bold">Profil mentee dan akses</h2>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Field di sini hanya berlaku untuk link privat mentee ini. Perubahan baru terlihat setelah menekan tombol simpan.</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <div className="md:col-span-2"><Input label="Judul ruang" value={portal.title} onChange={event => setPortal({ ...portal, title: event.target.value })} placeholder="Contoh: Social Media Content" /></div>
+              <Input label="Nama mentee" value={portal.menteeName} onChange={event => setPortal({ ...portal, menteeName: event.target.value })} />
+              <Input label="Email mentee" type="email" value={portal.menteeEmail} onChange={event => setPortal({ ...portal, menteeEmail: event.target.value })} />
+              <label className="md:col-span-2 flex items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] px-4 py-3 text-sm font-semibold">
+                <input type="checkbox" checked={portal.isActive} onChange={event => setPortal({ ...portal, isActive: event.target.checked })} />
+                Link aktif untuk mentee
+                <span className="ml-auto text-xs font-normal text-[var(--muted)]">Matikan sementara tanpa menghapus data ruang.</span>
+              </label>
+            </div>
+          </Card>
+
+          <Card className="space-y-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Mentor dan visual</p>
+              <h2 className="mt-2 text-xl font-bold">Identitas yang tampil di halaman publik</h2>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Upload foto langsung dari komputer. Tidak perlu menempelkan URL gambar.</p>
+            </div>
+            <div className="grid gap-5 lg:grid-cols-2">
+              <div className="space-y-4">
+                <Input label="Nama mentor" value={portal.mentorName} onChange={event => setPortal({ ...portal, mentorName: event.target.value })} />
+                <Input label="Jabatan / label mentor" value={portal.mentorRole} onChange={event => setPortal({ ...portal, mentorRole: event.target.value })} placeholder="Contoh: Mentor Social Media" />
+                <OneToOneImageField label="Foto mentor" value={portal.mentorAvatarUrl} onChange={value => setPortal({ ...portal, mentorAvatarUrl: value })} kind="avatar" description="Gunakan foto persegi atau portrait. Transparansi PNG tetap dipertahankan." />
+              </div>
+              <div className="space-y-4">
+                <OneToOneImageField label="Logo ruang" value={portal.logoUrl} onChange={value => setPortal({ ...portal, logoUrl: value })} kind="logo" description="Logo transparan akan ditampilkan tanpa latar tambahan." />
+                <OneToOneImageField label="Cover ruang (opsional)" value={portal.coverImageUrl} onChange={value => setPortal({ ...portal, coverImageUrl: value })} kind="cover" description="Banner yang tampil di bagian atas halaman mentee." />
+              </div>
+            </div>
+          </Card>
+
+          <Card className="space-y-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Welcome dan tema</p>
+              <h2 className="mt-2 text-xl font-bold">Atur pesan pembuka dan warna ruang</h2>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Pesan ini menjadi konteks pertama yang dibaca mentee saat membuka link.</p>
+            </div>
+            <div className="grid gap-4 md:grid-cols-2">
+              <Input label="Judul sambutan" value={portal.welcomeTitle} onChange={event => setPortal({ ...portal, welcomeTitle: event.target.value })} placeholder="Ruang belajar personal Anda" />
+              <label className="flex flex-col gap-2">
+                <span className="text-xs font-semibold text-[var(--muted)]">Tema</span>
+                <select value={portal.theme} onChange={event => setPortal({ ...portal, theme: event.target.value as OneToOneTheme })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 text-sm outline-none focus:border-[var(--accent)]">
+                  {themeOptions.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+                </select>
+              </label>
+              <Textarea label="Pesan sambutan" value={portal.welcomeMessage} onChange={event => setPortal({ ...portal, welcomeMessage: event.target.value })} className="min-h-[150px] md:col-span-2" placeholder="Tulis arahan singkat untuk mentee..." />
+              <Input label="Warna aksen" type="color" value={portal.accentColor} onChange={event => setPortal({ ...portal, accentColor: event.target.value })} className="h-[46px] p-1" />
+            </div>
+          </Card>
+        </div>
+
+        <div className="min-w-0 space-y-5">
+          <Card className="space-y-4 xl:sticky xl:top-5">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em]" style={{ color: accent }}>Preview identitas</p>
+              <h2 className="mt-2 text-xl font-bold">Tampilan ringkas halaman mentee</h2>
+              <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Preview ini mengikuti perubahan form secara langsung.</p>
+            </div>
+            <div className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)]">
+              {portal.coverImageUrl && <img src={portal.coverImageUrl} alt="" className="h-28 w-full object-cover" />}
+              <div className="p-4">
+                <div className="flex items-start gap-3">
+                  {portal.logoUrl ? <img src={portal.logoUrl} alt="Logo ruang" className="h-12 w-12 shrink-0 rounded-xl object-contain" /> : <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-xl bg-[var(--surface)]" style={{ color: accent }}><UserRound size={19} /></div>}
+                  <div className="min-w-0"><p className="truncate text-sm font-bold">{portal.title || 'Judul ruang'}</p><p className="mt-1 text-xs text-[var(--muted)]">Untuk {portal.menteeName || 'nama mentee'}</p></div>
+                </div>
+                <div className="mt-4 flex items-center gap-3 border-t border-[var(--border)] pt-4">
+                  {portal.mentorAvatarUrl ? <img src={portal.mentorAvatarUrl} alt="" className="h-10 w-10 shrink-0 rounded-full object-cover" /> : <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-[var(--surface)]" style={{ color: accent }}><UserRound size={17} /></div>}
+                  <div className="min-w-0"><p className="truncate text-sm font-semibold">{portal.mentorName || 'Nama mentor'}</p><p className="truncate text-xs text-[var(--muted)]">{portal.mentorRole || 'Jabatan mentor'}</p></div>
+                </div>
+                {(portal.welcomeTitle || portal.welcomeMessage) && <div className="mt-4 rounded-xl p-3" style={{ backgroundColor: `${accent}12` }}><p className="text-sm font-bold" style={{ color: accent }}>{portal.welcomeTitle || 'Selamat datang'}</p>{portal.welcomeMessage && <p className="mt-1 line-clamp-4 whitespace-pre-line text-xs leading-relaxed text-[var(--muted)]">{portal.welcomeMessage}</p>}</div>}
+              </div>
+            </div>
+          </Card>
+
+          <Card className="space-y-4">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Pengaturan tersedia</p>
+              <h2 className="mt-2 text-lg font-bold">Kelola isi ruang dari tab di atas</h2>
+            </div>
+            <ul className="space-y-3 text-sm text-[var(--muted)]">
+              <li className="flex gap-3"><span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: accent }} />Recording dan materi dapat ditambah, diedit, diurutkan, atau disembunyikan.</li>
+              <li className="flex gap-3"><span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: accent }} />Kalender mendukung waktu sesi, lokasi, link meeting, dan status.</li>
+              <li className="flex gap-3"><span className="mt-1 h-2 w-2 shrink-0 rounded-full" style={{ backgroundColor: accent }} />Task dan catatan mentor bisa diberi deadline, prioritas, serta visibilitas per item.</li>
+            </ul>
+            <div className="rounded-xl bg-[var(--surface-soft)] p-3 text-xs leading-relaxed text-[var(--muted)]">Simpan perubahan tampilan dengan tombol <strong className="text-[var(--text)]">Simpan tampilan</strong> di bagian atas.</div>
+          </Card>
+        </div>
+      </div>
+    )}
 
     {activeTab === 'recordings' && <RecordingEditor rows={recordings} onAdd={() => void addRow('one_to_one_recordings', { title: 'Recording baru', description: '', video_url: '', material_url: '', duration: '', sort_order: recordings.length, is_published: true })} onSave={(row) => void saveRow('one_to_one_recordings', row.id, { title: row.title, description: row.description, video_url: row.videoUrl, material_url: row.materialUrl, duration: row.duration, sort_order: row.sortOrder, is_published: row.isPublished })} onDelete={row => void deleteRow('one_to_one_recordings', row.id)} />}
     {activeTab === 'schedule' && <ScheduleEditor rows={schedule} onAdd={() => void addRow('one_to_one_schedule_events', { title: 'Sesi mentoring', description: '', starts_at: new Date().toISOString(), ends_at: new Date(Date.now() + 60 * 60 * 1000).toISOString(), location: '', meeting_url: '', status: 'scheduled', sort_order: schedule.length })} onSave={(row) => void saveRow('one_to_one_schedule_events', row.id, { title: row.title, description: row.description, starts_at: isoDateTime(row.startsAt), ends_at: isoDateTime(row.endsAt), location: row.location, meeting_url: row.meetingUrl, status: row.status, sort_order: row.sortOrder })} onDelete={row => void deleteRow('one_to_one_schedule_events', row.id)} />}
