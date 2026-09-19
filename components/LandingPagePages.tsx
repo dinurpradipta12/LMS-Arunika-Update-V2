@@ -33,6 +33,7 @@ import {
   Star,
   Trash2,
   Upload,
+  UserRound,
   Users,
   Video,
   X,
@@ -127,6 +128,7 @@ const LANDING_BLOCK_OPTIONS: Array<{
   { value: 'workflow', label: 'Workflow', description: 'Tahapan proses bernomor', icon: ListOrdered },
   { value: 'pricing', label: 'Harga', description: 'Paket dan harga produk', icon: CreditCard },
   { value: 'testimonial', label: 'Testimoni', description: 'Bukti sosial dari pelanggan', icon: Quote },
+  { value: 'profile', label: 'Profil', description: 'Foto dan biografi singkat', icon: UserRound },
   { value: 'faq', label: 'FAQ', description: 'Pertanyaan yang sering ditanya', icon: Layout },
   { value: 'payment', label: 'Pembayaran', description: 'QR Code dan instruksi transfer', icon: CreditCard },
   { value: 'bonus', label: 'Bonus', description: 'Foto dan keterangan bonus', icon: Gift },
@@ -155,6 +157,7 @@ type LandingTopicCategory = { id: string; title: string; items: string[] };
 type LandingWorkflowLayout = 'vertical' | 'horizontal';
 type LandingWorkflowStep = { id: string; label: string; title: string; description: string };
 type LandingTestimonialItem = { quote: string; name: string; role: string; rating: number };
+type LandingProfileLayout = 'split' | 'centered';
 type LandingBonusItem = { title: string; body: string; imageUrl: string; imageAlt: string; caption: string };
 type LandingPricingPackage = {
   id: string;
@@ -308,6 +311,16 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
         role: 'Pelanggan',
         rating: 5
       }]
+    },
+    profile: {
+      heading: 'Tentang saya',
+      eyebrow: 'Profil',
+      name: 'Nama Anda',
+      role: 'Mentor / Founder',
+      bio: 'Tulis biografi singkat, pengalaman, dan alasan pengunjung perlu mengenal Anda.',
+      photoUrl: '',
+      photoAlt: 'Foto profil',
+      layout: 'split'
     },
     faq: {
       heading: 'Pertanyaan umum',
@@ -518,6 +531,10 @@ const normalizeVideoLayout = (value: unknown): LandingVideoLayout => (
   ['grid', 'slider', 'row'].includes(asText(value)) ? asText(value) as LandingVideoLayout : 'grid'
 );
 
+const normalizeProfileLayout = (value: unknown): LandingProfileLayout => (
+  ['split', 'centered'].includes(asText(value)) ? asText(value) as LandingProfileLayout : 'split'
+);
+
 const normalizeTestimonialRating = (value: unknown) => Math.min(5, Math.max(1, Math.round(Number(value) || 5)));
 
 const normalizeTestimonialItems = (value: unknown, legacyData: Record<string, any> = {}): LandingTestimonialItem[] => {
@@ -593,6 +610,7 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
     data.layout = normalizeVideoLayout(rawData.layout);
   }
   if (type === 'testimonial') data.items = normalizeTestimonialItems(rawData.items, rawData);
+  if (type === 'profile') data.layout = normalizeProfileLayout(rawData.layout);
   if (type === 'bonus') data.items = normalizeBonusItems(rawData.items, rawData);
   return {
     id: asText(value?.id, fallback.id),
@@ -1357,6 +1375,34 @@ const LandingTestimonialGridBlock: React.FC<{ data: Record<string, any> }> = ({ 
   );
 };
 
+const LandingProfileBlock: React.FC<{ data: Record<string, any> }> = ({ data }) => {
+  const layout = normalizeProfileLayout(data.layout);
+  const heading = asText(data.heading).trim();
+  const eyebrow = asText(data.eyebrow, 'Profil').trim();
+  const name = asText(data.name, 'Nama Anda').trim() || 'Nama Anda';
+  const role = asText(data.role).trim();
+  const bio = asText(data.bio).trim();
+  const photoUrl = asText(data.photoUrl).trim();
+  const initials = name.split(/\s+/).filter(Boolean).slice(0, 2).map(part => part[0]?.toUpperCase()).join('') || 'P';
+  const isCentered = layout === 'centered';
+
+  return (
+    <section className="rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm md:p-8" aria-label={heading || 'Profil'}>
+      {heading && <div className="mb-6"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{eyebrow}</p><h2 className="mt-2 text-2xl font-bold" style={{ color: headingColorValue(data.headingColor) }}>{heading}</h2></div>}
+      <div className={`${isCentered ? 'mx-auto max-w-2xl text-center' : 'grid gap-6 md:grid-cols-[150px_minmax(0,1fr)] md:items-center'}`}>
+        <div className={`${isCentered ? 'mx-auto h-36 w-36 md:h-44 md:w-44' : 'mx-auto h-32 w-32 md:mx-0 md:h-36 md:w-36'} overflow-hidden rounded-full border-4 border-[var(--accent-soft)] bg-[var(--surface-soft)] shadow-sm`}>
+          {photoUrl ? <img src={photoUrl} alt={asText(data.photoAlt, `Foto ${name}`)} className="h-full w-full object-cover" /> : <div className="flex h-full w-full items-center justify-center text-3xl font-bold text-[var(--accent-strong)]" aria-label={`Inisial ${name}`}>{initials}</div>}
+        </div>
+        <div className={isCentered ? 'mt-5' : 'min-w-0'}>
+          <h3 className="text-2xl font-bold">{name}</h3>
+          {role && <p className="mt-1 text-sm font-semibold text-[var(--accent-strong)]">{role}</p>}
+          {bio && <div className="mt-4 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{renderRichText(bio)}</div>}
+        </div>
+      </div>
+    </section>
+  );
+};
+
 export const LandingBlockRenderer: React.FC<{
   block: LandingBlock;
   pageTitle?: string;
@@ -1462,6 +1508,8 @@ export const LandingBlockRenderer: React.FC<{
       );
     case 'testimonial':
       return <LandingTestimonialGridBlock data={data} />;
+    case 'profile':
+      return <LandingProfileBlock data={data} />;
     case 'faq':
       return (
         <section className="space-y-4">
@@ -1932,6 +1980,34 @@ const LandingVideoFileField: React.FC<{ value: string; onChange: (value: string)
   );
 };
 
+const LandingProfileEditor: React.FC<{
+  data: Record<string, any>;
+  onChange: (values: Record<string, any>) => void;
+}> = ({ data, onChange }) => {
+  const layout = normalizeProfileLayout(data.layout);
+  const patch = (values: Record<string, any>) => onChange(values);
+
+  return (
+    <div className="space-y-4">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-[11px] leading-relaxed text-[var(--muted)]">Gunakan blok ini untuk memperkenalkan mentor, pemilik program, pembicara, atau orang di balik produk dengan foto dan biografi singkat.</div>
+      <Input label="Judul section (opsional)" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} placeholder="Tentang saya" />
+      <Input label="Label kecil (opsional)" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} placeholder="Profil" />
+      <label className="flex flex-col gap-2">
+        <span className="text-xs font-semibold text-[var(--muted)]">Layout profil</span>
+        <select value={layout} onChange={event => patch({ layout: event.target.value as LandingProfileLayout })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">
+          <option value="split">Foto di samping teks</option>
+          <option value="centered">Foto di atas, teks di tengah</option>
+        </select>
+      </label>
+      <ImageUploader label="Foto profil (opsional)" value={asText(data.photoUrl)} onChange={photoUrl => patch({ photoUrl })} />
+      <Input label="Alt foto" value={asText(data.photoAlt)} onChange={event => patch({ photoAlt: event.target.value })} placeholder="Foto profil" />
+      <Input label="Nama" value={asText(data.name)} onChange={event => patch({ name: event.target.value })} placeholder="Nama Anda" />
+      <Input label="Jabatan / label" value={asText(data.role)} onChange={event => patch({ role: event.target.value })} placeholder="Mentor / Founder" />
+      <Textarea label="Biografi singkat" value={asText(data.bio)} onChange={event => patch({ bio: event.target.value })} placeholder="Ceritakan pengalaman, keahlian, dan fokus Anda secara singkat." className="min-h-[150px]" />
+    </div>
+  );
+};
+
 const LandingTestimonialEditor: React.FC<{ items: LandingTestimonialItem[]; onChange: (items: LandingTestimonialItem[]) => void }> = ({ items, onChange }) => {
   const maxTestimonials = 20;
   const updateItem = (index: number, patch: Partial<LandingTestimonialItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
@@ -2052,7 +2128,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const patch = (values: Record<string, any>) => onChange({ ...data, ...values });
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
   const pricingButtonFields = <div className="space-y-2"><Input label="Label tombol pilihan paket" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Pilih paket" /><p className="text-[11px] leading-relaxed text-[var(--muted)]">Setelah memilih paket, pengunjung akan melihat total pembayaran dan QR Code di blok Pembayaran.</p></div>;
-  const hasHeadingColor = ['hero', 'text', 'features', 'topics', 'workflow', 'pricing', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
+  const hasHeadingColor = ['hero', 'text', 'features', 'topics', 'workflow', 'pricing', 'profile', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero':
@@ -2145,6 +2221,8 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
       };
       return <LandingTestimonialEditor items={items} onChange={updateItems} />;
     }
+    case 'profile':
+      return <div className="space-y-4"><LandingProfileEditor data={data} onChange={patch} />{headingColorField}</div>;
     case 'faq':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="FAQ (satu per baris, format: Pertanyaan | Jawaban)" value={faqItemsToText(normalizeFaqItems(data.items, []))} onChange={event => patch({ items: textToFaqItems(event.target.value) })} className="min-h-[200px]" /></div>;
     case 'payment':
