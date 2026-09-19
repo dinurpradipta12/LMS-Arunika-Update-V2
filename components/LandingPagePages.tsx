@@ -133,6 +133,14 @@ type LandingImageLayout = 'slider' | 'marquee' | 'row';
 type LandingImageItem = { url: string; alt: string; caption: string };
 type LandingTestimonialItem = { quote: string; name: string; role: string; rating: number };
 type LandingBonusItem = { title: string; body: string; imageUrl: string; imageAlt: string; caption: string };
+type LandingPricingPackage = {
+  id: string;
+  name: string;
+  price: string;
+  originalPrice: string;
+  description: string;
+  features: string[];
+};
 
 const normalizeHeroImageScale = (value: unknown, fallback = 1.15) => {
   const numericValue = Number(value);
@@ -209,10 +217,18 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
     },
     pricing: {
       heading: 'Dapatkan akses sekarang',
+      packages: [{
+        id: 'landing-package-default',
+        name: 'Paket utama',
+        price: 'Rp 0',
+        originalPrice: '',
+        description: 'Pilih paket yang paling sesuai dengan kebutuhan Anda.',
+        features: ['Akses materi utama', 'Panduan praktis', 'Dukungan setelah pembelian']
+      }],
       price: 'Rp 0',
       body: 'Pilih paket yang paling sesuai dengan kebutuhan Anda.',
       features: ['Akses materi utama', 'Panduan praktis', 'Dukungan setelah pembelian'],
-      buttonLabel: 'Daftar sekarang',
+      buttonLabel: 'Pilih paket',
       buttonUrl: ''
     },
     testimonial: {
@@ -239,7 +255,7 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       ctaBeforePrice: '',
       originalAmount: '',
       amount: 'Rp 0',
-      instructions: 'Silakan lakukan pembayaran melalui QR Code atau rekening yang tersedia. Setelah itu, kirim bukti pembayaran melalui WhatsApp.',
+      instructions: 'Pilih paket yang sesuai di atas, lakukan pembayaran sesuai total, lalu kirim bukti pembayaran melalui WhatsApp.',
       qrCode: '',
       accountNumber: '',
       whatsapp: '',
@@ -280,6 +296,46 @@ const normalizeLineItems = (value: unknown, fallback: Array<{ title: string; des
     title: asText(item?.title),
     description: asText(item?.description)
   })).filter(item => item.title || item.description);
+};
+
+const createPricingPackage = (index = 0): LandingPricingPackage => ({
+  id: `landing-package-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+  name: `Paket ${index + 1}`,
+  price: '',
+  originalPrice: '',
+  description: '',
+  features: []
+});
+
+const normalizePricingPackages = (value: unknown, legacyData: Record<string, any> = {}): LandingPricingPackage[] => {
+  if (Array.isArray(value)) {
+    return value.slice(0, 12).map((item, index) => ({
+      id: asText(item?.id, `landing-package-${index}`),
+      name: asText(item?.name || item?.title),
+      price: asText(item?.price),
+      originalPrice: asText(item?.originalPrice || item?.original_price),
+      description: asText(item?.description || item?.body),
+      features: Array.isArray(item?.features) ? item.features.map((feature: unknown) => asText(feature)).filter(Boolean) : []
+    }));
+  }
+
+  return [{
+    id: 'landing-package-legacy',
+    name: asText(legacyData.packageName || legacyData.package_name, 'Paket utama'),
+    price: asText(legacyData.price),
+    originalPrice: asText(legacyData.originalPrice || legacyData.original_price),
+    description: asText(legacyData.body),
+    features: Array.isArray(legacyData.features) ? legacyData.features.map((feature: unknown) => asText(feature)).filter(Boolean) : []
+  }];
+};
+
+const getPricingPackagesForPage = (page: LandingPage): LandingPricingPackage[] => {
+  const pricingBlock = page.blocks.find(block => block.type === 'pricing');
+  return pricingBlock ? normalizePricingPackages(pricingBlock.data?.packages, pricingBlock.data || {}) : [];
+};
+
+const getFirstPricingPackage = (page: LandingPage): LandingPricingPackage | null => {
+  return getPricingPackagesForPage(page)[0] || null;
 };
 
 const normalizeFaqItems = (value: unknown, fallback: Array<{ question: string; answer: string }>) => {
@@ -356,7 +412,13 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
     data.imagePositionX = normalizeHeroImagePosition(rawData.imagePositionX);
     data.imagePositionY = normalizeHeroImagePosition(rawData.imagePositionY);
   }
-  if (type === 'pricing') data.features = Array.isArray(rawData.features) ? rawData.features.map((item: unknown) => asText(item)).filter(Boolean) : fallback.data.features;
+  if (type === 'pricing') {
+    data.packages = normalizePricingPackages(rawData.packages, rawData);
+    const firstPackage = data.packages[0];
+    data.price = asText(rawData.price, firstPackage?.price || fallback.data.price);
+    data.body = asText(rawData.body, firstPackage?.description || fallback.data.body);
+    data.features = Array.isArray(rawData.features) ? rawData.features.map((item: unknown) => asText(item)).filter(Boolean) : firstPackage?.features || fallback.data.features;
+  }
   if (type === 'faq') data.items = normalizeFaqItems(rawData.items, fallback.data.items);
   if (type === 'image') {
     data.images = normalizeImageItems(rawData.images, rawData);
@@ -437,20 +499,23 @@ const normalizeWhatsAppNumber = (value: unknown) => {
   return digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
 };
 
-const whatsappHref = (phone: unknown, pageTitle: string, paymentAmount?: string) => {
+const whatsappHref = (phone: unknown, pageTitle: string, paymentAmount?: string, selectedPackage?: LandingPricingPackage | null, paymentAccount?: string) => {
   const normalized = normalizeWhatsAppNumber(phone);
   if (!normalized) return '';
-  const amount = paymentAmount?.trim() || 'akan saya informasikan melalui chat ini';
+  const packageName = selectedPackage?.name.trim();
+  const amount = selectedPackage?.price.trim() || paymentAmount?.trim() || 'akan saya informasikan melalui chat ini';
+  const benefits = selectedPackage?.features.filter(Boolean) || [];
   const message = [
-    `Halo, saya sudah melakukan pembelian untuk ${pageTitle}.`,
+    `Halo, saya ingin melakukan pembayaran untuk ${pageTitle}.`,
+    packageName ? `Paket yang dipilih: ${packageName}` : '',
+    `Total pembayaran: ${amount}`,
+    benefits.length ? `Benefit paket:\n${benefits.map(feature => `- ${feature}`).join('\n')}` : '',
+    paymentAccount?.trim() ? `Transfer ke: ${paymentAccount.trim()}` : '',
     '',
-    `Nominal pembayaran: ${amount}`,
-    '',
-    'Mohon bantuannya untuk follow-up langkah selanjutnya setelah pembelian, termasuk konfirmasi pembayaran dan informasi akses, jadwal, atau instruksi berikutnya.',
-    'Bukti transfer siap saya kirimkan di chat ini bila diperlukan.',
+    'Saya akan melakukan pembayaran melalui QR Code/rekening yang tersedia. Setelah transfer, saya akan mengirimkan bukti pembayaran melalui chat ini untuk diproses.',
     '',
     'Terima kasih.'
-  ].join('\n');
+  ].filter(Boolean).join('\n');
   return `https://wa.me/${normalized}?text=${encodeURIComponent(message)}`;
 };
 
@@ -762,7 +827,14 @@ const LandingTestimonialGridBlock: React.FC<{ data: Record<string, any> }> = ({ 
   );
 };
 
-export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: string; onCtaClick?: (label: string) => void }> = ({ block, pageTitle = 'produk ini', onCtaClick }) => {
+export const LandingBlockRenderer: React.FC<{
+  block: LandingBlock;
+  pageTitle?: string;
+  onCtaClick?: (label: string) => void;
+  selectedPackage?: LandingPricingPackage | null;
+  onSelectPackage?: (item: LandingPricingPackage) => void;
+  hasPricingBlock?: boolean;
+}> = ({ block, pageTitle = 'produk ini', onCtaClick, selectedPackage, onSelectPackage, hasPricingBlock = false }) => {
   const data = block.data || {};
   const textBody = asText(data.body);
   const sectionHeadingColor = headingColorValue(data.headingColor);
@@ -827,22 +899,38 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
         </section>
       );
     case 'pricing':
+      const pricingPackages = normalizePricingPackages(data.packages, data);
+      const pricingButtonLabel = asText(data.buttonLabel, 'Pilih paket');
       return (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm md:p-8">
-          <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_240px] md:items-center">
-            <div>
-              <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Pilihan paket')}</h2>
-              <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{textBody}</p>
-              <ul className="mt-4 space-y-2 text-sm text-[var(--muted)]">
-                {(Array.isArray(data.features) ? data.features : []).map((feature: unknown, index: number) => <li key={`${asText(feature)}-${index}`} className="flex items-start gap-2"><Check size={16} className="mt-0.5 shrink-0 text-[var(--success-text)]" /> {asText(feature)}</li>)}
-              </ul>
-            </div>
-            <div className="rounded-2xl bg-[var(--accent-soft)] p-5 text-center">
-              <p className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Mulai dari</p>
-              <p className="mt-2 text-2xl font-bold text-[var(--accent-strong)]">{asText(data.price, 'Hubungi kami')}</p>
-              <ActionLink label={asText(data.buttonLabel, 'Daftar sekarang')} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('pricing')} className="mt-5 w-full" />
-            </div>
+          <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Pilihan paket')}</h2>
+          {textBody && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{textBody}</p>}
+          <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+            {pricingPackages.map((item, index) => {
+              const isSelected = selectedPackage?.id === item.id;
+              return (
+                <article key={`${item.id}-${index}`} className={`flex h-full flex-col rounded-2xl border p-5 shadow-sm transition-colors ${isSelected ? 'border-[var(--accent)] bg-[var(--accent-soft)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] bg-[var(--surface-soft)]'}`}>
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">Paket {index + 1}</p>
+                      <h3 className="mt-2 text-lg font-bold">{item.name || `Paket ${index + 1}`}</h3>
+                    </div>
+                    {isSelected && <Badge color="var(--success-soft)">Dipilih</Badge>}
+                  </div>
+                  {item.description && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
+                  <div className="mt-5 flex flex-wrap items-baseline gap-2">
+                    {item.originalPrice && <span className="text-sm font-semibold text-[var(--muted)] line-through">{item.originalPrice}</span>}
+                    <p className="text-2xl font-bold text-[var(--accent-strong)]">{item.price || 'Hubungi kami'}</p>
+                  </div>
+                  {item.features.length > 0 && <ul className="mt-5 flex-1 space-y-2 text-sm text-[var(--muted)]">{item.features.map((feature, featureIndex) => <li key={`${feature}-${featureIndex}`} className="flex items-start gap-2"><Check size={16} className="mt-0.5 shrink-0 text-[var(--success-text)]" /> <span>{feature}</span></li>)}</ul>}
+                  <button type="button" onClick={() => { onSelectPackage?.(item); onCtaClick?.(`pricing:${item.name || `Paket ${index + 1}`}`); }} className={`mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${isSelected ? 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]' : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:border-[var(--border-strong)]'}`}>
+                    {isSelected ? 'Paket dipilih' : pricingButtonLabel}
+                  </button>
+                </article>
+              );
+            })}
           </div>
+          {safeHref(data.buttonUrl) && <ActionLink label={pricingButtonLabel} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('pricing')} className="mt-6" />}
         </section>
       );
     case 'testimonial':
@@ -857,19 +945,23 @@ export const LandingBlockRenderer: React.FC<{ block: LandingBlock; pageTitle?: s
         </section>
       );
     case 'payment': {
-      const confirmationHref = whatsappHref(data.whatsapp, pageTitle, asText(data.amount)) || safeHref(data.buttonUrl);
+      const confirmationHref = hasPricingBlock
+        ? selectedPackage ? whatsappHref(data.whatsapp, pageTitle, asText(data.amount), selectedPackage, asText(data.accountNumber)) : ''
+        : whatsappHref(data.whatsapp, pageTitle, asText(data.amount), null, asText(data.accountNumber)) || safeHref(data.buttonUrl);
       const ctaBeforePrice = asText(data.ctaBeforePrice).trim();
       const originalAmount = asText(data.originalAmount).trim();
+      const selectedAmount = selectedPackage?.price.trim() || asText(data.amount);
+      const selectedOriginalAmount = selectedPackage?.originalPrice.trim() || originalAmount;
       return (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-6 shadow-sm md:p-8">
           <div className="grid gap-6 md:grid-cols-[minmax(0,1fr)_230px] md:items-center">
             <div>
               {ctaBeforePrice && <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{ctaBeforePrice}</p>}
               <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Informasi pembayaran')}</h2>
-              {(originalAmount || asText(data.amount)) && <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">{originalAmount && <span className="text-base font-semibold text-[var(--muted)] line-through">{originalAmount}</span>}{asText(data.amount) && <p className="text-2xl font-bold text-[var(--accent-strong)]">{asText(data.amount)}</p>}</div>}
+              {hasPricingBlock && !selectedPackage ? <p className="mt-3 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-3 text-sm leading-relaxed text-[var(--muted)]">Pilih salah satu paket di atas untuk melihat total pembayaran dan melanjutkan konfirmasi.</p> : <>{selectedPackage && <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Paket dipilih</p><p className="mt-1 font-semibold">{selectedPackage.name || 'Paket pilihan'}</p>{selectedPackage.features.length > 0 && <ul className="mt-2 space-y-1 text-xs leading-relaxed text-[var(--muted)]">{selectedPackage.features.map((feature, index) => <li key={`${feature}-${index}`} className="flex items-start gap-2"><Check size={13} className="mt-0.5 shrink-0 text-[var(--success-text)]" /> <span>{feature}</span></li>)}</ul>}</div>}{(selectedOriginalAmount || selectedAmount) && <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">{selectedOriginalAmount && <span className="text-base font-semibold text-[var(--muted)] line-through">{selectedOriginalAmount}</span>}{selectedAmount && <p className="text-2xl font-bold text-[var(--accent-strong)]">{selectedAmount}</p>}</div>}</>}
               <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{asText(data.instructions, 'Tambahkan instruksi pembayaran.')}</p>
               {asText(data.accountNumber) && <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Nomor rekening</p><p className="mt-1 break-words text-sm font-semibold">{asText(data.accountNumber)}</p></div>}
-              {confirmationHref && <a href={confirmationHref} onClick={() => onCtaClick?.('payment')} className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-5 py-3 text-sm font-semibold text-white hover:brightness-95">{asText(data.buttonLabel, 'Konfirmasi melalui WhatsApp')} <ExternalLink size={15} /></a>}
+              {confirmationHref ? <a href={confirmationHref} onClick={() => onCtaClick?.('payment')} className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-5 py-3 text-sm font-semibold text-white hover:brightness-95">{asText(data.buttonLabel, 'Konfirmasi melalui WhatsApp')} <ExternalLink size={15} /></a> : selectedPackage && <p className="mt-4 text-xs leading-relaxed text-[var(--muted)]">Nomor WhatsApp konfirmasi belum diatur oleh penyelenggara.</p>}
             </div>
             <div className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-center">
               <p className="mb-3 text-xs font-semibold text-[var(--muted)]">QR Code pembayaran</p>
@@ -935,22 +1027,32 @@ const LandingPageShell: React.FC<{ page: LandingPage; children: React.ReactNode;
   </div>
 );
 
-const LandingPagePreview: React.FC<{ page: LandingPage; editable?: boolean; selectedBlockId?: string; onSelect?: (id: string) => void; onDrop?: (event: React.DragEvent, index: number) => void; onDragStart?: (event: React.DragEvent, blockId: string) => void; onMove?: (index: number, direction: -1 | 1) => void; onRemove?: (id: string) => void }> = ({ page, editable = false, selectedBlockId, onSelect, onDrop, onDragStart, onMove, onRemove }) => (
-  <LandingPageShell page={page} preview={editable}>
-    {page.blocks.length === 0 && editable ? <div onDragOver={event => event.preventDefault()} onDrop={event => onDrop?.(event, 0)} className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] text-sm text-[var(--muted)]">Tarik elemen ke sini atau pilih elemen dari panel kiri.</div> : page.blocks.map((block, index) => (
-      <div key={block.id} draggable={editable} onDragStart={event => onDragStart?.(event, block.id)} onDragOver={event => { if (editable) event.preventDefault(); }} onDrop={event => onDrop?.(event, index)} onClick={event => { if (!editable) return; event.preventDefault(); onSelect?.(block.id); }} className={`group relative rounded-3xl transition-shadow ${editable ? `cursor-grab ${selectedBlockId === block.id ? 'ring-2 ring-[var(--accent)] ring-offset-2' : 'hover:ring-2 hover:ring-[var(--accent-soft)]'}` : ''}`}>
-        {editable && <div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/95 p-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
-          <span className="px-1 text-[var(--muted)]" title="Tarik untuk mengurutkan"><GripVertical size={15} /></span>
-          <button type="button" aria-label={`Naikkan ${LANDING_BLOCK_LABELS[block.type]}`} disabled={index === 0} onClick={event => { event.stopPropagation(); onMove?.(index, -1); }} className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--surface-soft)] disabled:opacity-30"><MoveUp size={14} /></button>
-          <button type="button" aria-label={`Turunkan ${LANDING_BLOCK_LABELS[block.type]}`} disabled={index === page.blocks.length - 1} onClick={event => { event.stopPropagation(); onMove?.(index, 1); }} className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--surface-soft)] disabled:opacity-30"><MoveDown size={14} /></button>
-          <button type="button" aria-label={`Hapus ${LANDING_BLOCK_LABELS[block.type]}`} onClick={event => { event.stopPropagation(); onRemove?.(block.id); }} className="rounded-lg p-1.5 text-[var(--danger-text)] hover:bg-[var(--danger-soft)]"><Trash2 size={14} /></button>
-        </div>}
-        <LandingBlockRenderer block={block} pageTitle={page.title} />
-      </div>
-    ))}
-    {editable && page.blocks.length > 0 && <div onDragOver={event => event.preventDefault()} onDrop={event => onDrop?.(event, page.blocks.length)} className="h-8 rounded-xl border border-dashed border-transparent transition-colors hover:border-[var(--border-strong)]" aria-label="Taruh elemen di bagian paling bawah" />}
-  </LandingPageShell>
-);
+const LandingPagePreview: React.FC<{ page: LandingPage; editable?: boolean; selectedBlockId?: string; onSelect?: (id: string) => void; onDrop?: (event: React.DragEvent, index: number) => void; onDragStart?: (event: React.DragEvent, blockId: string) => void; onMove?: (index: number, direction: -1 | 1) => void; onRemove?: (id: string) => void }> = ({ page, editable = false, selectedBlockId, onSelect, onDrop, onDragStart, onMove, onRemove }) => {
+  const [selectedPackage, setSelectedPackage] = useState<LandingPricingPackage | null>(null);
+  const hasPricingBlock = page.blocks.some(block => block.type === 'pricing');
+
+  useEffect(() => {
+    const packages = getPricingPackagesForPage(page);
+    setSelectedPackage(current => current ? packages.find(item => item.id === current.id) || packages[0] || null : packages[0] || null);
+  }, [page]);
+
+  return (
+    <LandingPageShell page={page} preview={editable}>
+      {page.blocks.length === 0 && editable ? <div onDragOver={event => event.preventDefault()} onDrop={event => onDrop?.(event, 0)} className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] text-sm text-[var(--muted)]">Tarik elemen ke sini atau pilih elemen dari panel kiri.</div> : page.blocks.map((block, index) => (
+        <div key={block.id} draggable={editable} onDragStart={event => onDragStart?.(event, block.id)} onDragOver={event => { if (editable) event.preventDefault(); }} onDrop={event => onDrop?.(event, index)} onClick={event => { if (!editable) return; event.preventDefault(); onSelect?.(block.id); }} className={`group relative rounded-3xl transition-shadow ${editable ? `cursor-grab ${selectedBlockId === block.id ? 'ring-2 ring-[var(--accent)] ring-offset-2' : 'hover:ring-2 hover:ring-[var(--accent-soft)]'}` : ''}`}>
+          {editable && <div className="absolute right-3 top-3 z-10 flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/95 p-1 opacity-0 shadow-sm transition-opacity group-hover:opacity-100 group-focus-within:opacity-100">
+            <span className="px-1 text-[var(--muted)]" title="Tarik untuk mengurutkan"><GripVertical size={15} /></span>
+            <button type="button" aria-label={`Naikkan ${LANDING_BLOCK_LABELS[block.type]}`} disabled={index === 0} onClick={event => { event.stopPropagation(); onMove?.(index, -1); }} className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--surface-soft)] disabled:opacity-30"><MoveUp size={14} /></button>
+            <button type="button" aria-label={`Turunkan ${LANDING_BLOCK_LABELS[block.type]}`} disabled={index === page.blocks.length - 1} onClick={event => { event.stopPropagation(); onMove?.(index, 1); }} className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--surface-soft)] disabled:opacity-30"><MoveDown size={14} /></button>
+            <button type="button" aria-label={`Hapus ${LANDING_BLOCK_LABELS[block.type]}`} onClick={event => { event.stopPropagation(); onRemove?.(block.id); }} className="rounded-lg p-1.5 text-[var(--danger-text)] hover:bg-[var(--danger-soft)]"><Trash2 size={14} /></button>
+          </div>}
+          <LandingBlockRenderer block={block} pageTitle={page.title} selectedPackage={selectedPackage} onSelectPackage={setSelectedPackage} hasPricingBlock={hasPricingBlock} />
+        </div>
+      ))}
+      {editable && page.blocks.length > 0 && <div onDragOver={event => event.preventDefault()} onDrop={event => onDrop?.(event, page.blocks.length)} className="h-8 rounded-xl border border-dashed border-transparent transition-colors hover:border-[var(--border-strong)]" aria-label="Taruh elemen di bagian paling bawah" />}
+    </LandingPageShell>
+  );
+};
 
 const ImageUploader: React.FC<{ label: string; value: string; onChange: (value: string) => void; preservePng?: boolean }> = ({ label, value, onChange, preservePng = false }) => {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -1191,6 +1293,43 @@ const LandingBonusEditor: React.FC<{ items: LandingBonusItem[]; onChange: (items
   );
 };
 
+const LandingPricingEditor: React.FC<{ items: LandingPricingPackage[]; onChange: (items: LandingPricingPackage[]) => void }> = ({ items, onChange }) => {
+  const maxPackages = 12;
+  const updateItem = (index: number, patch: Partial<LandingPricingPackage>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const addItem = () => {
+    if (items.length >= maxPackages) return;
+    onChange([...items, createPricingPackage(items.length)]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted)]">Daftar paket</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Pengunjung memilih salah satu paket sebelum melihat total pembayaran dan QR Code.</p>
+        </div>
+        <span className="shrink-0 text-[11px] text-[var(--muted)]">{items.length}/{maxPackages}</span>
+      </div>
+      {items.length ? items.map((item, index) => (
+        <div key={`pricing-editor-${item.id}-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Paket {index + 1}</p>
+            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus paket ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+          </div>
+          <Input label="Nama paket" value={item.name} onChange={event => updateItem(index, { name: event.target.value })} placeholder="Contoh: Paket Pro" />
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Harga paket" value={item.price} onChange={event => updateItem(index, { price: event.target.value })} placeholder="Contoh: Rp 250.000" />
+            <Input label="Harga coret (opsional)" value={item.originalPrice} onChange={event => updateItem(index, { originalPrice: event.target.value })} placeholder="Contoh: Rp 350.000" />
+          </div>
+          <Textarea label="Deskripsi paket (opsional)" value={item.description} onChange={event => updateItem(index, { description: event.target.value })} placeholder="Jelaskan paket ini cocok untuk siapa." className="min-h-[90px]" />
+          <Textarea label="Benefit paket (satu per baris)" value={item.features.join('\n')} onChange={event => updateItem(index, { features: event.target.value.split('\n').map(value => value.trim()).filter(Boolean) })} placeholder={'Akses kelas selamanya\nTemplate siap pakai\nSupport grup'} className="min-h-[110px]" />
+        </div>
+      )) : <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 py-6 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada paket. Tambahkan paket pertama agar pengunjung dapat memilih produk.</div>}
+      <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxPackages}>Tambah paket</Button>
+    </div>
+  );
+};
+
 const pipeItemsToText = (items: Array<{ title: string; description: string }>) => items.map(item => `${item.title} | ${item.description}`).join('\n');
 const textToPipeItems = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean).map(line => { const [title, ...description] = line.split('|'); return { title: title.trim(), description: description.join('|').trim() }; });
 const faqItemsToText = (items: Array<{ question: string; answer: string }>) => items.map(item => `${item.question} | ${item.answer}`).join('\n');
@@ -1200,6 +1339,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const data = block.data || {};
   const patch = (values: Record<string, any>) => onChange({ ...data, ...values });
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
+  const pricingButtonFields = <div className="space-y-2"><Input label="Label tombol pilihan paket" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Pilih paket" /><p className="text-[11px] leading-relaxed text-[var(--muted)]">Setelah memilih paket, pengunjung akan melihat total pembayaran dan QR Code di blok Pembayaran.</p></div>;
   const hasHeadingColor = ['hero', 'text', 'features', 'pricing', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
@@ -1241,8 +1381,19 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
       return <div className="space-y-4"><Input label="Link YouTube" value={asText(data.url)} onChange={event => patch({ url: event.target.value })} icon={LinkIcon} placeholder="https://youtube.com/watch?v=..." /><Textarea label="Keterangan video" value={asText(data.caption)} onChange={event => patch({ caption: event.target.value })} /></div>;
     case 'features':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Manfaat (satu per baris, format: Judul | Deskripsi)" value={pipeItemsToText(normalizeLineItems(data.items, []))} onChange={event => patch({ items: textToPipeItems(event.target.value) })} className="min-h-[180px]" /></div>;
-    case 'pricing':
-      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Input label="Nominal / harga" value={asText(data.price)} onChange={event => patch({ price: event.target.value })} /><Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><Textarea label="Isi paket (satu per baris)" value={Array.isArray(data.features) ? data.features.join('\n') : ''} onChange={event => patch({ features: event.target.value.split('\n').map(value => value.trim()).filter(Boolean) })} />{commonButtonFields}</div>;
+    case 'pricing': {
+      const items = normalizePricingPackages(data.packages, data);
+      const updateItems = (nextItems: LandingPricingPackage[]) => {
+        const first = nextItems[0];
+        patch({
+          packages: nextItems,
+          price: first?.price || '',
+          body: first?.description || asText(data.body),
+          features: first?.features || []
+        });
+      };
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Deskripsi bagian (opsional)" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} placeholder="Arahkan pengunjung untuk memilih paket yang paling sesuai." className="min-h-[90px]" /><LandingPricingEditor items={items} onChange={updateItems} />{pricingButtonFields}</div>;
+    }
     case 'testimonial': {
       const items = normalizeTestimonialItems(data.items, data);
       const updateItems = (nextItems: LandingTestimonialItem[]) => {
@@ -1260,7 +1411,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
     case 'faq':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="FAQ (satu per baris, format: Pertanyaan | Jawaban)" value={faqItemsToText(normalizeFaqItems(data.items, []))} onChange={event => patch({ items: textToFaqItems(event.target.value) })} className="min-h-[200px]" /></div>;
     case 'payment':
-      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Input label="CTA sebelum harga (opsional)" value={asText(data.ctaBeforePrice)} onChange={event => patch({ ctaBeforePrice: event.target.value })} placeholder="Contoh: Dapatkan harga promo hari ini" /><Input label="Harga coret (opsional)" value={asText(data.originalAmount)} onChange={event => patch({ originalAmount: event.target.value })} placeholder="Contoh: Rp 350.000" /><Input label="Nominal pembayaran" value={asText(data.amount)} onChange={event => patch({ amount: event.target.value })} placeholder="Contoh: Rp 250.000" /><Textarea label="Instruksi pembayaran" value={asText(data.instructions)} onChange={event => patch({ instructions: event.target.value })} /><Input label="Nomor rekening (opsional)" value={asText(data.accountNumber)} onChange={event => patch({ accountNumber: event.target.value })} /><Input label="WhatsApp konfirmasi (opsional)" value={asText(data.whatsapp)} onChange={event => patch({ whatsapp: event.target.value })} placeholder="62812xxxxxxx" /><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} /><ImageUploader label="QR Code pembayaran" value={asText(data.qrCode)} onChange={value => patch({ qrCode: value })} preservePng /><Input label="URL QR Code (opsional)" value={asText(data.qrCode).startsWith('data:') ? '' : asText(data.qrCode)} onChange={event => patch({ qrCode: event.target.value })} placeholder="https://.../qr.png" /></div>;
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<p className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-[11px] leading-relaxed text-[var(--muted)]">Gunakan blok ini setelah blok Harga/Paket. Setelah pengunjung memilih paket, total dan benefitnya akan tampil di sini sebelum konfirmasi WhatsApp.</p><Input label="CTA sebelum harga (opsional)" value={asText(data.ctaBeforePrice)} onChange={event => patch({ ctaBeforePrice: event.target.value })} placeholder="Contoh: Selesaikan pembayaran" /><Input label="Harga coret (opsional)" value={asText(data.originalAmount)} onChange={event => patch({ originalAmount: event.target.value })} placeholder="Contoh: Rp 350.000" /><Input label="Nominal pembayaran" value={asText(data.amount)} onChange={event => patch({ amount: event.target.value })} placeholder="Dipakai jika tidak ada paket" /><Textarea label="Instruksi pembayaran" value={asText(data.instructions)} onChange={event => patch({ instructions: event.target.value })} placeholder="Pilih paket, bayar melalui QR Code/rekening, lalu kirim bukti pembayaran melalui WhatsApp." /><Input label="Nomor rekening (opsional)" value={asText(data.accountNumber)} onChange={event => patch({ accountNumber: event.target.value })} /><Input label="WhatsApp konfirmasi (opsional)" value={asText(data.whatsapp)} onChange={event => patch({ whatsapp: event.target.value })} placeholder="62812xxxxxxx" /><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} /><ImageUploader label="QR Code pembayaran" value={asText(data.qrCode)} onChange={value => patch({ qrCode: value })} preservePng /><Input label="URL QR Code (opsional)" value={asText(data.qrCode).startsWith('data:') ? '' : asText(data.qrCode)} onChange={event => patch({ qrCode: event.target.value })} placeholder="https://.../qr.png" /></div>;
     case 'bonus': {
       const items = normalizeBonusItems(data.items, data);
       const updateItems = (nextItems: LandingBonusItem[]) => {
@@ -1750,6 +1901,7 @@ export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: strin
   const { slug: routeSlug } = useParams<{ slug: string }>();
   const slug = slugOverride || routeSlug;
   const [page, setPage] = useState<LandingPage | null>(null);
+  const [selectedPackage, setSelectedPackage] = useState<LandingPricingPackage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const trackedViewRef = useRef<string | null>(null);
@@ -1764,7 +1916,9 @@ export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: strin
     const { data, error } = await client.rpc('get_public_landing_page', { p_slug: decodeURIComponent(slug) });
     if (error || !data) setLoadError(errorMessage(error || 'Landing page tidak ditemukan.'));
     else {
-      setPage(mapLandingRow(data));
+      const mappedPage = mapLandingRow(data);
+      setPage(mappedPage);
+      setSelectedPackage(getFirstPricingPackage(mappedPage));
       setLoadError(null);
     }
     setIsLoading(false);
@@ -1794,7 +1948,8 @@ export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: strin
 
   if (isLoading) return <div className="flex min-h-screen items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat landing page...</div>;
   if (loadError || !page) return <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md space-y-5 py-10 text-center"><XCircle size={34} className="mx-auto text-[var(--danger-text)]" /><div><h1 className="text-xl font-bold">Landing page tidak dapat dibuka</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{loadError}</p></div><Button icon={Loader2} onClick={() => void fetchPage()} className="mx-auto w-full">Coba Lagi</Button></Card></div>;
-  return <LandingPageShell page={page}><>{page.blocks.map(block => <LandingBlockRenderer key={block.id} block={block} pageTitle={page.title} onCtaClick={handleCtaClick} />)}</></LandingPageShell>;
+  const hasPricingBlock = page.blocks.some(block => block.type === 'pricing');
+  return <LandingPageShell page={page}><>{page.blocks.map(block => <LandingBlockRenderer key={block.id} block={block} pageTitle={page.title} onCtaClick={handleCtaClick} selectedPackage={selectedPackage} onSelectPackage={setSelectedPackage} hasPricingBlock={hasPricingBlock} />)}</></LandingPageShell>;
 };
 
 export { createLandingShareLink };
