@@ -222,7 +222,7 @@ export interface FormResponse {
 }
 
 export type LandingPageStatus = 'draft' | 'published' | 'archived';
-export type LandingBlockType = 'hero' | 'text' | 'image' | 'features' | 'pricing' | 'testimonial' | 'faq' | 'cta' | 'payment' | 'video' | 'bonus' | 'spacer';
+export type LandingBlockType = 'hero' | 'text' | 'image' | 'features' | 'topics' | 'pricing' | 'testimonial' | 'faq' | 'cta' | 'payment' | 'video' | 'bonus' | 'spacer';
 
 export interface LandingBlock {
   id: string;

@@ -123,6 +123,7 @@ const LANDING_BLOCK_OPTIONS: Array<{
   { value: 'image', label: 'Gambar', description: 'Galeri foto atau banner produk', icon: ImagePlus },
   { value: 'video', label: 'Video', description: 'Video demo atau testimoni', icon: Video },
   { value: 'features', label: 'Manfaat', description: 'Keunggulan dalam grid', icon: Star },
+  { value: 'topics', label: 'Topik bahasan', description: 'Kategori dengan daftar poin', icon: List },
   { value: 'pricing', label: 'Harga', description: 'Paket dan harga produk', icon: CreditCard },
   { value: 'testimonial', label: 'Testimoni', description: 'Bukti sosial dari pelanggan', icon: Quote },
   { value: 'faq', label: 'FAQ', description: 'Pertanyaan yang sering ditanya', icon: Layout },
@@ -146,6 +147,7 @@ type LandingVideoItem = {
   startSeconds: number;
   endSeconds: number | null;
 };
+type LandingTopicCategory = { id: string; title: string; items: string[] };
 type LandingTestimonialItem = { quote: string; name: string; role: string; rating: number };
 type LandingBonusItem = { title: string; body: string; imageUrl: string; imageAlt: string; caption: string };
 type LandingPricingPackage = {
@@ -238,6 +240,31 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
         { title: 'Dukungan berkelanjutan', description: 'Ada panduan dan bantuan saat Anda membutuhkannya.' }
       ]
     },
+    topics: {
+      heading: 'Hal yang Bisa Kita Bahas',
+      intro: '',
+      categories: [
+        {
+          id: 'landing-topic-default-1',
+          title: 'Strategi dan Optimasi Akun',
+          items: [
+            'Audit kondisi akun.',
+            'Penentuan positioning dan target audiens.',
+            'Evaluasi content pillar dan content value.',
+            'Identifikasi peluang optimasi.'
+          ]
+        },
+        {
+          id: 'landing-topic-default-2',
+          title: 'Sistem dan Manajemen Konten',
+          items: [
+            'Sistem pencarian dan pengelolaan ide.',
+            'Content planning dan editorial calendar.',
+            'Alur produksi, revisi, approval, hingga publikasi.'
+          ]
+        }
+      ]
+    },
     pricing: {
       heading: 'Dapatkan akses sekarang',
       packages: [{
@@ -319,6 +346,21 @@ const normalizeLineItems = (value: unknown, fallback: Array<{ title: string; des
     title: asText(item?.title),
     description: asText(item?.description)
   })).filter(item => item.title || item.description);
+};
+
+const createTopicCategory = (index = 0): LandingTopicCategory => ({
+  id: `landing-topic-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+  title: `Kategori ${index + 1}`,
+  items: ['Poin pembahasan pertama.']
+});
+
+const normalizeTopicCategories = (value: unknown, fallback: LandingTopicCategory[] = []): LandingTopicCategory[] => {
+  if (!Array.isArray(value)) return fallback;
+  return value.slice(0, 12).map((item, index) => ({
+    id: asText(item?.id, `landing-topic-${index}`),
+    title: asText(item?.title),
+    items: Array.isArray(item?.items ?? item?.points) ? (item?.items ?? item?.points).map((point: unknown) => asText(point)) : []
+  }));
 };
 
 const createPricingPackage = (index = 0): LandingPricingPackage => ({
@@ -494,6 +536,7 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
     data.features = Array.isArray(rawData.features) ? rawData.features.map((item: unknown) => asText(item)).filter(Boolean) : firstPackage?.features || fallback.data.features;
   }
   if (type === 'faq') data.items = normalizeFaqItems(rawData.items, fallback.data.items);
+  if (type === 'topics') data.categories = normalizeTopicCategories(rawData.categories, fallback.data.categories);
   if (type === 'image') {
     data.images = normalizeImageItems(rawData.images, rawData);
     data.layout = (['slider', 'marquee', 'row'].includes(rawData.layout) ? rawData.layout : fallback.data.layout) as LandingImageLayout;
@@ -1047,6 +1090,31 @@ const LandingVideoGalleryBlock: React.FC<{ data: Record<string, any> }> = ({ dat
   );
 };
 
+const LandingTopicsBlock: React.FC<{ data: Record<string, any> }> = ({ data }) => {
+  const categories = normalizeTopicCategories(data.categories, []).filter(category => category.title.trim() || category.items.some(item => item.trim()));
+  return (
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm md:p-8" aria-label="Topik bahasan">
+      <h2 className="text-2xl font-bold md:text-3xl" style={{ color: headingColorValue(data.headingColor) }}>{asText(data.heading, 'Hal yang Bisa Kita Bahas')}</h2>
+      {asText(data.intro).trim() && <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{asText(data.intro)}</p>}
+      {categories.length ? (
+        <div className="mt-7 space-y-7">
+          {categories.map((category, index) => {
+            const points = category.items.map(item => item.trim()).filter(Boolean);
+            return (
+              <div key={`${category.id}-${index}`}>
+                {category.title.trim() && <h3 className="text-xl font-bold leading-tight md:text-2xl">{category.title.trim()}</h3>}
+                {points.length > 0 && <ul className="mt-4 list-disc space-y-2 pl-6 text-sm leading-relaxed text-[var(--muted)] md:text-base">{points.map((point, pointIndex) => <li key={`${category.id}-point-${pointIndex}`}>{point}</li>)}</ul>}
+              </div>
+            );
+          })}
+        </div>
+      ) : (
+        <div className="mt-6 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 py-8 text-center text-sm text-[var(--muted)]">Tambahkan kategori dan poin pembahasan dari pengaturan blok.</div>
+      )}
+    </section>
+  );
+};
+
 const LandingTestimonialCard: React.FC<{ item: LandingTestimonialItem; index: number }> = ({ item, index }) => {
   const rating = normalizeTestimonialRating(item.rating);
   const displayName = item.name.trim() || 'Pelanggan';
@@ -1215,6 +1283,8 @@ export const LandingBlockRenderer: React.FC<{
           </div>
         </section>
       );
+    case 'topics':
+      return <LandingTopicsBlock data={data} />;
     case 'pricing':
       const pricingPackages = normalizePricingPackages(data.packages, data);
       const pricingButtonLabel = asText(data.buttonLabel, 'Pilih paket');
@@ -1587,6 +1657,38 @@ const LandingVideoEditor: React.FC<{
   );
 };
 
+const LandingTopicsEditor: React.FC<{ items: LandingTopicCategory[]; onChange: (items: LandingTopicCategory[]) => void }> = ({ items, onChange }) => {
+  const maxCategories = 12;
+  const updateItem = (index: number, patch: Partial<LandingTopicCategory>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const addItem = () => {
+    if (items.length >= maxCategories) return;
+    onChange([...items, createTopicCategory(items.length)]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted)]">Kategori topik</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Setiap kategori akan tampil sebagai subjudul dengan daftar bullet di bawahnya.</p>
+        </div>
+        <span className="shrink-0 text-[11px] text-[var(--muted)]">{items.length}/{maxCategories}</span>
+      </div>
+      {items.length ? items.map((item, index) => (
+        <div key={`${item.id}-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Kategori {index + 1}</p>
+            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus kategori ${index + 1}`} title={`Hapus kategori ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+          </div>
+          <Input label="Nama kategori / subjudul" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Strategi dan Optimasi Akun" />
+          <Textarea label="Poin pembahasan (satu per baris)" value={item.items.join('\n')} onChange={event => updateItem(index, { items: event.target.value.split('\n') })} placeholder={'Audit kondisi akun.\nPenentuan positioning dan target audiens.\nEvaluasi content pillar.'} className="min-h-[140px]" />
+        </div>
+      )) : <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada kategori. Tambahkan kategori pertama untuk menampilkan daftar topik.</div>}
+      <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxCategories}>Tambah kategori</Button>
+    </div>
+  );
+};
+
 const LandingTestimonialEditor: React.FC<{ items: LandingTestimonialItem[]; onChange: (items: LandingTestimonialItem[]) => void }> = ({ items, onChange }) => {
   const maxTestimonials = 20;
   const updateItem = (index: number, patch: Partial<LandingTestimonialItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
@@ -1707,7 +1809,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const patch = (values: Record<string, any>) => onChange({ ...data, ...values });
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
   const pricingButtonFields = <div className="space-y-2"><Input label="Label tombol pilihan paket" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Pilih paket" /><p className="text-[11px] leading-relaxed text-[var(--muted)]">Setelah memilih paket, pengunjung akan melihat total pembayaran dan QR Code di blok Pembayaran.</p></div>;
-  const hasHeadingColor = ['hero', 'text', 'features', 'pricing', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
+  const hasHeadingColor = ['hero', 'text', 'features', 'topics', 'pricing', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero':
@@ -1762,6 +1864,10 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
     }
     case 'features':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Manfaat (satu per baris, format: Judul | Deskripsi)" value={pipeItemsToText(normalizeLineItems(data.items, []))} onChange={event => patch({ items: textToPipeItems(event.target.value) })} className="min-h-[180px]" /></div>;
+    case 'topics': {
+      const items = normalizeTopicCategories(data.categories, []);
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Pembuka (opsional)" value={asText(data.intro)} onChange={event => patch({ intro: event.target.value })} placeholder="Jelaskan secara singkat topik yang akan dibahas." className="min-h-[90px]" /><LandingTopicsEditor items={items} onChange={categories => patch({ categories })} /></div>;
+    }
     case 'pricing': {
       const items = normalizePricingPackages(data.packages, data);
       const updateItems = (nextItems: LandingPricingPackage[]) => {
