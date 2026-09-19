@@ -903,17 +903,14 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
   return <main className="min-h-screen px-2 py-4 sm:px-4 md:px-5 md:py-6" style={{ background: theme.background, ['--one-to-one-accent' as any]: accent }}>
     <div className="mx-auto w-full max-w-[1180px] space-y-4">
       <section className="overflow-hidden rounded-3xl border border-white/70 bg-white shadow-sm" style={{ borderTopColor: accent }}>
-        <div className="px-3 pb-4 pt-3 sm:px-5 sm:pb-5 sm:pt-4 md:px-6">
-          <div className="relative isolate min-h-[300px] overflow-hidden rounded-2xl bg-slate-100 shadow-inner md:min-h-[360px]">
+        <div className="relative isolate min-h-[300px] overflow-hidden bg-slate-100 md:min-h-[360px]">
             {data.coverImageUrl ? <img src={data.coverImageUrl} alt="Banner ruang 1:1" className="absolute inset-0 h-full w-full object-cover" /> : <div className="absolute inset-0" style={{ background: `linear-gradient(120deg, ${accent}35, ${accent}0d)` }} aria-label="Banner ruang 1:1" />}
             <div className="absolute inset-0" style={{ background: 'linear-gradient(180deg, rgba(15, 23, 42, 0.16) 0%, rgba(255, 255, 255, 0.02) 38%, rgba(255, 255, 255, 0.86) 82%, rgba(255, 255, 255, 1) 100%)' }} aria-hidden="true" />
             <div className="relative z-10 flex min-h-[300px] flex-col items-center px-4 pb-6 pt-5 text-center md:min-h-[360px] md:px-8 md:pb-8 md:pt-6">
               <div className="flex flex-wrap items-center justify-center gap-3" aria-label="Branding Arunika">
-                <div className="rounded-xl bg-white/90 p-2 shadow-sm backdrop-blur-sm">
-                  <img src={logoUtama} alt="Arunika" className="h-9 w-auto object-contain md:h-11" />
-                </div>
-                {data.logoUrl && <span className="h-7 w-px bg-white/80" aria-hidden="true" />}
-                {data.logoUrl && <div className="rounded-xl bg-white/90 p-2 shadow-sm backdrop-blur-sm"><img src={data.logoUrl} alt="Logo ruang" className="h-9 max-w-[130px] object-contain md:h-11" /></div>}
+                <img src={logoUtama} alt="Arunika" className="h-9 w-auto object-contain drop-shadow-md md:h-11" />
+                {data.logoUrl && <span className="h-7 w-px bg-slate-900/25" aria-hidden="true" />}
+                {data.logoUrl && <img src={data.logoUrl} alt="Logo ruang" className="h-9 max-w-[130px] object-contain drop-shadow-md md:h-11" />}
               </div>
               <div className="mt-4 max-w-2xl">
                 <p className="text-[10px] font-bold uppercase tracking-[0.18em] text-slate-700">Ruang 1:1 personal</p>
@@ -924,11 +921,10 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
                 <h2 className="text-3xl font-extrabold tracking-tight text-slate-950 md:text-5xl">{greeting}</h2>
                 {data.welcomeTitle && data.welcomeTitle !== greeting && <p className="mt-2 text-base font-semibold text-slate-800 md:text-lg">{data.welcomeTitle}</p>}
                 {data.welcomeMessage && <p className="mx-auto mt-2 max-w-2xl whitespace-pre-line text-sm leading-relaxed text-slate-700 md:text-base">{data.welcomeMessage}</p>}
+                {data.mentorName && <div className="mt-3 flex items-center justify-center gap-3 text-center">{data.mentorAvatarUrl ? <img src={data.mentorAvatarUrl} alt={data.mentorName} className="h-8 w-8 rounded-full object-cover shadow-sm" /> : <div className="flex h-8 w-8 items-center justify-center rounded-full bg-slate-900/10"><UserRound size={15} /></div>}<div><p className="text-sm font-bold text-slate-800">{data.mentorName}</p><p className="text-xs text-slate-500">{data.mentorRole || 'Mentor'}</p></div></div>}
               </div>
             </div>
           </div>
-          {data.mentorName && <div className="mt-4 flex items-center justify-center gap-3 text-center">{data.mentorAvatarUrl ? <img src={data.mentorAvatarUrl} alt={data.mentorName} className="h-9 w-9 rounded-full object-cover" /> : <div className="flex h-9 w-9 items-center justify-center rounded-full bg-slate-100"><UserRound size={16} /></div>}<div><p className="text-sm font-bold text-slate-800">{data.mentorName}</p><p className="text-xs text-slate-500">{data.mentorRole || 'Mentor'}</p></div></div>}
-        </div>
       </section>
 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(270px,0.8fr)]">
