@@ -124,6 +124,7 @@ const LANDING_BLOCK_OPTIONS: Array<{
   { value: 'video', label: 'Video', description: 'Video demo atau testimoni', icon: Video },
   { value: 'features', label: 'Manfaat', description: 'Keunggulan dalam grid', icon: Star },
   { value: 'topics', label: 'Topik bahasan', description: 'Kategori dengan daftar poin', icon: List },
+  { value: 'workflow', label: 'Workflow', description: 'Tahapan proses bernomor', icon: ListOrdered },
   { value: 'pricing', label: 'Harga', description: 'Paket dan harga produk', icon: CreditCard },
   { value: 'testimonial', label: 'Testimoni', description: 'Bukti sosial dari pelanggan', icon: Quote },
   { value: 'faq', label: 'FAQ', description: 'Pertanyaan yang sering ditanya', icon: Layout },
@@ -148,6 +149,8 @@ type LandingVideoItem = {
   endSeconds: number | null;
 };
 type LandingTopicCategory = { id: string; title: string; items: string[] };
+type LandingWorkflowLayout = 'vertical' | 'horizontal';
+type LandingWorkflowStep = { id: string; label: string; title: string; description: string };
 type LandingTestimonialItem = { quote: string; name: string; role: string; rating: number };
 type LandingBonusItem = { title: string; body: string; imageUrl: string; imageAlt: string; caption: string };
 type LandingPricingPackage = {
@@ -265,6 +268,16 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
         }
       ]
     },
+    workflow: {
+      heading: 'Bagaimana prosesnya?',
+      intro: 'Ikuti beberapa langkah sederhana untuk mulai mendapatkan hasil yang lebih terarah.',
+      layout: 'vertical',
+      steps: [
+        { id: 'landing-workflow-default-1', label: '01', title: 'Pilih paket', description: 'Tentukan paket atau layanan yang paling sesuai dengan kebutuhan Anda.' },
+        { id: 'landing-workflow-default-2', label: '02', title: 'Lakukan pembayaran', description: 'Selesaikan pembayaran sesuai instruksi yang tersedia.' },
+        { id: 'landing-workflow-default-3', label: '03', title: 'Mulai proses', description: 'Anda akan menerima detail akses dan langkah berikutnya.' }
+      ]
+    },
     pricing: {
       heading: 'Dapatkan akses sekarang',
       packages: [{
@@ -362,6 +375,27 @@ const normalizeTopicCategories = (value: unknown, fallback: LandingTopicCategory
     items: Array.isArray(item?.items ?? item?.points) ? (item?.items ?? item?.points).map((point: unknown) => asText(point)) : []
   }));
 };
+
+const createWorkflowStep = (index = 0): LandingWorkflowStep => ({
+  id: `landing-workflow-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+  label: String(index + 1).padStart(2, '0'),
+  title: `Langkah ${index + 1}`,
+  description: 'Jelaskan apa yang perlu dilakukan pada tahap ini.'
+});
+
+const normalizeWorkflowSteps = (value: unknown, fallback: LandingWorkflowStep[] = []): LandingWorkflowStep[] => {
+  if (!Array.isArray(value)) return fallback;
+  return value.slice(0, 12).map((item, index) => ({
+    id: asText(item?.id, `landing-workflow-${index}`),
+    label: asText(item?.label, String(index + 1).padStart(2, '0')),
+    title: asText(item?.title),
+    description: asText(item?.description || item?.body)
+  }));
+};
+
+const normalizeWorkflowLayout = (value: unknown): LandingWorkflowLayout => (
+  ['vertical', 'horizontal'].includes(asText(value)) ? asText(value) as LandingWorkflowLayout : 'vertical'
+);
 
 const createPricingPackage = (index = 0): LandingPricingPackage => ({
   id: `landing-package-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
@@ -537,6 +571,10 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   }
   if (type === 'faq') data.items = normalizeFaqItems(rawData.items, fallback.data.items);
   if (type === 'topics') data.categories = normalizeTopicCategories(rawData.categories, fallback.data.categories);
+  if (type === 'workflow') {
+    data.steps = normalizeWorkflowSteps(rawData.steps, fallback.data.steps);
+    data.layout = normalizeWorkflowLayout(rawData.layout);
+  }
   if (type === 'image') {
     data.images = normalizeImageItems(rawData.images, rawData);
     data.layout = (['slider', 'marquee', 'row'].includes(rawData.layout) ? rawData.layout : fallback.data.layout) as LandingImageLayout;
@@ -1115,6 +1153,55 @@ const LandingTopicsBlock: React.FC<{ data: Record<string, any> }> = ({ data }) =
   );
 };
 
+const LandingWorkflowBlock: React.FC<{ data: Record<string, any> }> = ({ data }) => {
+  const steps = normalizeWorkflowSteps(data.steps, []).filter(step => step.label.trim() || step.title.trim() || step.description.trim());
+  const layout = normalizeWorkflowLayout(data.layout);
+  const heading = asText(data.heading, 'Bagaimana prosesnya?');
+  const intro = asText(data.intro).trim();
+
+  if (!steps.length) {
+    return <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-center text-sm text-[var(--muted)]">Tambahkan tahapan workflow dari pengaturan blok.</div>;
+  }
+
+  const renderStepContent = (step: LandingWorkflowStep, index: number, horizontal = false) => {
+    const marker = <div className={`flex shrink-0 items-center justify-center rounded-2xl bg-[var(--accent)] font-bold text-white shadow-sm ${horizontal ? 'h-14 w-14 text-sm' : 'h-11 w-11 text-xs'}`} aria-label={`Tahap ${index + 1}`}>{step.label.trim() || String(index + 1).padStart(2, '0')}</div>;
+    const copy = <div className={horizontal ? 'mt-4' : 'min-w-0'}>
+      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">Tahap {index + 1}</p>
+      <h3 className={`${horizontal ? 'mt-2 text-base' : 'mt-1 text-lg'} font-bold leading-tight`}>{step.title.trim() || `Langkah ${index + 1}`}</h3>
+      {step.description.trim() && <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{step.description.trim()}</p>}
+    </div>;
+    return horizontal ? <div className="flex flex-col items-center text-center">{marker}{copy}</div> : <>{marker}{copy}</>;
+  };
+
+  return (
+    <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm md:p-8" aria-label="Workflow">
+      <h2 className="text-2xl font-bold md:text-3xl" style={{ color: headingColorValue(data.headingColor) }}>{heading}</h2>
+      {intro && <p className="mt-3 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{intro}</p>}
+      {layout === 'horizontal' ? (
+        <div className="mt-8 overflow-x-auto pb-2">
+          <div className="flex min-w-max items-start">
+            {steps.map((step, index) => (
+              <div key={`${step.id}-${index}`} className="relative min-w-[210px] flex-1 px-4 first:pl-0 last:pr-0 sm:min-w-[240px]">
+                {renderStepContent(step, index, true)}
+                {index < steps.length - 1 && <span className="absolute left-[calc(50%+2rem)] right-[-1rem] top-7 h-px bg-[var(--border-strong)]" aria-hidden="true" />}
+              </div>
+            ))}
+          </div>
+        </div>
+      ) : (
+        <div className="mt-8 space-y-0">
+          {steps.map((step, index) => (
+            <div key={`${step.id}-${index}`} className="relative flex gap-4 pb-8 last:pb-0">
+              {index < steps.length - 1 && <span className="absolute bottom-0 left-[1.35rem] top-11 w-px -translate-x-1/2 bg-[var(--border-strong)]" aria-hidden="true" />}
+              {renderStepContent(step, index)}
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+};
+
 const LandingTestimonialCard: React.FC<{ item: LandingTestimonialItem; index: number }> = ({ item, index }) => {
   const rating = normalizeTestimonialRating(item.rating);
   const displayName = item.name.trim() || 'Pelanggan';
@@ -1285,6 +1372,8 @@ export const LandingBlockRenderer: React.FC<{
       );
     case 'topics':
       return <LandingTopicsBlock data={data} />;
+    case 'workflow':
+      return <LandingWorkflowBlock data={data} />;
     case 'pricing':
       const pricingPackages = normalizePricingPackages(data.packages, data);
       const pricingButtonLabel = asText(data.buttonLabel, 'Pilih paket');
@@ -1689,6 +1778,54 @@ const LandingTopicsEditor: React.FC<{ items: LandingTopicCategory[]; onChange: (
   );
 };
 
+const LandingWorkflowEditor: React.FC<{
+  items: LandingWorkflowStep[];
+  layout: LandingWorkflowLayout;
+  onChange: (items: LandingWorkflowStep[]) => void;
+  onLayoutChange: (layout: LandingWorkflowLayout) => void;
+}> = ({ items, layout, onChange, onLayoutChange }) => {
+  const maxSteps = 12;
+  const updateItem = (index: number, patch: Partial<LandingWorkflowStep>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const addItem = () => {
+    if (items.length >= maxSteps) return;
+    onChange([...items, createWorkflowStep(items.length)]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <label className="flex flex-col gap-2">
+        <span className="text-xs font-semibold text-[var(--muted)]">Tampilan workflow</span>
+        <select value={layout} onChange={event => onLayoutChange(event.target.value as LandingWorkflowLayout)} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">
+          <option value="vertical">Timeline vertikal</option>
+          <option value="horizontal">Tahapan horizontal</option>
+        </select>
+        <span className="text-[11px] leading-relaxed text-[var(--muted)]">Timeline vertikal lebih nyaman untuk penjelasan panjang; tampilan horizontal cocok untuk alur singkat.</span>
+      </label>
+      <div className="flex items-center justify-between gap-3">
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted)]">Tahapan workflow</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Urutan mengikuti posisi dari atas ke bawah.</p>
+        </div>
+        <span className="shrink-0 text-[11px] text-[var(--muted)]">{items.length}/{maxSteps}</span>
+      </div>
+      {items.length ? items.map((item, index) => (
+        <div key={`${item.id}-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Tahap {index + 1}</p>
+            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus tahap ${index + 1}`} title={`Hapus tahap ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-[100px_minmax(0,1fr)]">
+            <Input label="Label" value={item.label} onChange={event => updateItem(index, { label: event.target.value })} placeholder="01" />
+            <Input label="Judul tahap" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Konsultasi awal" />
+          </div>
+          <Textarea label="Deskripsi tahap" value={item.description} onChange={event => updateItem(index, { description: event.target.value })} placeholder="Jelaskan apa yang terjadi di tahap ini." className="min-h-[100px]" />
+        </div>
+      )) : <div className="flex min-h-28 items-center justify-center rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada tahap. Tambahkan tahap pertama untuk membuat alur kerja.</div>}
+      <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxSteps}>Tambah tahap</Button>
+    </div>
+  );
+};
+
 const LandingTestimonialEditor: React.FC<{ items: LandingTestimonialItem[]; onChange: (items: LandingTestimonialItem[]) => void }> = ({ items, onChange }) => {
   const maxTestimonials = 20;
   const updateItem = (index: number, patch: Partial<LandingTestimonialItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
@@ -1809,7 +1946,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const patch = (values: Record<string, any>) => onChange({ ...data, ...values });
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
   const pricingButtonFields = <div className="space-y-2"><Input label="Label tombol pilihan paket" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Pilih paket" /><p className="text-[11px] leading-relaxed text-[var(--muted)]">Setelah memilih paket, pengunjung akan melihat total pembayaran dan QR Code di blok Pembayaran.</p></div>;
-  const hasHeadingColor = ['hero', 'text', 'features', 'topics', 'pricing', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
+  const hasHeadingColor = ['hero', 'text', 'features', 'topics', 'workflow', 'pricing', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero':
@@ -1867,6 +2004,11 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
     case 'topics': {
       const items = normalizeTopicCategories(data.categories, []);
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Pembuka (opsional)" value={asText(data.intro)} onChange={event => patch({ intro: event.target.value })} placeholder="Jelaskan secara singkat topik yang akan dibahas." className="min-h-[90px]" /><LandingTopicsEditor items={items} onChange={categories => patch({ categories })} /></div>;
+    }
+    case 'workflow': {
+      const items = normalizeWorkflowSteps(data.steps, []);
+      const layout = normalizeWorkflowLayout(data.layout);
+      return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Pembuka (opsional)" value={asText(data.intro)} onChange={event => patch({ intro: event.target.value })} placeholder="Jelaskan secara singkat alur yang akan diikuti." className="min-h-[90px]" /><LandingWorkflowEditor items={items} layout={layout} onChange={steps => patch({ steps })} onLayoutChange={nextLayout => patch({ layout: nextLayout })} /></div>;
     }
     case 'pricing': {
       const items = normalizePricingPackages(data.packages, data);
