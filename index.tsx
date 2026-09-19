@@ -105,6 +105,7 @@ import {
 import { PublicQnaPage, QNA_SPACE_LABEL } from './components/QnaPages';
 import { QnaAdminCreatePage, QnaAdminDetailPage, QnaAdminListPage } from './components/QnaAdminPages';
 import { VideoClipperPage } from './components/VideoClipperPages';
+import { OneToOneEditorPage, OneToOneSpacePage, PublicOneToOnePage, ONE_TO_ONE_SPACE_LABEL } from './components/OneToOnePages';
 import logoUtama from './src/logo-utama.png';
 import faviconLogo from './src/favicon.png';
 
@@ -790,6 +791,9 @@ const Sidebar: React.FC<{
           </Link>
           <Link to="/admin/video-clipper" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/video-clipper'))} title="Video Clipper">
             <Scissors size={18} /><span className={labelClassName}>Video Clipper</span>
+          </Link>
+          <Link to="/admin/one-to-one" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/one-to-one'))} title={ONE_TO_ONE_SPACE_LABEL}>
+            <Users size={18} /><span className={labelClassName}>{ONE_TO_ONE_SPACE_LABEL}</span>
           </Link>
           <Link to="/admin/qna" onClick={closeOnMobile} className={linkClassName(location.pathname.startsWith('/admin/qna'))} title={QNA_SPACE_LABEL}>
             <MessageCircle size={18} /><span className={labelClassName}>{QNA_SPACE_LABEL}</span>
@@ -1847,7 +1851,7 @@ const App: React.FC = () => {
   const lastLocalUpdateRef = useRef<number>(0);
   const isAdmin = authStatus === 'admin';
   const isCustomCatalogHostRoute = isCustomCatalogHost() && (location.pathname === '/' || location.pathname === '');
-  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing|catalog)(?:\/|$)/.test(location.pathname) || isCustomCatalogHostRoute;
+  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing|catalog|one-to-one)(?:\/|$)/.test(location.pathname) || isCustomCatalogHostRoute;
 
   useEffect(() => {
     // Hapus otorisasi dan cache data lama yang sebelumnya dipercaya dari localStorage.
@@ -2244,6 +2248,8 @@ const App: React.FC = () => {
         <Route path="/admin/catalog-pages" element={renderAdminPage(<CatalogPagesPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/catalog-pages/:id" element={renderAdminPage(<CatalogPageEditor client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/video-clipper" element={renderAdminPage(<VideoClipperPage />)} />
+        <Route path="/admin/one-to-one/:id" element={renderAdminPage(<OneToOneEditorPage client={getAdminSupabaseClient()} />)} />
+        <Route path="/admin/one-to-one" element={renderAdminPage(<OneToOneSpacePage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna/new" element={renderAdminPage(<QnaAdminCreatePage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna/:id" element={renderAdminPage(<QnaAdminDetailPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/qna" element={renderAdminPage(<QnaAdminListPage client={getAdminSupabaseClient()} />)} />
@@ -2265,6 +2271,8 @@ const App: React.FC = () => {
         <Route path="/qna/present" element={<PublicNotFoundPage />} />
         <Route path="/qna/:slug/present" element={<PublicQnaPage client={getPublicSupabaseClient()} presenterMode />} />
         <Route path="/qna/:slug" element={<PublicQnaPage client={getPublicSupabaseClient()} />} />
+        <Route path="/one-to-one/:token" element={<PublicOneToOnePage client={getPublicSupabaseClient()} />} />
+        <Route path="/one-to-one" element={<PublicNotFoundPage />} />
         <Route path="/" element={isCustomCatalogHostRoute ? <PublicCatalogPageView client={getPublicSupabaseClient()} domainOverride={window.location.hostname} /> : authStatus === 'loading' ? <AuthLoading /> : <Navigate to={isAdmin ? '/admin' : '/login'} replace />} />
       </Routes>
     </div>
@@ -2277,7 +2285,7 @@ const root = rootRegistry.__arunikaRoot
 rootRegistry.__arunikaRoot = root;
 const directPublicNotFoundPathMatch = window.location.hash
   ? null
-  : window.location.pathname.match(/^\/(?:c|course|class|form|landing|catalog|qna)(?:\/present)?\/?$/);
+  : window.location.pathname.match(/^\/(?:c|course|class|form|landing|catalog|qna|one-to-one)(?:\/present)?\/?$/);
 const directFormPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/form\/([^/]+)\/?$/);
 const directFormSlug = directFormPathMatch ? decodeURIComponent(directFormPathMatch[1]) : null;
 const directLandingPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/landing\/([^/]+)\/?$/);
@@ -2290,6 +2298,8 @@ const directQnaPresenter = Boolean(directQnaPathMatch?.[2]);
 const directQnaEntry = directQnaSlug
   ? `/qna/${encodeURIComponent(directQnaSlug)}${directQnaPresenter ? '/present' : ''}${window.location.search}`
   : null;
+const directOneToOnePathMatch = window.location.hash ? null : window.location.pathname.match(/^\/one-to-one\/([^/]+)\/?$/);
+const directOneToOneToken = directOneToOnePathMatch ? decodeURIComponent(directOneToOnePathMatch[1]) : null;
 root.render(directPublicNotFoundPathMatch
   ? <PublicNotFoundPage />
   : directFormSlug
@@ -2300,4 +2310,6 @@ root.render(directPublicNotFoundPathMatch
     ? <MemoryRouter initialEntries={[`/catalog/${directCatalogSlug}${window.location.search}`]}><PublicCatalogPageView client={getPublicSupabaseClient()} slugOverride={directCatalogSlug} /></MemoryRouter>
   : directQnaSlug
     ? <MemoryRouter initialEntries={[directQnaEntry || `/qna/${directQnaSlug}`]}><PublicQnaPage client={getPublicSupabaseClient()} presenterMode={directQnaPresenter} slugOverride={directQnaSlug} /></MemoryRouter>
+  : directOneToOneToken
+    ? <MemoryRouter initialEntries={[`/one-to-one/${encodeURIComponent(directOneToOneToken)}`]}><PublicOneToOnePage client={getPublicSupabaseClient()} tokenOverride={directOneToOneToken} /></MemoryRouter>
   : <Router><App /></Router>);

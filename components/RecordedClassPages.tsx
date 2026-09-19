@@ -28,6 +28,7 @@ import {
   Scissors,
   Trash2,
   UserRound,
+  Users,
   Video,
   X,
   XCircle
@@ -1330,6 +1331,23 @@ export const SpacesDashboard: React.FC<{ courses: Course[] }> = ({ courses }) =>
             </div>
             <p className="text-sm text-[var(--muted)] mt-4 leading-relaxed">Potong video yang Anda miliki menjadi preview pendek dan download hasilnya untuk Landing Page.</p>
             <span className="inline-flex items-center gap-2 text-sm font-semibold text-[var(--accent-strong)] mt-7">Buka tools <ChevronRight size={16} /></span>
+          </Card>
+        </Link>
+
+        <Link to="/admin/one-to-one" className="group block">
+          <Card className="h-full p-7 md:p-8 group-hover:border-[var(--border-strong)]">
+            <div className="mb-6 flex h-12 w-12 items-center justify-center rounded-2xl bg-[var(--success-soft)] text-[var(--success-text)]">
+              <Users size={23} />
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 08</p>
+                <h2 className="mt-2 text-xl font-bold">1:1 Mentorship</h2>
+              </div>
+              <Badge color="var(--success-soft)">Privat</Badge>
+            </div>
+            <p className="mt-4 text-sm leading-relaxed text-[var(--muted)]">Buat dashboard personal per mentee untuk recording, kalender, task, dan catatan mentor dengan link tanpa login.</p>
+            <span className="mt-7 inline-flex items-center gap-2 text-sm font-semibold text-[var(--success-text)]">Buka ruang <ChevronRight size={16} /></span>
           </Card>
         </Link>
       </div>

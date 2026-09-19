@@ -158,6 +158,75 @@ export interface Branding {
   siteName: string;
 }
 
+export type OneToOneTheme = 'navy' | 'emerald' | 'coral' | 'violet' | 'amber';
+
+export interface OneToOnePortal {
+  id: string;
+  title: string;
+  menteeName: string;
+  menteeEmail: string;
+  mentorName: string;
+  mentorRole: string;
+  mentorAvatarUrl: string;
+  logoUrl: string;
+  coverImageUrl: string;
+  welcomeTitle: string;
+  welcomeMessage: string;
+  theme: OneToOneTheme;
+  accentColor: string;
+  isActive: boolean;
+  publicTokenHint?: string;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface OneToOneRecording {
+  id: string;
+  portalId: string;
+  title: string;
+  description: string;
+  videoUrl: string;
+  materialUrl: string;
+  duration: string;
+  sortOrder: number;
+  isPublished: boolean;
+}
+
+export interface OneToOneScheduleEvent {
+  id: string;
+  portalId: string;
+  title: string;
+  description: string;
+  startsAt: string;
+  endsAt: string;
+  location: string;
+  meetingUrl: string;
+  status: 'scheduled' | 'completed' | 'cancelled';
+  sortOrder: number;
+}
+
+export interface OneToOneTask {
+  id: string;
+  portalId: string;
+  title: string;
+  description: string;
+  dueAt: string;
+  status: 'todo' | 'in_progress' | 'done';
+  priority: 'low' | 'medium' | 'high';
+  sortOrder: number;
+  isVisible: boolean;
+}
+
+export interface OneToOneNote {
+  id: string;
+  portalId: string;
+  title: string;
+  body: string;
+  noteDate: string;
+  isVisible: boolean;
+  sortOrder: number;
+}
+
 export interface SupabaseConfig {
   url: string;
   anonKey: string;
