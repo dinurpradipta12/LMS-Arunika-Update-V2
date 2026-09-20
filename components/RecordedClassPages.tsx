@@ -58,6 +58,8 @@ const PUBLIC_CLASS_CONTENT_CLASS = 'w-full max-w-4xl mx-auto';
 
 const createDefaultQuiz = (courseId: string): CourseQuiz => ({
   courseId,
+  placement: 'tab',
+  moduleId: null,
   title: DEFAULT_QUIZ_TITLE,
   description: 'Kerjakan post-test setelah menyelesaikan seluruh materi recording.',
   enabled: false,
@@ -88,12 +90,15 @@ const mapCourseRow = (row: any): Course => ({
   categories: row.categories || [],
   spaceType: row.space_type || 'product_tutorial',
   published: row.published !== false,
-  overallFeedbackEnabled: row.overall_feedback_enabled !== false
+  overallFeedbackEnabled: row.overall_feedback_enabled !== false,
+  postTestMode: row.post_test_mode === 'per_material' ? 'per_material' : 'tab'
 });
 
 const mapQuizRow = (row: any): CourseQuiz => ({
   id: row.id,
   courseId: row.course_id,
+  placement: row.placement === 'module' ? 'per_material' : 'tab',
+  moduleId: row.module_id || null,
   title: row.title || DEFAULT_QUIZ_TITLE,
   description: row.description || '',
   enabled: row.is_enabled === true,
@@ -103,6 +108,21 @@ const mapQuizRow = (row: any): CourseQuiz => ({
   feedbackEnabled: row.feedback_enabled === true,
   feedbackRequired: row.feedback_required === true,
   feedbackPrompt: row.feedback_prompt || 'Bagaimana pengalaman Anda mengikuti kelas ini?',
+  questions: Array.isArray(row.questions) ? row.questions : []
+});
+
+const mapPublicQuiz = (row: any): PublicCourseQuiz => ({
+  id: row.id,
+  courseId: row.courseId || row.course_id,
+  placement: row.placement === 'module' || row.placement === 'per_material' ? 'per_material' : 'tab',
+  moduleId: row.moduleId || row.module_id || null,
+  title: row.title || DEFAULT_QUIZ_TITLE,
+  description: row.description || '',
+  passingScore: Number(row.passingScore ?? row.passing_score ?? 70),
+  maxAttempts: Number(row.maxAttempts ?? row.max_attempts ?? 3),
+  feedbackEnabled: row.feedbackEnabled === true || row.feedback_enabled === true,
+  feedbackRequired: row.feedbackRequired === true || row.feedback_required === true,
+  feedbackPrompt: row.feedbackPrompt || row.feedback_prompt || 'Bagaimana pengalaman Anda mengikuti kelas ini?',
   questions: Array.isArray(row.questions) ? row.questions : []
 });
 
@@ -144,7 +164,11 @@ const databaseErrorMessage = (error: any) => {
     || message.includes('space_type')
     || message.includes('published')
     || message.includes('get_public_class_quiz')
+    || message.includes('get_public_class_quizzes')
     || message.includes('submit_class_post_test')
+    || message.includes('submit_class_quiz_attempt')
+    || message.includes('post_test_mode')
+    || message.includes('placement')
     || message.includes('feedback_enabled')
     || message.includes('overall_feedback_enabled')
     || message.includes('class_feedback')
@@ -793,6 +817,78 @@ const SelectField: React.FC<React.SelectHTMLAttributes<HTMLSelectElement> & { la
     </select>
   </label>
 );
+
+const MaterialQuizModal: React.FC<{
+  quiz: PublicCourseQuiz | null;
+  moduleTitle: string;
+  participantName: string;
+  participantEmail: string;
+  answers: Record<string, string>;
+  feedback: string;
+  error: string | null;
+  result: QuizSubmissionResult | null;
+  isSubmitting: boolean;
+  onClose: () => void;
+  onSubmit: (event: React.FormEvent) => void;
+  onParticipantNameChange: (value: string) => void;
+  onParticipantEmailChange: (value: string) => void;
+  onAnswerChange: (questionId: string, value: string) => void;
+  onFeedbackChange: (value: string) => void;
+}> = ({
+  quiz,
+  moduleTitle,
+  participantName,
+  participantEmail,
+  answers,
+  feedback,
+  error,
+  result,
+  isSubmitting,
+  onClose,
+  onSubmit,
+  onParticipantNameChange,
+  onParticipantEmailChange,
+  onAnswerChange,
+  onFeedbackChange
+}) => {
+  if (!quiz) return null;
+  return (
+    <div className="fixed inset-0 z-[1200] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }}>
+      <div role="dialog" aria-modal="true" aria-labelledby="arunika-material-quiz-title" className="flex max-h-[92vh] w-full max-w-2xl flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl" onMouseDown={event => event.stopPropagation()}>
+        <div className="flex items-start justify-between gap-4 border-b border-[var(--border)] p-5 sm:p-6">
+          <div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Post-test materi</p><h2 id="arunika-material-quiz-title" className="mt-2 text-xl font-bold break-words">{moduleTitle}</h2><p className="mt-1 text-sm text-[var(--muted)]">{quiz.title}</p></div>
+          <button type="button" aria-label="Tutup post-test materi" onClick={onClose} className="rounded-xl p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"><X size={19} /></button>
+        </div>
+        <div className="min-h-0 flex-1 overflow-y-auto p-5 sm:p-6">
+          {result ? (
+            <div className="py-8 text-center">
+              {result.needsReview ? <ClipboardCheck size={46} className="mx-auto text-[var(--accent-strong)]" /> : result.passed ? <CheckCircle2 size={46} className="mx-auto text-[var(--success-text)]" /> : <XCircle size={46} className="mx-auto text-[var(--danger-text)]" />}
+              <p className="mt-5 text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Jawaban berhasil dikirim</p>
+              <p className="mt-3 text-5xl font-bold">{result.score}</p>
+              <h3 className="mt-4 text-xl font-semibold">{result.needsReview ? 'Menunggu review admin' : result.passed ? 'Post-test selesai' : 'Nilai belum mencapai batas lulus'}</h3>
+              <p className="mt-2 text-sm text-[var(--muted)]">Materi berikutnya sekarang dapat dibuka jika tersedia.</p>
+            </div>
+          ) : (
+            <form id="material-quiz-form" onSubmit={onSubmit} className="space-y-6">
+              <div className="grid gap-4 md:grid-cols-2"><Input label="Nama Lengkap" value={participantName} onChange={event => onParticipantNameChange(event.target.value)} required /><Input label="Email" type="email" value={participantEmail} onChange={event => onParticipantEmailChange(event.target.value)} required /></div>
+              {quiz.questions.map((question, questionIndex) => (
+                <fieldset key={question.id} className="min-w-0 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-5">
+                  <legend className="sr-only">Pertanyaan {questionIndex + 1}</legend>
+                  <p className="font-semibold leading-relaxed"><span className="mr-2 text-[var(--accent-strong)]">{questionIndex + 1}.</span>{question.prompt}</p>
+                  {question.type === 'long_answer' ? <div className="mt-4"><Textarea label="Jawaban panjang" value={answers[question.id] || ''} onChange={event => onAnswerChange(question.id, event.target.value)} placeholder="Tuliskan jawaban Anda secara lengkap..." className="min-h-[150px]" maxLength={5000} required /><p className="mt-1 text-right text-[11px] text-[var(--muted)]">{(answers[question.id] || '').length}/5.000</p></div> : <div className="mt-4 space-y-2.5">{question.options.map((option, optionIndex) => <label key={`${question.id}-${optionIndex}`} className={`flex cursor-pointer items-start gap-3 rounded-xl border p-3.5 transition-colors ${answers[question.id] === option ? 'border-[var(--border-strong)] bg-[var(--accent-soft)]' : 'border-[var(--border)] bg-[var(--surface)] hover:border-[var(--border-strong)]'}`}><input type="radio" name={`material-${question.id}`} value={option} checked={answers[question.id] === option} onChange={() => onAnswerChange(question.id, option)} className="mt-0.5 h-4 w-4 flex-shrink-0 accent-[var(--accent)]" required /><span className="min-w-0 break-words text-sm">{option}</span></label>)}</div>}
+                </fieldset>
+              ))}
+              {quiz.feedbackEnabled && <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-5"><Textarea label={`Feedback Materi${quiz.feedbackRequired ? ' (Wajib)' : ' (Opsional)'}`} value={feedback} onChange={event => onFeedbackChange(event.target.value)} placeholder={quiz.feedbackPrompt || 'Bagaimana pengalaman Anda mengikuti materi ini?'} className="min-h-[130px] bg-[var(--surface)]" maxLength={5000} required={quiz.feedbackRequired} /><p className="mt-1 text-right text-[11px] text-[var(--muted)]">{feedback.length}/5.000</p></div>}
+              {error && <div className="rounded-xl border border-[var(--border)] bg-[var(--danger-soft)] p-4 text-sm text-[var(--danger-text)]">{error}</div>}
+              <Button type="submit" icon={ClipboardCheck} isLoading={isSubmitting} disabled={isSubmitting} className="w-full">Kirim Post-Test Materi</Button>
+            </form>
+          )}
+        </div>
+        {result && <div className="flex justify-end border-t border-[var(--border)] p-4 sm:p-5"><Button type="button" onClick={onClose}>Tutup</Button></div>}
+      </div>
+    </div>
+  );
+};
 
 type NoticeTone = 'success' | 'error';
 
@@ -1518,7 +1614,9 @@ export const RecordedClassEditor: React.FC<{
   const { id } = useParams<{ id: string }>();
   const sourceCourse = courses.find(course => course.id === id);
   const [course, setCourse] = useState<Course | null>(null);
-  const [quiz, setQuiz] = useState<CourseQuiz | null>(null);
+  const [globalQuiz, setGlobalQuiz] = useState<CourseQuiz | null>(null);
+  const [moduleQuizzes, setModuleQuizzes] = useState<Record<string, CourseQuiz>>({});
+  const [selectedQuizModuleId, setSelectedQuizModuleId] = useState('');
   const [isQuizLoading, setIsQuizLoading] = useState(true);
   const [quizLoadError, setQuizLoadError] = useState<string | null>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -1531,7 +1629,8 @@ export const RecordedClassEditor: React.FC<{
         spaceType: 'recorded_class',
         published: sourceCourse.published === true,
         modules: sourceCourse.modules || [],
-        assets: sourceCourse.assets || []
+        assets: sourceCourse.assets || [],
+        postTestMode: sourceCourse.postTestMode === 'per_material' ? 'per_material' : 'tab'
       });
     }
   }, [sourceCourse]);
@@ -1541,33 +1640,60 @@ export const RecordedClassEditor: React.FC<{
     setIsQuizLoading(true);
     setQuizLoadError(null);
     if (!client) {
-      setQuiz(createDefaultQuiz(id));
+      setGlobalQuiz(createDefaultQuiz(id));
+      setModuleQuizzes({});
       setQuizLoadError('Koneksi Supabase belum tersedia.');
       setIsQuizLoading(false);
       return;
     }
 
-    const { data, error } = await client.from('course_quizzes').select('*').eq('course_id', id).maybeSingle();
+    const { data, error } = await client.from('course_quizzes').select('*').eq('course_id', id).order('created_at');
     if (error) {
       console.warn('Quiz editor fetch failed', error);
-      setQuiz(createDefaultQuiz(id));
+      setGlobalQuiz(createDefaultQuiz(id));
+      setModuleQuizzes({});
       setQuizLoadError(databaseErrorMessage(error));
     } else {
-      setQuiz(data ? mapQuizRow(data) : createDefaultQuiz(id));
+      const rows = Array.isArray(data) ? data.map(mapQuizRow) : [];
+      const tabQuiz = rows.find(row => !row.moduleId && row.placement !== 'per_material');
+      setGlobalQuiz(tabQuiz || createDefaultQuiz(id));
+      setModuleQuizzes(rows.reduce<Record<string, CourseQuiz>>((result, row) => {
+        if (row.moduleId) result[row.moduleId] = row;
+        return result;
+      }, {}));
     }
     setIsQuizLoading(false);
   }, [client, id]);
 
   useEffect(() => { void fetchQuiz(); }, [fetchQuiz]);
 
+  useEffect(() => {
+    if (!course?.modules.length) {
+      setSelectedQuizModuleId('');
+      return;
+    }
+    if (!selectedQuizModuleId || !course.modules.some(module => module.id === selectedQuizModuleId)) {
+      setSelectedQuizModuleId(course.modules[0].id);
+    }
+  }, [course, selectedQuizModuleId]);
+
   const updateCourse = (next: Course) => {
     onLocalEdit();
     setCourse(next);
+    const validModuleIds = new Set(next.modules.map(module => module.id));
+    setModuleQuizzes(current => Object.entries(current).reduce<Record<string, CourseQuiz>>((result, [moduleId, quizConfig]) => {
+      if (validModuleIds.has(moduleId)) result[moduleId] = quizConfig;
+      return result;
+    }, {}));
   };
 
   const updateQuiz = (next: CourseQuiz) => {
     onLocalEdit();
-    setQuiz(next);
+    if (course?.postTestMode === 'per_material' && selectedQuizModuleId) {
+      setModuleQuizzes(current => ({ ...current, [selectedQuizModuleId]: { ...next, placement: 'per_material', moduleId: selectedQuizModuleId } }));
+    } else {
+      setGlobalQuiz(next);
+    }
   };
 
   if (!id) return null;
@@ -1583,6 +1709,13 @@ export const RecordedClassEditor: React.FC<{
       </div>
     );
   }
+
+  const postTestMode = course.postTestMode === 'per_material' ? 'per_material' : 'tab';
+  const selectedQuizModule = course.modules.find(module => module.id === selectedQuizModuleId) || course.modules[0] || null;
+  const activeQuiz = postTestMode === 'per_material'
+    ? (selectedQuizModule ? moduleQuizzes[selectedQuizModule.id] || { ...createDefaultQuiz(id), placement: 'per_material', moduleId: selectedQuizModule.id, title: `Post-Test ${selectedQuizModule.title}` } : null)
+    : globalQuiz;
+  const quiz = activeQuiz;
 
   const addModule = (type: 'video' | 'text') => {
     const nextModule: Module = {
@@ -1628,11 +1761,11 @@ export const RecordedClassEditor: React.FC<{
     });
   };
 
-  const validateQuiz = () => {
-    if (!quiz?.enabled) return null;
-    if (quiz.questions.length === 0) return 'Tambahkan minimal satu pertanyaan sebelum post-test diaktifkan.';
-    for (let index = 0; index < quiz.questions.length; index += 1) {
-      const question = quiz.questions[index];
+  const validateQuizConfig = (target: CourseQuiz | null) => {
+    if (!target?.enabled) return null;
+    if (target.questions.length === 0) return 'Tambahkan minimal satu pertanyaan sebelum post-test diaktifkan.';
+    for (let index = 0; index < target.questions.length; index += 1) {
+      const question = target.questions[index];
       if (!question.prompt.trim()) return `Pertanyaan #${index + 1} belum diisi.`;
       if (question.type === 'long_answer') continue;
       if (question.options.length < 2 || question.options.some(option => !option.trim())) return `Pilihan jawaban pertanyaan #${index + 1} belum lengkap.`;
@@ -1642,15 +1775,19 @@ export const RecordedClassEditor: React.FC<{
     return null;
   };
 
+  const validateQuiz = () => validateQuizConfig(quiz);
+
   const handleSave = async () => {
-    if (!quiz) return;
+    if (!quiz && postTestMode === 'tab') return;
     if (!course.title.trim()) {
       setNotice({ tone: 'error', title: 'Judul kelas belum diisi', message: 'Isi judul kelas terlebih dahulu sebelum menyimpan perubahan.' });
       return;
     }
-    const quizValidation = validateQuiz();
-    if (quizValidation) {
-      setNotice({ tone: 'error', title: 'Post-test belum siap disimpan', message: quizValidation });
+    const validationMessages = postTestMode === 'per_material'
+      ? Object.values(moduleQuizzes).map((item, index) => validateQuizConfig(item) ? `Materi post-test #${index + 1}: ${validateQuizConfig(item)}` : null).filter(Boolean)
+      : [validateQuiz()];
+    if (validationMessages[0]) {
+      setNotice({ tone: 'error', title: 'Post-test belum siap disimpan', message: String(validationMessages[0]) });
       return;
     }
     if (!client) {
@@ -1660,31 +1797,46 @@ export const RecordedClassEditor: React.FC<{
 
     setIsSaving(true);
     try {
-      await onSaveCourse({ ...course, spaceType: 'recorded_class' });
-      const quizRow: Record<string, unknown> = {
-        course_id: course.id,
-        title: quiz.title,
-        description: quiz.description,
-        is_enabled: quiz.enabled,
-        passing_score: Math.max(0, Math.min(100, Number(quiz.passingScore) || 0)),
-        max_attempts: Math.max(1, Number(quiz.maxAttempts) || 1),
-        show_answers: quiz.showAnswers,
-        feedback_enabled: quiz.feedbackEnabled,
-        feedback_required: quiz.feedbackEnabled && quiz.feedbackRequired,
-        feedback_prompt: quiz.feedbackPrompt.trim() || 'Bagaimana pengalaman Anda mengikuti kelas ini?',
-        questions: quiz.questions,
-        updated_at: new Date().toISOString()
+      await onSaveCourse({ ...course, spaceType: 'recorded_class', postTestMode });
+      const saveQuizRow = async (target: CourseQuiz, placement: 'tab' | 'module', moduleId: string | null) => {
+        const quizRow: Record<string, unknown> = {
+          course_id: course.id,
+          placement,
+          module_id: moduleId,
+          title: target.title,
+          description: target.description,
+          is_enabled: target.enabled,
+          passing_score: Math.max(0, Math.min(100, Number(target.passingScore) || 0)),
+          max_attempts: Math.max(1, Number(target.maxAttempts) || 1),
+          show_answers: target.showAnswers,
+          feedback_enabled: target.feedbackEnabled,
+          feedback_required: target.feedbackEnabled && target.feedbackRequired,
+          feedback_prompt: target.feedbackPrompt.trim() || 'Bagaimana pengalaman Anda mengikuti kelas ini?',
+          questions: target.questions,
+          updated_at: new Date().toISOString()
+        };
+        const query = target.id
+          ? client.from('course_quizzes').update(quizRow).eq('id', target.id).select('*').single()
+          : client.from('course_quizzes').insert(quizRow).select('*').single();
+        const { data, error } = await query;
+        if (error) throw error;
+        return mapQuizRow(data);
       };
-      if (quiz.id) quizRow.id = quiz.id;
 
-      const { data, error } = await client.from('course_quizzes').upsert(quizRow, { onConflict: 'course_id' }).select('*').single();
-      if (error) throw error;
-      setQuiz(mapQuizRow(data));
+      if (postTestMode === 'tab' && quiz) {
+        setGlobalQuiz(await saveQuizRow(quiz, 'tab', null));
+      } else if (postTestMode === 'per_material') {
+        const savedModuleQuizzes = await Promise.all(Object.values(moduleQuizzes).map(item => saveQuizRow(item, 'module', item.moduleId || null)));
+        setModuleQuizzes(savedModuleQuizzes.reduce<Record<string, CourseQuiz>>((result, item) => {
+          if (item.moduleId) result[item.moduleId] = item;
+          return result;
+        }, {}));
+      }
       setQuizLoadError(null);
       setNotice({
         tone: 'success',
         title: course.published ? 'Kelas berhasil dipublikasikan' : 'Draft kelas berhasil disimpan',
-        message: course.published ? 'Kelas dan post-test berhasil disimpan serta dipublikasikan.' : 'Perubahan kelas dan post-test berhasil disimpan sebagai draft.'
+        message: course.published ? 'Kelas dan pengaturan post-test berhasil disimpan serta dipublikasikan.' : 'Perubahan kelas dan post-test berhasil disimpan sebagai draft.'
       });
     } catch (error: any) {
       console.error('Recorded class save failed', error);
@@ -1819,8 +1971,10 @@ export const RecordedClassEditor: React.FC<{
           <p className="text-sm text-[var(--muted)] mt-1">Pilihan ganda dan benar/salah dinilai otomatis. Jawaban panjang masuk ke review admin.</p>
         </div>
 
-        {isQuizLoading || !quiz ? (
+        {isQuizLoading ? (
           <Card className="flex items-center justify-center gap-3 py-12 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat pengaturan post-test...</Card>
+        ) : !quiz ? (
+          <Card className="py-12 text-center text-sm text-[var(--muted)]">Tambahkan minimal satu materi terlebih dahulu untuk mengatur post-test per materi.</Card>
         ) : (
           <div className="space-y-5">
             {quizLoadError && (
@@ -1831,6 +1985,29 @@ export const RecordedClassEditor: React.FC<{
             )}
 
             <Card className="space-y-6">
+              <div className="grid md:grid-cols-2 gap-5 p-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)]">
+                <SelectField
+                  label="Penempatan post-test"
+                  value={postTestMode}
+                  onChange={event => updateCourse({ ...course, postTestMode: event.target.value as Course['postTestMode'] })}
+                >
+                  <option value="tab">Satu post-test di tab kelas</option>
+                  <option value="per_material">Post-test di bawah setiap materi</option>
+                </SelectField>
+                <div className="text-xs text-[var(--muted)] leading-relaxed self-end">
+                  {postTestMode === 'per_material'
+                    ? 'Setiap materi dapat memiliki post-test sendiri. Materi berikutnya akan terbuka setelah post-test materi sebelumnya dikirim.'
+                    : 'Peserta mengerjakan satu post-test setelah seluruh materi kelas selesai.'}
+                </div>
+              </div>
+              {postTestMode === 'per_material' && (
+                <div className="p-4 rounded-xl border border-[var(--border-strong)] bg-[var(--accent-soft)] space-y-3">
+                  <SelectField label="Materi yang sedang diatur" value={selectedQuizModule?.id || ''} onChange={event => setSelectedQuizModuleId(event.target.value)}>
+                    {course.modules.length === 0 ? <option value="">Belum ada materi</option> : course.modules.map((module, index) => <option key={module.id} value={module.id}>Materi {index + 1} — {module.title}</option>)}
+                  </SelectField>
+                  <p className="text-xs text-[var(--muted)]">Pengaturan pertanyaan di bawah berlaku untuk materi yang dipilih. Nonaktifkan toggle jika materi ini tidak memerlukan post-test.</p>
+                </div>
+              )}
               <ToggleField checked={quiz.enabled} onChange={enabled => updateQuiz({ ...quiz, enabled })} label="Aktifkan post-test untuk peserta" description="Post-test akan tampil setelah materi pada halaman publik kelas." />
               <div className="grid md:grid-cols-2 gap-5">
                 <Input label="Judul Post-Test" value={quiz.title} onChange={event => updateQuiz({ ...quiz, title: event.target.value })} />
@@ -1924,7 +2101,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
   const course = courses.find(item => item.id === id);
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
   const [feedbackSubmissions, setFeedbackSubmissions] = useState<ClassFeedbackSubmission[]>([]);
-  const [quiz, setQuiz] = useState<CourseQuiz | null>(null);
+  const [quizzes, setQuizzes] = useState<CourseQuiz[]>([]);
   const [selectedAttempt, setSelectedAttempt] = useState<QuizAttempt | null>(null);
   const [reportPreviewAttempt, setReportPreviewAttempt] = useState<QuizAttempt | null>(null);
   const [selectedFeedbackForCard, setSelectedFeedbackForCard] = useState<ClassFeedbackSubmission | null>(null);
@@ -1942,7 +2119,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
     const [attemptResult, feedbackResult, quizResult] = await Promise.all([
       client.from('quiz_attempts').select('*').eq('course_id', id).order('submitted_at', { ascending: false }),
       client.from('class_feedback_submissions').select('*').eq('course_id', id).order('created_at', { ascending: false }),
-      client.from('course_quizzes').select('*').eq('course_id', id).maybeSingle()
+      client.from('course_quizzes').select('*').eq('course_id', id).order('created_at')
     ]);
     if (attemptResult.error) {
       console.error('Quiz result fetch failed', attemptResult.error);
@@ -1958,9 +2135,9 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
     }
     if (quizResult.error) {
       console.warn('Quiz result question fetch failed', quizResult.error);
-      setQuiz(null);
+      setQuizzes([]);
     } else {
-      setQuiz(quizResult.data ? mapQuizRow(quizResult.data) : null);
+      setQuizzes((quizResult.data || []).map(mapQuizRow));
     }
     setSelectedAttempt(null);
     setReportPreviewAttempt(null);
@@ -1968,6 +2145,22 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
   }, [client, id]);
 
   useEffect(() => { void fetchAttempts(); }, [fetchAttempts]);
+
+  const quizForAttempt = (attempt: QuizAttempt | null) => {
+    if (!attempt) return null;
+    return quizzes.find(item => item.id === attempt.quizId) || quizzes.find(item => item.placement !== 'per_material') || null;
+  };
+
+  const quizLabel = (attempt: QuizAttempt) => {
+    const attemptQuiz = quizForAttempt(attempt);
+    if (!attemptQuiz) return 'Post-Test';
+    if (attemptQuiz.moduleId) {
+      const moduleIndex = course?.modules.findIndex(module => module.id === attemptQuiz.moduleId) ?? -1;
+      const moduleTitle = course?.modules.find(module => module.id === attemptQuiz.moduleId)?.title;
+      return moduleTitle ? `Materi ${moduleIndex + 1} · ${moduleTitle}` : attemptQuiz.title;
+    }
+    return attemptQuiz.title || 'Post-Test Kelas';
+  };
 
   const stats = useMemo(() => {
     const participantCount = new Set(attempts.map(attempt => attempt.participantEmail.toLowerCase())).size;
@@ -1982,7 +2175,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
   const exportCsv = () => {
     const rows = [
       ['Tipe', 'Nama', 'Email Peserta', 'Email Sertifikat', 'Nilai', 'Status', 'Percobaan', 'Rating', 'Feedback', 'Jawaban', 'Waktu Submit'],
-      ...attempts.map(attempt => ['Post-Test', attempt.participantName, attempt.participantEmail, '', attempt.score, attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus', attempt.attemptNumber, '', attempt.classFeedback || '', JSON.stringify(attempt.answers), new Date(attempt.submittedAt).toLocaleString('id-ID')]),
+      ...attempts.map(attempt => [quizLabel(attempt), attempt.participantName, attempt.participantEmail, '', attempt.score, attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus', attempt.attemptNumber, '', attempt.classFeedback || '', JSON.stringify(attempt.answers), new Date(attempt.submittedAt).toLocaleString('id-ID')]),
       ...feedbackSubmissions.map(feedback => ['Feedback Kelas', feedback.participantName, feedback.participantEmail, feedback.certificateEmail, '', 'Selesai', '', feedback.rating, feedback.feedback, '', new Date(feedback.submittedAt).toLocaleString('id-ID')])
     ];
     const csv = rows.map(row => row.map(escapeCsv).join(',')).join('\n');
@@ -2003,7 +2196,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
       };
       return result;
     }, {});
-    const summary = calculateReviewedAttempt(attempt, quiz, normalizedReviews);
+    const summary = calculateReviewedAttempt(attempt, quizForAttempt(attempt), normalizedReviews);
     const { data, error } = await withRequestTimeout<any>(client
       .from('quiz_attempts')
       .update({
@@ -2064,12 +2257,13 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
           <div className="hidden md:block overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
             <table className="w-full text-left text-sm">
               <thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]">
-                <tr><th className="p-4">Peserta</th><th className="p-4">Nilai</th><th className="p-4">Status</th><th className="p-4">Percobaan</th><th className="p-4">Dikirim</th><th className="p-4">Detail</th><th className="p-4">Raport</th></tr>
+                <tr><th className="p-4">Peserta</th><th className="p-4">Post-test</th><th className="p-4">Nilai</th><th className="p-4">Status</th><th className="p-4">Percobaan</th><th className="p-4">Dikirim</th><th className="p-4">Detail</th><th className="p-4">Raport</th></tr>
               </thead>
               <tbody>
                 {attempts.map(attempt => (
                   <tr key={attempt.id} className="border-t border-[var(--border)]">
                     <td className="p-4"><p className="font-semibold">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] mt-1">{attempt.participantEmail}</p></td>
+                    <td className="p-4 text-xs font-semibold max-w-[220px]">{quizLabel(attempt)}</td>
                     <td className="p-4 font-bold">{attempt.score}</td>
                     <td className="p-4"><button type="button" onClick={() => setSelectedAttempt(attempt)} className={`inline-flex rounded-lg px-2.5 py-1 text-xs font-semibold transition hover:ring-2 hover:ring-[var(--accent-soft)] ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`} aria-label={`Buka review ${attempt.participantName}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</button></td>
                     <td className="p-4">#{attempt.attemptNumber}</td>
@@ -2087,7 +2281,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
             {attempts.map(attempt => (
               <Card key={attempt.id} className="space-y-4">
                 <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold truncate">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{attempt.participantEmail}</p></div><button type="button" onClick={() => setSelectedAttempt(attempt)} className={`rounded-lg px-2 py-1 text-[10px] font-semibold transition hover:ring-2 hover:ring-[var(--accent-soft)] ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`} aria-label={`Buka review ${attempt.participantName}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</button></div>
-                <div className="grid grid-cols-3 gap-3 text-xs"><div><p className="text-[var(--muted)]">Nilai</p><p className="font-bold text-lg mt-1">{attempt.score}</p></div><div><p className="text-[var(--muted)]">Percobaan</p><p className="font-semibold mt-2">#{attempt.attemptNumber}</p></div><div><p className="text-[var(--muted)]">Dikirim</p><p className="font-semibold mt-2">{new Date(attempt.submittedAt).toLocaleDateString('id-ID')}</p></div></div>
+                <p className="rounded-lg bg-[var(--surface-soft)] px-3 py-2 text-xs font-semibold">{quizLabel(attempt)}</p><div className="grid grid-cols-3 gap-3 text-xs"><div><p className="text-[var(--muted)]">Nilai</p><p className="font-bold text-lg mt-1">{attempt.score}</p></div><div><p className="text-[var(--muted)]">Percobaan</p><p className="font-semibold mt-2">#{attempt.attemptNumber}</p></div><div><p className="text-[var(--muted)]">Dikirim</p><p className="font-semibold mt-2">{new Date(attempt.submittedAt).toLocaleDateString('id-ID')}</p></div></div>
                 <div className="flex flex-wrap gap-2 border-t border-[var(--border)] pt-3"><button type="button" onClick={() => setSelectedAttempt(attempt)} className="text-left text-xs font-semibold text-[var(--accent-strong)] hover:underline">Lihat dan koreksi jawaban</button><Button type="button" variant="secondary" icon={FileText} className="ml-auto px-3 py-2 text-xs" onClick={() => setReportPreviewAttempt(attempt)}>Preview PDF</Button></div>
               </Card>
             ))}
@@ -2111,7 +2305,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
       {selectedAttempt && (
         <AnswerReviewModal
           attempt={selectedAttempt}
-          quiz={quiz}
+          quiz={quizForAttempt(selectedAttempt)}
           overallFeedback={feedbackSubmissions.find(feedback => feedback.participantEmail.trim().toLowerCase() === selectedAttempt.participantEmail.trim().toLowerCase()) || null}
           onClose={() => setSelectedAttempt(null)}
           onSave={(reviews, reviewFeedback) => saveAttemptReview(selectedAttempt, reviews, reviewFeedback)}
@@ -2121,10 +2315,10 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
       {reportPreviewAttempt && (
         <AssessmentReportPreviewModal
           attempt={reportPreviewAttempt}
-          quiz={quiz}
+          quiz={quizForAttempt(reportPreviewAttempt)}
           courseTitle={course?.title || RECORDED_CLASS_SPACE_LABEL}
           onClose={() => setReportPreviewAttempt(null)}
-          onDownload={() => downloadQuizReport(reportPreviewAttempt, quiz, course?.title || RECORDED_CLASS_SPACE_LABEL)}
+          onDownload={() => downloadQuizReport(reportPreviewAttempt, quizForAttempt(reportPreviewAttempt), course?.title || RECORDED_CLASS_SPACE_LABEL)}
         />
       )}
       {selectedFeedbackForCard && <ReviewCardModal feedback={selectedFeedbackForCard} courseTitle={course?.title || 'Kelas Arunika'} onClose={() => setSelectedFeedbackForCard(null)} />}
@@ -2141,7 +2335,14 @@ export const PublicRecordedClassView: React.FC<{
   const courseId = routeCode ? resolveCourseId(routeCode) : '';
   const [course, setCourse] = useState<Course | null>(null);
   const [quiz, setQuiz] = useState<PublicCourseQuiz | null>(null);
+  const [quizSet, setQuizSet] = useState<{ mode: 'tab' | 'per_material'; quizzes: PublicCourseQuiz[] }>({ mode: 'tab', quizzes: [] });
   const [selectedModule, setSelectedModule] = useState<Module | null>(null);
+  const [moduleQuizModalId, setModuleQuizModalId] = useState<string | null>(null);
+  const [moduleQuizAnswers, setModuleQuizAnswers] = useState<Record<string, string>>({});
+  const [moduleQuizFeedback, setModuleQuizFeedback] = useState('');
+  const [moduleQuizSubmitting, setModuleQuizSubmitting] = useState(false);
+  const [moduleQuizError, setModuleQuizError] = useState<string | null>(null);
+  const [moduleQuizResult, setModuleQuizResult] = useState<QuizSubmissionResult | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isQuizLoading, setIsQuizLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
@@ -2155,6 +2356,7 @@ export const PublicRecordedClassView: React.FC<{
   const [result, setResult] = useState<QuizSubmissionResult | null>(null);
   const [activeTab, setActiveTab] = useState<PublicClassTab>('materials');
   const [completedModuleIds, setCompletedModuleIds] = useState<string[]>([]);
+  const [completedQuizModuleIds, setCompletedQuizModuleIds] = useState<string[]>([]);
   const [certificateEmail, setCertificateEmail] = useState('');
   const [feedbackRating, setFeedbackRating] = useState('');
   const [overallFeedback, setOverallFeedback] = useState('');
@@ -2164,8 +2366,25 @@ export const PublicRecordedClassView: React.FC<{
   const autoOpenedFeedbackRef = useRef(false);
 
   const progressStorageKey = `arunika-class-progress:${courseId}`;
-  const allMaterialsCompleted = Boolean(course && course.modules.length > 0 && course.modules.every(module => completedModuleIds.includes(module.id)));
+  const quizProgressStorageKey = `arunika-class-post-test-progress:${courseId}`;
+  const perMaterialMode = (course?.postTestMode === 'per_material' || quizSet.mode === 'per_material');
+  const moduleQuizById = useMemo(() => quizSet.quizzes.reduce<Record<string, PublicCourseQuiz>>((result, item) => {
+    if (item.moduleId) result[item.moduleId] = item;
+    return result;
+  }, {}), [quizSet.quizzes]);
+  const requiredMaterialQuizIds = useMemo(() => (course?.modules || []).filter(module => Boolean(moduleQuizById[module.id])).map(module => module.id), [course?.modules, moduleQuizById]);
+  const allRequiredMaterialQuizzesCompleted = !perMaterialMode || requiredMaterialQuizIds.every(moduleId => completedQuizModuleIds.includes(moduleId));
+  const allMaterialsCompleted = Boolean(course && course.modules.length > 0 && course.modules.every(module => completedModuleIds.includes(module.id)) && allRequiredMaterialQuizzesCompleted);
   const overallFeedbackEnabled = course?.overallFeedbackEnabled !== false;
+  const selectedModuleQuiz = moduleQuizModalId ? moduleQuizById[moduleQuizModalId] || null : null;
+
+  const isModuleUnlocked = (index: number) => {
+    if (index <= 0) return true;
+    const previousModule = course?.modules[index - 1];
+    if (!previousModule || !completedModuleIds.includes(previousModule.id)) return false;
+    const previousQuiz = perMaterialMode ? moduleQuizById[previousModule.id] : null;
+    return !previousQuiz || completedQuizModuleIds.includes(previousModule.id);
+  };
 
   const fetchClass = useCallback(async () => {
     setIsLoading(true);
@@ -2174,6 +2393,7 @@ export const PublicRecordedClassView: React.FC<{
     setIsQuizLoading(true);
     setCourse(null);
     setQuiz(null);
+    setQuizSet({ mode: 'tab', quizzes: [] });
     if (!client || !courseId) {
       setLoadError('Link kelas tidak valid atau koneksi publik belum tersedia.');
       setIsLoading(false);
@@ -2198,19 +2418,43 @@ export const PublicRecordedClassView: React.FC<{
       setIsLoading(false);
 
       try {
-        const { data: quizData, error: quizRequestError } = await withRequestTimeout<any>(
-          client.rpc('get_public_class_quiz', { p_course_id: courseId }) as PromiseLike<any>
+        const { data: quizSetData, error: quizSetError } = await withRequestTimeout<any>(
+          client.rpc('get_public_class_quizzes', { p_course_id: courseId }) as PromiseLike<any>
         );
-        if (quizRequestError) {
-          console.warn('Public quiz fetch failed', quizRequestError);
-          setQuizError(databaseErrorMessage(quizRequestError));
-        } else if (quizData) {
-          setQuiz(quizData as PublicCourseQuiz);
+        if (!quizSetError && quizSetData) {
+          const quizzes = Array.isArray(quizSetData.quizzes) ? quizSetData.quizzes.map(mapPublicQuiz) : [];
+          const mode = quizSetData.mode === 'per_material' ? 'per_material' : 'tab';
+          setQuizSet({ mode, quizzes });
+          setQuiz(quizzes.find(item => item.placement === 'tab') || null);
+        } else {
+          const { data: quizData, error: quizRequestError } = await withRequestTimeout<any>(
+            client.rpc('get_public_class_quiz', { p_course_id: courseId }) as PromiseLike<any>
+          );
+          if (quizRequestError) {
+            console.warn('Public quiz fetch failed', quizRequestError);
+            setQuizError(databaseErrorMessage(quizSetError || quizRequestError));
+          } else if (quizData) {
+            const fallbackQuiz = mapPublicQuiz(quizData);
+            setQuizSet({ mode: 'tab', quizzes: [fallbackQuiz] });
+            setQuiz(fallbackQuiz);
+          }
         }
       } catch (quizRequestError) {
         console.warn('Public quiz request failed', quizRequestError);
-        const timedOut = quizRequestError instanceof Error && quizRequestError.message === 'REQUEST_TIMEOUT';
-        setQuizError(timedOut ? 'Post-test terlalu lama dimuat. Silakan muat ulang halaman.' : databaseErrorMessage(quizRequestError));
+        try {
+          const { data: fallbackData, error: fallbackError } = await withRequestTimeout<any>(client.rpc('get_public_class_quiz', { p_course_id: courseId }) as PromiseLike<any>);
+          if (!fallbackError && fallbackData) {
+            const fallbackQuiz = mapPublicQuiz(fallbackData);
+            setQuizSet({ mode: 'tab', quizzes: [fallbackQuiz] });
+            setQuiz(fallbackQuiz);
+          } else {
+            const timedOut = quizRequestError instanceof Error && quizRequestError.message === 'REQUEST_TIMEOUT';
+            setQuizError(timedOut ? 'Post-test terlalu lama dimuat. Silakan muat ulang halaman.' : databaseErrorMessage(fallbackError || quizRequestError));
+          }
+        } catch (fallbackRequestError) {
+          const timedOut = quizRequestError instanceof Error && quizRequestError.message === 'REQUEST_TIMEOUT';
+          setQuizError(timedOut ? 'Post-test terlalu lama dimuat. Silakan muat ulang halaman.' : databaseErrorMessage(fallbackRequestError));
+        }
       } finally {
         setIsQuizLoading(false);
       }
@@ -2249,6 +2493,23 @@ export const PublicRecordedClassView: React.FC<{
   }, [course, courseId, progressStorageKey]);
 
   useEffect(() => {
+    if (!courseId || typeof window === 'undefined') return;
+    try {
+      const stored = JSON.parse(window.localStorage.getItem(quizProgressStorageKey) || '[]');
+      if (Array.isArray(stored)) {
+        const validIds = new Set(requiredMaterialQuizIds);
+        setCompletedQuizModuleIds(stored.filter((value): value is string => typeof value === 'string' && validIds.has(value)));
+      }
+    } catch {
+      setCompletedQuizModuleIds([]);
+    }
+  }, [courseId, quizProgressStorageKey, requiredMaterialQuizIds]);
+
+  useEffect(() => {
+    if (!perMaterialMode && activeTab === 'post_test' && quizSet.quizzes.length === 0) setActiveTab('materials');
+  }, [activeTab, perMaterialMode, quizSet.quizzes.length]);
+
+  useEffect(() => {
     if (!overallFeedbackEnabled) {
       autoOpenedFeedbackRef.current = false;
       if (activeTab === 'feedback') setActiveTab('materials');
@@ -2271,6 +2532,67 @@ export const PublicRecordedClassView: React.FC<{
       }
       return next;
     });
+  };
+
+  const openModuleQuiz = (moduleId: string) => {
+    if (!moduleQuizById[moduleId] || completedQuizModuleIds.includes(moduleId)) return;
+    if (!completedModuleIds.includes(moduleId)) {
+      setModuleQuizError('Tandai materi ini sebagai selesai sebelum mengerjakan post-test.');
+      return;
+    }
+    setModuleQuizModalId(moduleId);
+    setModuleQuizAnswers({});
+    setModuleQuizFeedback('');
+    setModuleQuizError(null);
+    setModuleQuizResult(null);
+  };
+
+  const handleModuleQuizSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!selectedModuleQuiz || !moduleQuizModalId || !client) return;
+    if (!participantName.trim() || !participantEmail.trim()) {
+      setModuleQuizError('Nama dan email peserta wajib diisi.');
+      return;
+    }
+    const unanswered = selectedModuleQuiz.questions.find(question => !String(moduleQuizAnswers[question.id] || '').trim());
+    if (unanswered) {
+      setModuleQuizError('Jawab seluruh pertanyaan sebelum mengirim post-test.');
+      return;
+    }
+    if (selectedModuleQuiz.feedbackEnabled && selectedModuleQuiz.feedbackRequired && !moduleQuizFeedback.trim()) {
+      setModuleQuizError('Feedback materi wajib diisi sebelum mengirim post-test.');
+      return;
+    }
+
+    setModuleQuizSubmitting(true);
+    setModuleQuizError(null);
+    try {
+      const { data, error } = await withRequestTimeout<any>(client.rpc('submit_class_quiz_attempt', {
+        p_course_id: courseId,
+        p_quiz_id: selectedModuleQuiz.id,
+        p_participant_name: participantName.trim(),
+        p_participant_email: participantEmail.trim(),
+        p_answers: moduleQuizAnswers,
+        p_class_feedback: selectedModuleQuiz.feedbackEnabled ? moduleQuizFeedback.trim() || null : null
+      }) as PromiseLike<any>);
+      if (error) {
+        const message = String(error.message || 'Post-test gagal dikirim.');
+        setModuleQuizError(message.includes('MAX_ATTEMPTS_REACHED') ? 'Batas percobaan post-test untuk email ini sudah tercapai.' : databaseErrorMessage(error));
+      } else {
+        setModuleQuizResult(data as QuizSubmissionResult);
+        setCompletedQuizModuleIds(current => {
+          if (current.includes(moduleQuizModalId)) return current;
+          const next = [...current, moduleQuizModalId];
+          try { window.localStorage.setItem(quizProgressStorageKey, JSON.stringify(next)); } catch { /* progress tetap tersedia di state */ }
+          return next;
+        });
+      }
+    } catch (error) {
+      const timedOut = error instanceof Error && error.message === 'REQUEST_TIMEOUT';
+      setModuleQuizError(timedOut ? 'Server terlalu lama merespons. Jawaban belum dapat dipastikan tersimpan; tunggu sebentar sebelum mencoba lagi.' : databaseErrorMessage(error));
+    } finally {
+      setModuleQuizSubmitting(false);
+    }
   };
 
   const handleSubmit = async (event: React.FormEvent) => {
@@ -2404,13 +2726,13 @@ export const PublicRecordedClassView: React.FC<{
           </div>
         </section>
 
-        <div role="tablist" aria-label="Bagian kelas" className={`grid grid-cols-1 ${overallFeedbackEnabled ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2 p-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]`}>
+        <div role="tablist" aria-label="Bagian kelas" className={`grid grid-cols-1 ${overallFeedbackEnabled ? (perMaterialMode ? 'sm:grid-cols-2' : 'sm:grid-cols-3') : (perMaterialMode ? 'sm:grid-cols-1' : 'sm:grid-cols-2')} gap-2 p-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]`}>
           <button type="button" role="tab" aria-selected={activeTab === 'materials'} onClick={() => setActiveTab('materials')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'materials' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>
             Materi <span className="text-xs font-normal ml-1">({completedModuleIds.length}/{course.modules.length})</span>
           </button>
-          <button type="button" role="tab" aria-selected={activeTab === 'post_test'} onClick={() => setActiveTab('post_test')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'post_test' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>
+          {!perMaterialMode && <button type="button" role="tab" aria-selected={activeTab === 'post_test'} onClick={() => setActiveTab('post_test')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'post_test' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>
             <ClipboardCheck size={15} className="inline-block mr-2 -mt-0.5" />Post-Test
-          </button>
+          </button>}
           {overallFeedbackEnabled && (
             <button type="button" role="tab" aria-selected={activeTab === 'feedback'} disabled={!allMaterialsCompleted} onClick={() => allMaterialsCompleted && setActiveTab('feedback')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'feedback' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : allMaterialsCompleted ? 'text-[var(--muted)] hover:bg-[var(--surface-soft)]' : 'text-[var(--muted)]/60 cursor-not-allowed'}`} title={!allMaterialsCompleted ? 'Selesaikan semua materi terlebih dahulu' : undefined}>
               {allMaterialsCompleted ? <CheckCircle2 size={15} className="inline-block mr-2 -mt-0.5" /> : <LockKeyhole size={14} className="inline-block mr-2 -mt-0.5" />}Feedback Kelas
@@ -2439,6 +2761,16 @@ export const PublicRecordedClassView: React.FC<{
                         {completedModuleIds.includes(selectedModule.id) ? 'Materi selesai' : 'Tandai selesai'}
                       </Button>
                     </div>
+                    {perMaterialMode && moduleQuizById[selectedModule.id] && (
+                      <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+                        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+                          <div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Evaluasi materi</p><p className="mt-1 text-sm font-semibold">{completedQuizModuleIds.includes(selectedModule.id) ? 'Post-test sudah dikirim' : 'Selesaikan post-test sebelum lanjut'}</p></div>
+                          <Button type="button" variant={completedQuizModuleIds.includes(selectedModule.id) ? 'green' : 'secondary'} icon={completedQuizModuleIds.includes(selectedModule.id) ? CheckCircle2 : ClipboardCheck} onClick={() => openModuleQuiz(selectedModule.id)} disabled={!completedModuleIds.includes(selectedModule.id) || completedQuizModuleIds.includes(selectedModule.id)} className="text-xs">
+                            {completedQuizModuleIds.includes(selectedModule.id) ? 'Selesai' : 'Kerjakan post-test'}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
                 </Card>
               ) : (
@@ -2581,11 +2913,18 @@ export const PublicRecordedClassView: React.FC<{
 
             <Card className="space-y-3">
               <h2 className="font-semibold flex items-center gap-2"><BookOpen size={18} className="text-[var(--accent-strong)]" /> Daftar Materi</h2>
-              {course.modules.map((module, index) => (
-                <button key={module.id} type="button" onClick={() => setSelectedModule(module)} className={`w-full text-left p-3 rounded-xl border transition-colors ${selectedModule?.id === module.id ? 'bg-[var(--accent-soft)] border-[var(--border-strong)]' : 'border-transparent hover:bg-[var(--surface-soft)]'}`}>
-                  <div className="flex gap-3"><span className={`w-8 h-8 rounded-lg border flex items-center justify-center text-xs font-semibold flex-shrink-0 ${completedModuleIds.includes(module.id) ? 'bg-[var(--success-soft)] border-[var(--border)] text-[var(--success-text)]' : 'border-[var(--border)] bg-[var(--surface)]'}`}>{completedModuleIds.includes(module.id) ? <Check size={15} /> : index + 1}</span><div className="min-w-0"><p className="text-xs font-semibold break-words leading-snug">{module.title}</p><p className="text-[10px] text-[var(--muted)] mt-1">{completedModuleIds.includes(module.id) ? 'Selesai' : module.duration || (module.type === 'video' ? 'Video' : 'Teks')}</p></div></div>
-                </button>
-              ))}
+              {course.modules.map((module, index) => {
+                const unlocked = isModuleUnlocked(index);
+                const moduleQuiz = perMaterialMode ? moduleQuizById[module.id] : null;
+                const moduleCompleted = completedModuleIds.includes(module.id);
+                const quizCompleted = completedQuizModuleIds.includes(module.id);
+                return <div key={module.id} className="space-y-1">
+                  <button key={module.id} type="button" disabled={!unlocked} onClick={() => unlocked && setSelectedModule(module)} className={`w-full text-left p-3 rounded-xl border transition-colors ${!unlocked ? 'cursor-not-allowed border-transparent opacity-55' : selectedModule?.id === module.id ? 'bg-[var(--accent-soft)] border-[var(--border-strong)]' : 'border-transparent hover:bg-[var(--surface-soft)]'}`}>
+                    <div className="flex gap-3"><span className={`w-8 h-8 rounded-lg border flex items-center justify-center text-xs font-semibold flex-shrink-0 ${moduleCompleted ? 'bg-[var(--success-soft)] border-[var(--border)] text-[var(--success-text)]' : 'border-[var(--border)] bg-[var(--surface)]'}`}>{!unlocked ? <LockKeyhole size={14} /> : moduleCompleted ? <Check size={15} /> : index + 1}</span><div className="min-w-0"><p className="text-xs font-semibold break-words leading-snug">{module.title}</p><p className="text-[10px] text-[var(--muted)] mt-1">{!unlocked ? 'Selesaikan materi dan post-test sebelumnya' : moduleCompleted ? 'Selesai' : module.duration || (module.type === 'video' ? 'Video' : 'Teks')}</p></div></div>
+                  </button>
+                  {moduleQuiz && <button type="button" disabled={!moduleCompleted || quizCompleted} onClick={() => openModuleQuiz(module.id)} className={`ml-11 flex w-[calc(100%-2.75rem)] items-center gap-2 rounded-lg px-3 py-2 text-left text-[11px] font-semibold transition-colors ${quizCompleted ? 'cursor-default bg-[var(--success-soft)] text-[var(--success-text)]' : moduleCompleted ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]' : 'cursor-not-allowed bg-[var(--surface-soft)] text-[var(--muted)]'}`}><ClipboardCheck size={14} />{quizCompleted ? 'Post-test selesai' : moduleCompleted ? 'Kerjakan post-test materi' : 'Tandai materi selesai dulu'}</button>}
+                </div>;
+              })}
               {course.modules.length === 0 && <p className="text-xs text-[var(--muted)]">Belum ada materi.</p>}
             </Card>
 
@@ -2602,6 +2941,23 @@ export const PublicRecordedClassView: React.FC<{
           </aside>}
         </div>
       </main>
+      <MaterialQuizModal
+        quiz={selectedModuleQuiz}
+        moduleTitle={course.modules.find(module => module.id === moduleQuizModalId)?.title || 'Materi'}
+        participantName={participantName}
+        participantEmail={participantEmail}
+        answers={moduleQuizAnswers}
+        feedback={moduleQuizFeedback}
+        error={moduleQuizError}
+        result={moduleQuizResult}
+        isSubmitting={moduleQuizSubmitting}
+        onClose={() => { setModuleQuizModalId(null); setModuleQuizResult(null); setModuleQuizError(null); }}
+        onSubmit={handleModuleQuizSubmit}
+        onParticipantNameChange={setParticipantName}
+        onParticipantEmailChange={setParticipantEmail}
+        onAnswerChange={(questionId, value) => setModuleQuizAnswers(current => ({ ...current, [questionId]: value }))}
+        onFeedbackChange={setModuleQuizFeedback}
+      />
     </div>
   );
 };

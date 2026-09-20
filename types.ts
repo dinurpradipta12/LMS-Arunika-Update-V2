@@ -2,6 +2,7 @@
 export type ContentType = 'video' | 'text';
 export type AssetType = 'link' | 'file';
 export type SpaceType = 'product_tutorial' | 'recorded_class';
+export type CoursePostTestMode = 'tab' | 'per_material';
 export type QuizQuestionType = 'multiple_choice' | 'true_false' | 'long_answer';
 
 export interface Module {
@@ -38,6 +39,7 @@ export interface Course {
   spaceType?: SpaceType;
   published?: boolean;
   overallFeedbackEnabled?: boolean;
+  postTestMode?: CoursePostTestMode;
 }
 
 export interface QuizQuestion {
@@ -60,6 +62,8 @@ export interface PublicQuizQuestion {
 export interface CourseQuiz {
   id?: string;
   courseId: string;
+  placement?: CoursePostTestMode;
+  moduleId?: string | null;
   title: string;
   description: string;
   enabled: boolean;
@@ -75,6 +79,8 @@ export interface CourseQuiz {
 export interface PublicCourseQuiz {
   id: string;
   courseId: string;
+  placement?: CoursePostTestMode;
+  moduleId?: string | null;
   title: string;
   description: string;
   passingScore: number;

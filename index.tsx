@@ -1607,7 +1607,8 @@ const PublicCourseView: React.FC<{
         categories: c.categories || [],
         spaceType: c.space_type || 'product_tutorial',
         published: c.published !== false,
-        overallFeedbackEnabled: c.overall_feedback_enabled !== false
+        overallFeedbackEnabled: c.overall_feedback_enabled !== false,
+        postTestMode: c.post_test_mode === 'per_material' ? 'per_material' : 'tab'
       };
       setLocalCourse(full);
       setSelectedModule(full.modules[0] || null);
@@ -1969,7 +1970,8 @@ const App: React.FC = () => {
         categories: item.categories || [],
         spaceType: item.space_type || 'product_tutorial',
         published: item.published !== false,
-        overallFeedbackEnabled: item.overall_feedback_enabled !== false
+        overallFeedbackEnabled: item.overall_feedback_enabled !== false,
+        postTestMode: item.post_test_mode === 'per_material' ? 'per_material' : 'tab'
       })));
     } catch (error) {
       console.warn('Fetch error', error);
@@ -2108,6 +2110,7 @@ const App: React.FC = () => {
         space_type: updatedCourse.spaceType || 'product_tutorial',
         published: updatedCourse.published !== false,
         overall_feedback_enabled: updatedCourse.overallFeedbackEnabled !== false,
+        post_test_mode: updatedCourse.postTestMode === 'per_material' ? 'per_material' : 'tab',
         updated_at: new Date().toISOString()
       };
       const { error: courseError } = await client.from('courses').upsert(courseData, { onConflict: 'id' });
@@ -2144,23 +2147,26 @@ const App: React.FC = () => {
 
     // Load the post-test before creating the copy so a missing/failed quiz
     // request never leaves a half-created class behind.
-    const { data: sourceQuiz, error: quizLoadError } = await client
+    const { data: sourceQuizzes, error: quizLoadError } = await client
       .from('course_quizzes')
       .select('*')
       .eq('course_id', sourceCourse.id)
-      .maybeSingle();
+      .order('created_at');
     if (quizLoadError) throw quizLoadError;
 
     const createCopyId = (prefix: string) => `${prefix}-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    const moduleIdMap: Record<string, string> = {};
+    const duplicatedModules = (sourceCourse.modules || []).map(module => {
+      const nextId = createCopyId('module');
+      moduleIdMap[module.id] = nextId;
+      return { ...module, id: nextId };
+    });
     const duplicatedCourse: Course = {
       ...sourceCourse,
       id: createCopyId('course'),
       title: `${sourceCourse.title} (Salinan)`,
       published: false,
-      modules: (sourceCourse.modules || []).map(module => ({
-        ...module,
-        id: createCopyId('module')
-      })),
+      modules: duplicatedModules,
       assets: (sourceCourse.assets || []).map(asset => ({
         ...asset,
         id: createCopyId('asset')
@@ -2172,13 +2178,14 @@ const App: React.FC = () => {
     try {
       await handleUpdateCourse(duplicatedCourse);
 
-      if (sourceQuiz) {
+      for (const sourceQuiz of sourceQuizzes || []) {
         const quizData: Record<string, any> = { ...sourceQuiz };
         delete quizData.id;
         delete quizData.course_id;
         delete quizData.created_at;
         delete quizData.updated_at;
         quizData.course_id = duplicatedCourse.id;
+        quizData.module_id = sourceQuiz.module_id ? moduleIdMap[sourceQuiz.module_id] || null : null;
         quizData.questions = Array.isArray(sourceQuiz.questions)
           ? sourceQuiz.questions.map((question: any) => ({
             ...question,
