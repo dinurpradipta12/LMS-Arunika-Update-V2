@@ -2384,6 +2384,9 @@ export const PublicRecordedClassView: React.FC<{
   const allRequiredMaterialQuizzesCompleted = !perMaterialMode || requiredMaterialQuizIds.every(moduleId => completedQuizModuleIds.includes(moduleId));
   const allMaterialsCompleted = Boolean(course && course.modules.length > 0 && course.modules.every(module => completedModuleIds.includes(module.id)) && allRequiredMaterialQuizzesCompleted);
   const overallFeedbackEnabled = course?.overallFeedbackEnabled !== false;
+  const showPostTestTab = !perMaterialMode;
+  const visibleTabCount = 1 + (showPostTestTab ? 1 : 0) + (overallFeedbackEnabled ? 1 : 0);
+  const showTabList = visibleTabCount >= 2;
   const selectedModuleQuiz = moduleQuizModalId ? moduleQuizById[moduleQuizModalId] || null : null;
 
   const isModuleUnlocked = (index: number) => {
@@ -2734,11 +2737,11 @@ export const PublicRecordedClassView: React.FC<{
           </div>
         </section>
 
-        <div role="tablist" aria-label="Bagian kelas" className={`grid grid-cols-1 ${overallFeedbackEnabled ? (perMaterialMode ? 'sm:grid-cols-2' : 'sm:grid-cols-3') : (perMaterialMode ? 'sm:grid-cols-1' : 'sm:grid-cols-2')} gap-2 p-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]`}>
+        {showTabList && <div role="tablist" aria-label="Bagian kelas" className={`grid grid-cols-1 ${visibleTabCount === 3 ? 'sm:grid-cols-3' : 'sm:grid-cols-2'} gap-2 p-2 rounded-2xl border border-[var(--border)] bg-[var(--surface)]`}>
           <button type="button" role="tab" aria-selected={activeTab === 'materials'} onClick={() => setActiveTab('materials')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'materials' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>
             Materi <span className="text-xs font-normal ml-1">({completedModuleIds.length}/{course.modules.length})</span>
           </button>
-          {!perMaterialMode && <button type="button" role="tab" aria-selected={activeTab === 'post_test'} onClick={() => setActiveTab('post_test')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'post_test' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>
+          {showPostTestTab && <button type="button" role="tab" aria-selected={activeTab === 'post_test'} onClick={() => setActiveTab('post_test')} className={`min-h-[48px] rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${activeTab === 'post_test' ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>
             <ClipboardCheck size={15} className="inline-block mr-2 -mt-0.5" />Post-Test
           </button>}
           {overallFeedbackEnabled && (
@@ -2746,7 +2749,7 @@ export const PublicRecordedClassView: React.FC<{
               {allMaterialsCompleted ? <CheckCircle2 size={15} className="inline-block mr-2 -mt-0.5" /> : <LockKeyhole size={14} className="inline-block mr-2 -mt-0.5" />}Feedback Kelas
             </button>
           )}
-        </div>
+        </div>}
 
         <div className={activeTab === 'materials' ? 'grid lg:grid-cols-3 gap-6 lg:gap-8 items-start' : PUBLIC_CLASS_CONTENT_CLASS}>
           <div className={activeTab === 'materials' ? 'lg:col-span-2 space-y-8 min-w-0' : 'min-w-0'}>
