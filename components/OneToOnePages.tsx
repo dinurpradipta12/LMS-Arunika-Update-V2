@@ -980,6 +980,8 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
   const [data, setData] = useState<any>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [taskUpdatingId, setTaskUpdatingId] = useState<string | null>(null);
+  const [taskUpdateError, setTaskUpdateError] = useState('');
 
   useEffect(() => {
     let cancelled = false;
@@ -998,6 +1000,24 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
     void load();
     return () => { cancelled = true; };
   }, [client, token]);
+
+  const toggleTask = async (task: any) => {
+    if (!client || !token || !task?.id || taskUpdatingId) return;
+    const nextStatus = task.status === 'done' ? 'todo' : 'done';
+    setTaskUpdatingId(task.id);
+    setTaskUpdateError('');
+    const { data: result, error: requestError } = await client.rpc('update_one_to_one_task_status', {
+      p_token: token,
+      p_task_id: task.id,
+      p_status: nextStatus
+    });
+    if (requestError || !result) {
+      setTaskUpdateError('Task belum dapat diperbarui. Coba lagi.');
+    } else {
+      setData((current: any) => current ? { ...current, tasks: (current.tasks || []).map((item: any) => item.id === task.id ? { ...item, status: result.status } : item) } : current);
+    }
+    setTaskUpdatingId(null);
+  };
 
   if (isLoading) return <main className="flex min-h-screen items-center justify-center gap-3 p-6 text-sm text-[var(--muted)]"><Loader2 size={20} className="animate-spin" /> Membuka ruang personal...</main>;
   if (error || !data) return <main className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md space-y-4 text-center"><LockKeyhole size={34} className="mx-auto text-[var(--accent-strong)]" /><h1 className="text-xl font-bold">Ruang tidak tersedia</h1><p className="text-sm leading-relaxed text-[var(--muted)]">{error || 'Link ini tidak dapat digunakan.'}</p></Card></main>;
@@ -1066,7 +1086,8 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
           </PublicDashboardPanel>
 
           <PublicDashboardPanel title="Task mentee" icon={CheckCircle2} accent={accent}>
-            {tasks.length === 0 ? <p className="text-sm text-slate-500">Belum ada task.</p> : <div className="space-y-2">{tasks.slice(0, 5).map((item: any) => <div key={item.id} className="flex items-start gap-2.5 rounded-xl bg-slate-50 p-3"><span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${item.status === 'done' ? 'bg-emerald-100 text-emerald-700' : 'bg-white text-slate-400'}`}><Check size={13} /></span><div className="min-w-0"><p className={`text-sm font-semibold ${item.status === 'done' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{item.title}</p>{item.dueAt && <p className="mt-0.5 text-xs text-slate-500">Deadline: {formatDate(item.dueAt, true)}</p>}</div></div>)}</div>}
+            {tasks.length === 0 ? <p className="text-sm text-slate-500">Belum ada task.</p> : <div className="space-y-2">{tasks.slice(0, 5).map((item: any) => <button key={item.id} type="button" onClick={() => void toggleTask(item)} disabled={Boolean(taskUpdatingId)} aria-pressed={item.status === 'done'} className="flex w-full items-start gap-2.5 rounded-xl bg-slate-50 p-3 text-left transition-colors hover:bg-slate-100 disabled:cursor-wait disabled:opacity-70"><span className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-full ${item.status === 'done' ? 'bg-emerald-100 text-emerald-700' : 'bg-white text-slate-400 ring-1 ring-slate-200'}`}>{taskUpdatingId === item.id ? <Loader2 size={13} className="animate-spin" /> : <Check size={13} />}</span><div className="min-w-0"><p className={`text-sm font-semibold ${item.status === 'done' ? 'text-slate-400 line-through' : 'text-slate-800'}`}>{item.title}</p>{item.dueAt && <p className="mt-0.5 text-xs text-slate-500">Deadline: {formatDate(item.dueAt, true)}</p>}<p className="mt-1 text-[11px] font-medium text-slate-400">{item.status === 'done' ? 'Selesai · klik untuk batalkan' : 'Klik untuk menandai selesai'}</p></div></button>)}</div>}
+            {taskUpdateError && <p className="mt-2 text-xs font-semibold text-red-600" role="alert">{taskUpdateError}</p>}
           </PublicDashboardPanel>
         </aside>
       </div>
