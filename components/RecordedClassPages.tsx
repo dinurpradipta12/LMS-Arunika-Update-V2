@@ -1777,6 +1777,31 @@ export const RecordedClassEditor: React.FC<{
 
   const validateQuiz = () => validateQuizConfig(quiz);
 
+  const scrollToQuestion = (questionIndex: number) => {
+    const questionElement = document.getElementById(`recorded-class-question-${questionIndex}`);
+    questionElement?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const questionNavigator = (currentIndex?: number) => quiz.questions.length > 1 ? (
+    <div className="flex min-w-0 flex-wrap items-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-2">
+      <span className="px-2 text-[11px] font-semibold text-[var(--muted)]">Pilih pertanyaan:</span>
+      <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-x-auto pb-0.5">
+        {quiz.questions.map((item, index) => (
+          <button
+            key={item.id}
+            type="button"
+            aria-label={`Buka pertanyaan ${index + 1}`}
+            aria-current={currentIndex === index ? 'step' : undefined}
+            onClick={() => scrollToQuestion(index)}
+            className={`h-8 min-w-8 rounded-lg border px-2 text-xs font-semibold transition-colors ${currentIndex === index ? 'border-[var(--accent)] bg-[var(--accent)] text-white' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]'}`}
+          >
+            {index + 1}
+          </button>
+        ))}
+      </div>
+    </div>
+  ) : null;
+
   const handleSave = async () => {
     if (!quiz && postTestMode === 'tab') return;
     if (!course.title.trim()) {
@@ -2037,9 +2062,11 @@ export const RecordedClassEditor: React.FC<{
                 <Button variant="secondary" className="text-xs px-3" icon={Plus} onClick={() => updateQuiz({ ...quiz, questions: [...quiz.questions, createQuestion('long_answer')] })}>Jawaban Panjang</Button>
               </div>
             </div>
+            {questionNavigator()}
 
             {quiz.questions.map((question, questionIndex) => (
-              <Card key={question.id} className="space-y-5 relative">
+              <div key={question.id} id={`recorded-class-question-${questionIndex}`} className="scroll-mt-24">
+              <Card className="space-y-5 relative">
                 <button type="button" aria-label={`Hapus pertanyaan ${questionIndex + 1}`} onClick={() => updateQuiz({ ...quiz, questions: quiz.questions.filter((_, index) => index !== questionIndex) })} className="absolute top-4 right-4 p-2 text-[var(--danger-text)] hover:bg-[var(--danger-soft)] rounded-lg"><Trash2 size={17} /></button>
                 <div className="grid md:grid-cols-[1fr_220px] gap-4 pr-10">
                   <div><Badge>Pertanyaan #{questionIndex + 1}</Badge></div>
@@ -2074,7 +2101,18 @@ export const RecordedClassEditor: React.FC<{
                     )}
                   </div>
                 )}
+                {questionNavigator(questionIndex) && (
+                  <div className="space-y-3 border-t border-[var(--border)] pt-4">
+                    {questionNavigator(questionIndex)}
+                    <div className="flex items-center justify-between gap-3">
+                      <Button type="button" variant="secondary" className="px-3 py-2 text-xs" disabled={questionIndex === 0} onClick={() => scrollToQuestion(questionIndex - 1)}>← Sebelumnya</Button>
+                      <span className="text-[11px] text-[var(--muted)]">{questionIndex + 1} dari {quiz.questions.length}</span>
+                      <Button type="button" variant="secondary" className="px-3 py-2 text-xs" disabled={questionIndex === quiz.questions.length - 1} onClick={() => scrollToQuestion(questionIndex + 1)}>Berikutnya →</Button>
+                    </div>
+                  </div>
+                )}
               </Card>
+              </div>
             ))}
 
             {quiz.questions.length === 0 && (
