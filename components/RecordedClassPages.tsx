@@ -1308,8 +1308,6 @@ const RecordingCoverEditor: React.FC<{
         reader.readAsDataURL(file);
       });
       onChangeImage(dataUrl);
-      onChangePosition(DEFAULT_COVER_POSITION);
-      onChangeZoom(DEFAULT_COVER_ZOOM);
     } catch (error: any) {
       onError?.(error?.message || 'Gambar gagal diproses.');
     } finally {
@@ -1996,7 +1994,7 @@ export const RecordedClassEditor: React.FC<{
               textMode={course.coverTextMode === 'light' ? 'light' : 'dark'}
               title={course.title}
               description={course.description}
-              onChangeImage={coverImage => updateCourse({ ...course, coverImage })}
+              onChangeImage={coverImage => updateCourse({ ...course, coverImage, coverPosition: DEFAULT_COVER_POSITION, coverZoom: DEFAULT_COVER_ZOOM })}
               onChangePosition={coverPosition => updateCourse({ ...course, coverPosition })}
               onChangeZoom={coverZoom => updateCourse({ ...course, coverZoom })}
               onChangeTextMode={coverTextMode => updateCourse({ ...course, coverTextMode })}
