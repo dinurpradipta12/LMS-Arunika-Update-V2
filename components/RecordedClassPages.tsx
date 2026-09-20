@@ -37,6 +37,7 @@ import {
 import {
   ClassFeedbackSubmission,
   Course,
+  CourseCoverTextMode,
   CourseQuiz,
   Mentor,
   Module,
@@ -55,6 +56,24 @@ const DEFAULT_QUIZ_TITLE = 'Post-Test Kelas';
 export const RECORDED_CLASS_SPACE_LABEL = 'Intensive & Mini Class Series';
 type PublicClassTab = 'materials' | 'post_test' | 'feedback';
 const PUBLIC_CLASS_CONTENT_CLASS = 'w-full max-w-4xl mx-auto';
+const DEFAULT_COVER_POSITION = '50% 50%';
+const DEFAULT_COVER_ZOOM = 100;
+
+const normalizeCoverPosition = (value: unknown) => {
+  if (typeof value !== 'string') return DEFAULT_COVER_POSITION;
+  const match = value.trim().match(/^(\d{1,3})%\s+(\d{1,3})%$/);
+  if (!match) return DEFAULT_COVER_POSITION;
+  const x = Math.max(0, Math.min(100, Number(match[1])));
+  const y = Math.max(0, Math.min(100, Number(match[2])));
+  return `${x}% ${y}%`;
+};
+
+const normalizeCoverZoom = (value: unknown) => Math.max(100, Math.min(200, Number(value) || DEFAULT_COVER_ZOOM));
+
+const parseCoverPosition = (value: string) => {
+  const [x, y] = normalizeCoverPosition(value).split(' ').map(item => Number.parseInt(item, 10));
+  return { x: Number.isFinite(x) ? x : 50, y: Number.isFinite(y) ? y : 50 };
+};
 
 const createDefaultQuiz = (courseId: string): CourseQuiz => ({
   courseId,
@@ -84,6 +103,9 @@ const createQuestion = (type: QuizQuestionType = 'multiple_choice'): QuizQuestio
 const mapCourseRow = (row: any): Course => ({
   ...row,
   coverImage: row.cover_image || '',
+  coverPosition: normalizeCoverPosition(row.cover_position),
+  coverZoom: normalizeCoverZoom(row.cover_zoom),
+  coverTextMode: row.cover_text_mode === 'light' ? 'light' : 'dark',
   mentorId: row.mentor_id || 'profile',
   modules: row.modules || [],
   assets: row.assets || [],
@@ -1235,9 +1257,27 @@ const ToggleField: React.FC<{
   </label>
 );
 
-const CoverUploader: React.FC<{ value: string; onChange: (value: string) => void; onError?: (message: string) => void }> = ({ value, onChange, onError }) => {
+const RecordingCoverEditor: React.FC<{
+  value: string;
+  position: string;
+  zoom: number;
+  textMode: CourseCoverTextMode;
+  title: string;
+  description: string;
+  onChangeImage: (value: string) => void;
+  onChangePosition: (value: string) => void;
+  onChangeZoom: (value: number) => void;
+  onChangeTextMode: (value: CourseCoverTextMode) => void;
+  onError?: (message: string) => void;
+}> = ({ value, position, zoom, textMode, title, description, onChangeImage, onChangePosition, onChangeZoom, onChangeTextMode, onError }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [isProcessing, setIsProcessing] = useState(false);
+  const parsedPosition = parseCoverPosition(position);
+
+  const updatePosition = (axis: 'x' | 'y', rawValue: string) => {
+    const next = Math.max(0, Math.min(100, Number(rawValue) || 0));
+    onChangePosition(axis === 'x' ? `${next}% ${parsedPosition.y}%` : `${parsedPosition.x}% ${next}%`);
+  };
 
   const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -1267,7 +1307,9 @@ const CoverUploader: React.FC<{ value: string; onChange: (value: string) => void
         };
         reader.readAsDataURL(file);
       });
-      onChange(dataUrl);
+      onChangeImage(dataUrl);
+      onChangePosition(DEFAULT_COVER_POSITION);
+      onChangeZoom(DEFAULT_COVER_ZOOM);
     } catch (error: any) {
       onError?.(error?.message || 'Gambar gagal diproses.');
     } finally {
@@ -1277,21 +1319,54 @@ const CoverUploader: React.FC<{ value: string; onChange: (value: string) => void
 
   return (
     <div className="space-y-3">
-      <Input label="URL Cover atau gambar tersimpan" value={value} onChange={event => onChange(event.target.value)} placeholder="https://..." />
-      <div className="aspect-video rounded-2xl border border-dashed border-[var(--border-strong)] overflow-hidden bg-[var(--surface-soft)] flex items-center justify-center">
+      <Input label="URL Cover atau gambar tersimpan (opsional)" value={value} onChange={event => onChangeImage(event.target.value)} placeholder="https://..." />
+      <div className="relative h-52 overflow-hidden rounded-2xl border border-[var(--border-strong)] bg-[var(--surface-soft)] sm:h-64">
         {value ? (
-          <img src={value} alt="Preview cover kelas" className="w-full h-full object-cover" />
+          <img
+            src={value}
+            alt="Preview cover kelas"
+            className="absolute inset-0 h-full w-full object-cover"
+            style={{ objectPosition: position, transform: `scale(${zoom / 100})`, transformOrigin: position }}
+          />
         ) : (
-          <div className="text-center text-[var(--muted)] px-4">
-            <Video size={28} className="mx-auto mb-2" />
-            <p className="text-xs">Cover {RECORDED_CLASS_SPACE_LABEL} 16:9</p>
+          <div className="absolute inset-0 flex items-center justify-center text-center text-[var(--muted)]">
+            <div><Video size={28} className="mx-auto mb-2" /><p className="text-xs">Cover {RECORDED_CLASS_SPACE_LABEL}</p></div>
           </div>
         )}
+        <div className={`absolute inset-0 ${textMode === 'light' ? 'bg-gradient-to-t from-slate-950/85 via-slate-950/25 to-transparent' : 'bg-gradient-to-t from-white/90 via-white/30 to-transparent'}`} />
+        <div className={`absolute inset-x-0 bottom-0 p-4 ${textMode === 'light' ? 'text-white' : 'text-[var(--text)]'}`}>
+          <span className={`inline-flex rounded-md border px-2 py-1 text-[9px] font-semibold uppercase tracking-wide ${textMode === 'light' ? 'border-white/25 bg-white/15 text-white' : 'border-[var(--border)] bg-white/70 text-[var(--text)]'}`}>On-demand Class</span>
+          <p className="mt-2 line-clamp-1 text-lg font-bold leading-tight">{title || 'Judul kelas'}</p>
+          <p className={`mt-1 line-clamp-1 text-xs ${textMode === 'light' ? 'text-white/85' : 'text-[var(--muted)]'}`}>{description || 'Deskripsi kelas akan tampil di sini.'}</p>
+        </div>
       </div>
+      <p className="text-xs leading-relaxed text-[var(--muted)]">Preview memakai rasio banner halaman publik. Geser fokus gambar dan cek posisi judul sebelum menyimpan kelas.</p>
       <input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} />
       <Button type="button" variant="secondary" onClick={() => inputRef.current?.click()} isLoading={isProcessing} className="w-full">
         Upload Cover
       </Button>
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+        <div className="flex items-center justify-between gap-3">
+          <div><p className="text-sm font-semibold">Atur cropping dan posisi</p><p className="mt-1 text-xs text-[var(--muted)]">Pengaturan ini disimpan sebagai fokus banner, jadi gambar tidak perlu dipotong ulang.</p></div>
+          <span className="rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2 py-1 text-[10px] font-semibold text-[var(--muted)]">{Math.round(zoom)}%</span>
+        </div>
+        <div className="mt-4 grid gap-4 sm:grid-cols-3">
+          <label className="space-y-2"><span className="flex justify-between text-xs font-semibold text-[var(--muted)]"><span>Horizontal</span><span>{parsedPosition.x}%</span></span><input aria-label="Posisi horizontal cover" type="range" min="0" max="100" value={parsedPosition.x} onChange={event => updatePosition('x', event.target.value)} className="w-full accent-[var(--accent)]" /></label>
+          <label className="space-y-2"><span className="flex justify-between text-xs font-semibold text-[var(--muted)]"><span>Vertikal</span><span>{parsedPosition.y}%</span></span><input aria-label="Posisi vertikal cover" type="range" min="0" max="100" value={parsedPosition.y} onChange={event => updatePosition('y', event.target.value)} className="w-full accent-[var(--accent)]" /></label>
+          <label className="space-y-2"><span className="flex justify-between text-xs font-semibold text-[var(--muted)]"><span>Zoom / crop</span><span>{Math.round(zoom)}%</span></span><input aria-label="Zoom cover" type="range" min="100" max="200" value={zoom} onChange={event => onChangeZoom(normalizeCoverZoom(event.target.value))} className="w-full accent-[var(--accent)]" /></label>
+        </div>
+        <div className="mt-4 grid grid-cols-3 gap-2 sm:flex sm:flex-wrap">
+          {[
+            ['Kiri atas', '0% 0%'], ['Tengah atas', '50% 0%'], ['Kanan atas', '100% 0%'],
+            ['Kiri tengah', '0% 50%'], ['Tengah', DEFAULT_COVER_POSITION], ['Kanan tengah', '100% 50%'],
+            ['Kiri bawah', '0% 100%'], ['Tengah bawah', '50% 100%'], ['Kanan bawah', '100% 100%']
+          ].map(([label, preset]) => <button key={preset} type="button" onClick={() => onChangePosition(preset)} className={`rounded-lg border px-2 py-2 text-[10px] font-semibold transition-colors ${normalizeCoverPosition(position) === preset ? 'border-[var(--accent)] bg-[var(--accent-soft)] text-[var(--accent-strong)]' : 'border-[var(--border)] bg-[var(--surface)] text-[var(--muted)] hover:border-[var(--border-strong)]'}`}>{label}</button>)}
+        </div>
+        <label className="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+          <input type="checkbox" checked={textMode === 'light'} onChange={event => onChangeTextMode(event.target.checked ? 'light' : 'dark')} className="mt-0.5 h-4 w-4 accent-[var(--accent)]" />
+          <span><span className="block text-sm font-semibold">Cover gelap, gunakan teks putih</span><span className="mt-1 block text-xs leading-relaxed text-[var(--muted)]">Matikan pilihan ini untuk cover terang dengan teks gelap.</span></span>
+        </label>
+      </div>
     </div>
   );
 };
@@ -1543,7 +1618,12 @@ export const RecordedClassesPage: React.FC<{
             </button>
             <div className="aspect-video overflow-hidden border-b border-[var(--border)] bg-[var(--surface-soft)]">
               {course.coverImage ? (
-                <img src={course.coverImage} alt="" className="w-full h-full object-cover" />
+                <img
+                  src={course.coverImage}
+                  alt=""
+                  className="h-full w-full object-cover"
+                  style={{ objectPosition: course.coverPosition || DEFAULT_COVER_POSITION, transform: `scale(${normalizeCoverZoom(course.coverZoom) / 100})`, transformOrigin: course.coverPosition || DEFAULT_COVER_POSITION }}
+                />
               ) : (
                 <div className="w-full h-full flex items-center justify-center text-[var(--muted)]"><GraduationCap size={34} /></div>
               )}
@@ -1630,7 +1710,10 @@ export const RecordedClassEditor: React.FC<{
         published: sourceCourse.published === true,
         modules: sourceCourse.modules || [],
         assets: sourceCourse.assets || [],
-        postTestMode: sourceCourse.postTestMode === 'per_material' ? 'per_material' : 'tab'
+        postTestMode: sourceCourse.postTestMode === 'per_material' ? 'per_material' : 'tab',
+        coverPosition: normalizeCoverPosition(sourceCourse.coverPosition),
+        coverZoom: normalizeCoverZoom(sourceCourse.coverZoom),
+        coverTextMode: sourceCourse.coverTextMode === 'light' ? 'light' : 'dark'
       });
     }
   }, [sourceCourse]);
@@ -1906,7 +1989,19 @@ export const RecordedClassEditor: React.FC<{
             </div>
             <Input label="Judul Kelas / Webinar" value={course.title} onChange={event => updateCourse({ ...course, title: event.target.value })} />
             <Textarea label="Deskripsi Kelas" value={course.description} onChange={event => updateCourse({ ...course, description: event.target.value })} />
-            <CoverUploader value={course.coverImage} onChange={coverImage => updateCourse({ ...course, coverImage })} onError={message => setNotice({ tone: 'error', title: 'Cover gagal diproses', message })} />
+            <RecordingCoverEditor
+              value={course.coverImage}
+              position={course.coverPosition || DEFAULT_COVER_POSITION}
+              zoom={normalizeCoverZoom(course.coverZoom)}
+              textMode={course.coverTextMode === 'light' ? 'light' : 'dark'}
+              title={course.title}
+              description={course.description}
+              onChangeImage={coverImage => updateCourse({ ...course, coverImage })}
+              onChangePosition={coverPosition => updateCourse({ ...course, coverPosition })}
+              onChangeZoom={coverZoom => updateCourse({ ...course, coverZoom })}
+              onChangeTextMode={coverTextMode => updateCourse({ ...course, coverTextMode })}
+              onError={message => setNotice({ tone: 'error', title: 'Cover gagal diproses', message })}
+            />
           </Card>
 
           <section className="space-y-4">
@@ -2709,6 +2804,10 @@ export const PublicRecordedClassView: React.FC<{
     );
   }
 
+  const coverUsesLightText = Boolean(course.coverImage) && course.coverTextMode === 'light';
+  const coverPosition = normalizeCoverPosition(course.coverPosition);
+  const coverZoom = normalizeCoverZoom(course.coverZoom);
+
   return (
     <div className="min-h-screen bg-[var(--app-bg)] [scrollbar-gutter:stable]">
       <header className="sticky top-0 z-40 bg-[var(--surface)]/95 backdrop-blur border-b border-[var(--border)] px-4">
@@ -2721,16 +2820,21 @@ export const PublicRecordedClassView: React.FC<{
       <main className="w-full max-w-7xl mx-auto p-4 md:p-8 space-y-8">
         <section className="relative h-[220px] sm:h-[250px] lg:h-[280px] rounded-2xl border border-[var(--border)] bg-[var(--surface)] overflow-hidden">
           {course.coverImage ? (
-            <img src={course.coverImage} alt={`Cover ${course.title}`} className="absolute inset-0 w-full h-full object-cover" />
+            <img
+              src={course.coverImage}
+              alt={`Cover ${course.title}`}
+              className="absolute inset-0 h-full w-full object-cover"
+              style={{ objectPosition: coverPosition, transform: `scale(${coverZoom / 100})`, transformOrigin: coverPosition }}
+            />
           ) : (
             <div className="absolute inset-0 flex items-center justify-center bg-[var(--surface-soft)] text-[var(--muted)]"><GraduationCap size={48} /></div>
           )}
-          <div className={`absolute inset-0 ${course.coverImage ? 'bg-gradient-to-t from-slate-950/80 via-slate-950/25 to-transparent' : 'bg-gradient-to-t from-[var(--surface)] via-[var(--surface)]/45 to-transparent'}`} />
-          <div className={`absolute inset-x-0 bottom-0 p-5 md:p-7 ${course.coverImage ? 'text-white' : 'text-[var(--text)]'}`}>
-            <Badge color="var(--success-soft)">On-demand Class</Badge>
+          <div className={`absolute inset-0 ${course.coverImage ? (coverUsesLightText ? 'bg-gradient-to-t from-slate-950/80 via-slate-950/25 to-transparent' : 'bg-gradient-to-t from-white/90 via-white/35 to-transparent') : 'bg-gradient-to-t from-[var(--surface)] via-[var(--surface)]/45 to-transparent'}`} />
+          <div className={`absolute inset-x-0 bottom-0 p-5 md:p-7 ${coverUsesLightText ? 'text-white' : 'text-[var(--text)]'}`}>
+            <span className={`inline-flex rounded-lg border px-3 py-1.5 text-[10px] font-semibold uppercase tracking-wider ${coverUsesLightText ? 'border-white/25 bg-white/15 text-white' : 'border-[var(--border)] bg-white/75 text-[var(--text)]'}`}>On-demand Class</span>
             <h1 className="text-2xl md:text-3xl font-bold leading-tight mt-3 max-w-4xl">{course.title}</h1>
-            <p className={`text-sm leading-6 mt-2 max-w-3xl line-clamp-2 ${course.coverImage ? 'text-white/85' : 'text-[var(--muted)]'}`}>{course.description}</p>
-            <div className={`flex flex-wrap gap-x-6 gap-y-2 mt-3 text-sm ${course.coverImage ? 'text-white/90' : 'text-[var(--muted)]'}`}>
+            <p className={`text-sm leading-6 mt-2 max-w-3xl line-clamp-2 ${coverUsesLightText ? 'text-white/85' : 'text-[var(--muted)]'}`}>{course.description}</p>
+            <div className={`flex flex-wrap gap-x-6 gap-y-2 mt-3 text-sm ${coverUsesLightText ? 'text-white/90' : 'text-[var(--muted)]'}`}>
               <span className="flex items-center gap-2"><Video size={16} /> {course.modules.length} materi</span>
               <span className="flex items-center gap-2"><Download size={16} /> {course.assets.length} asset</span>
             </div>

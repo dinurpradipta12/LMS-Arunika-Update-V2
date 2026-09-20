@@ -3,6 +3,7 @@ export type ContentType = 'video' | 'text';
 export type AssetType = 'link' | 'file';
 export type SpaceType = 'product_tutorial' | 'recorded_class';
 export type CoursePostTestMode = 'tab' | 'per_material';
+export type CourseCoverTextMode = 'dark' | 'light';
 export type QuizQuestionType = 'multiple_choice' | 'true_false' | 'long_answer';
 
 export interface Module {
@@ -40,6 +41,12 @@ export interface Course {
   published?: boolean;
   overallFeedbackEnabled?: boolean;
   postTestMode?: CoursePostTestMode;
+  /** Focal point used by the recording-class banner (percentage pair, e.g. 50% 50%). */
+  coverPosition?: string;
+  /** Display zoom for the recording-class banner crop preview. */
+  coverZoom?: number;
+  /** Text tone rendered above the cover image. */
+  coverTextMode?: CourseCoverTextMode;
 }
 
 export interface QuizQuestion {
