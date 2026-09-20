@@ -2759,16 +2759,16 @@ export const PublicRecordedClassView: React.FC<{
                   ) : (
                     <div className="p-6 md:p-9 min-h-[260px] whitespace-pre-wrap leading-7 text-sm md:text-base">{selectedModule.content}</div>
                   )}
+                  <div className="flex justify-end border-t border-[var(--border)] p-4 md:px-7">
+                    <Button type="button" variant={completedModuleIds.includes(selectedModule.id) ? 'green' : 'secondary'} icon={completedModuleIds.includes(selectedModule.id) ? CheckCircle2 : Check} onClick={() => markModuleComplete(selectedModule.id)} disabled={completedModuleIds.includes(selectedModule.id)} className="text-xs">
+                      {completedModuleIds.includes(selectedModule.id) ? 'Materi selesai' : 'Tandai selesai'}
+                    </Button>
+                  </div>
                   <div className="p-5 md:p-7 border-t border-[var(--border)]">
                     <Badge>{selectedModule.type === 'video' ? 'Recording' : 'Materi Teks'}</Badge>
                     <h3 className="text-xl font-semibold mt-3">{selectedModule.title}</h3>
                     {selectedModule.description && <p className="text-sm text-[var(--muted)] leading-7 mt-3 whitespace-pre-wrap">{selectedModule.description}</p>}
-                    <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mt-6 pt-5 border-t border-[var(--border)]">
-                      <p className="text-xs text-[var(--muted)]">{completedModuleIds.length} dari {course.modules.length} materi selesai</p>
-                      <Button type="button" variant={completedModuleIds.includes(selectedModule.id) ? 'green' : 'secondary'} icon={completedModuleIds.includes(selectedModule.id) ? CheckCircle2 : Check} onClick={() => markModuleComplete(selectedModule.id)} disabled={completedModuleIds.includes(selectedModule.id)} className="text-xs">
-                        {completedModuleIds.includes(selectedModule.id) ? 'Materi selesai' : 'Tandai selesai'}
-                      </Button>
-                    </div>
+                    <p className="mt-6 border-t border-[var(--border)] pt-5 text-xs text-[var(--muted)]">{completedModuleIds.length} dari {course.modules.length} materi selesai</p>
                     {perMaterialMode && moduleQuizById[selectedModule.id] && (
                       <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
