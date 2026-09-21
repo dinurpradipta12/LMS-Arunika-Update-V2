@@ -216,6 +216,44 @@ const ChatMessages: React.FC<{ messages: ChatMessage[]; viewer: 'admin' | 'guest
   </div>;
 };
 
+const escapeEditorHtml = (value: string) => value.replace(/[&<>"']/g, character => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[character] || character));
+
+const markdownToEditorHtml = (value: string) => value.split('\n').map(line => {
+  const escaped = escapeEditorHtml(line)
+    .replace(/`([^`\n]+)`/g, '<code>$1</code>')
+    .replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    .replace(/\+\+([^+\n]+)\+\+/g, '<u>$1</u>')
+    .replace(/\*([^*\n]+)\*/g, '<em>$1</em>');
+  const listItem = line.match(/^\s*[-*]\s+(.*)$/);
+  return `<div>${listItem ? '<span data-chat-list-marker="true">• </span>' : ''}${listItem ? escapeEditorHtml(listItem[1]).replace(/`([^`\n]+)`/g, '<code>$1</code>').replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>').replace(/\+\+([^+\n]+)\+\+/g, '<u>$1</u>').replace(/\*([^*\n]+)\*/g, '<em>$1</em>') : escaped || '<br />'}</div>`;
+}).join('');
+
+const editorHtmlToMarkdown = (html: string) => {
+  const root = document.createElement('div');
+  root.innerHTML = html;
+  const serialize = (node: Node): string => {
+    if (node.nodeType === 3) return node.textContent || '';
+    if (node.nodeType !== 1) return '';
+    const element = node as HTMLElement;
+    if (element.dataset.chatListMarker || ['script', 'style'].includes(element.tagName.toLowerCase())) return '';
+    const children = Array.from(element.childNodes).map(serialize).join('');
+    switch (element.tagName.toLowerCase()) {
+      case 'br': return '\n';
+      case 'strong':
+      case 'b': return `**${children}**`;
+      case 'em':
+      case 'i': return `*${children}*`;
+      case 'u': return `++${children}++`;
+      case 'code': return `\`${children}\``;
+      case 'li': return `- ${children}\n`;
+      case 'div':
+      case 'p': return `${children}\n`;
+      default: return children;
+    }
+  };
+  return serialize(root).replace(/\u00a0/g, ' ').replace(/[ \t]+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim();
+};
+
 const ChatComposer: React.FC<{
   value: string;
   onChange: (value: string) => void;
@@ -224,70 +262,76 @@ const ChatComposer: React.FC<{
   disabled?: boolean;
   isSending?: boolean;
 }> = ({ value, onChange, onSubmit, placeholder, disabled = false, isSending = false }) => {
-  const textareaRef = useRef<HTMLTextAreaElement | null>(null);
-  const resizeTextarea = () => {
-    const textarea = textareaRef.current;
-    if (!textarea) return;
-    textarea.style.height = 'auto';
-    const nextHeight = Math.min(Math.max(textarea.scrollHeight, 58), 220);
-    textarea.style.height = `${nextHeight}px`;
+  const editorRef = useRef<HTMLDivElement | null>(null);
+  const lastValueRef = useRef(value);
+  const [isEmpty, setIsEmpty] = useState(!value.trim());
+  const resizeEditor = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.style.height = 'auto';
+    editor.style.height = `${Math.min(Math.max(editor.scrollHeight, 58), 220)}px`;
   };
   const toolbarButtons = [
-    { label: 'Tebal', icon: Bold, prefix: '**', suffix: '**', placeholder: 'teks tebal', format: 'wrap' as const },
-    { label: 'Miring', icon: Italic, prefix: '*', suffix: '*', placeholder: 'teks miring', format: 'wrap' as const },
-    { label: 'Garis bawah', icon: Underline, prefix: '++', suffix: '++', placeholder: 'teks bergaris bawah', format: 'wrap' as const },
-    { label: 'Daftar', icon: List, prefix: '- ', suffix: '', placeholder: '', format: 'list' as const }
+    { label: 'Tebal', icon: Bold, command: 'bold' },
+    { label: 'Miring', icon: Italic, command: 'italic' },
+    { label: 'Garis bawah', icon: Underline, command: 'underline' },
+    { label: 'Daftar', icon: List, command: 'insertUnorderedList' }
   ];
 
-  const applyFormat = (button: typeof toolbarButtons[number]) => {
-    const textarea = textareaRef.current;
-    if (!textarea || disabled || isSending) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    if (button.format === 'list') {
-      const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
-      const nextValue = `${value.slice(0, lineStart)}- ${value.slice(lineStart)}`;
-      onChange(nextValue);
-      requestAnimationFrame(() => {
-        textarea.focus();
-        textarea.setSelectionRange(start + 2, end + 2);
-      });
-      return;
-    }
-    const selectedText = value.slice(start, end);
-    const textToInsert = selectedText || button.placeholder;
-    const nextValue = `${value.slice(0, start)}${button.prefix}${textToInsert}${button.suffix}${value.slice(end)}`;
-    onChange(nextValue);
-    requestAnimationFrame(() => {
-      textarea.focus();
-      const selectionStart = start + button.prefix.length;
-      textarea.setSelectionRange(selectionStart, selectionStart + textToInsert.length);
-    });
-  };
+  useEffect(() => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.innerHTML = markdownToEditorHtml(value);
+    setIsEmpty(!value.trim());
+    lastValueRef.current = value;
+    requestAnimationFrame(resizeEditor);
+  }, []);
 
   useEffect(() => {
-    resizeTextarea();
+    if (value === lastValueRef.current) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+    editor.innerHTML = markdownToEditorHtml(value);
+    setIsEmpty(!value.trim());
+    lastValueRef.current = value;
+    requestAnimationFrame(resizeEditor);
   }, [value]);
+
+  const handleEditorInput = () => {
+    const editor = editorRef.current;
+    if (!editor) return;
+    const nextValue = editorHtmlToMarkdown(editor.innerHTML);
+    lastValueRef.current = nextValue;
+    setIsEmpty(!nextValue);
+    onChange(nextValue);
+    requestAnimationFrame(resizeEditor);
+  };
+
+  const applyFormat = (command: string) => {
+    if (!editorRef.current || disabled || isSending) return;
+    editorRef.current.focus();
+    document.execCommand(command, false);
+    handleEditorInput();
+  };
 
   return <form className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] p-3 md:p-5" onSubmit={onSubmit}>
     <div className={`rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 transition-all focus-within:border-[var(--border-strong)] focus-within:ring-4 focus-within:ring-[color-mix(in_srgb,var(--accent)_10%,transparent)] ${disabled ? 'opacity-70' : ''}`}>
-      <textarea
-        ref={textareaRef}
-        value={value}
-        onChange={event => {
-          onChange(event.target.value);
-          requestAnimationFrame(resizeTextarea);
-        }}
-        placeholder={placeholder}
-        rows={1}
-        maxLength={4000}
-        disabled={disabled || isSending}
-        className="max-h-[220px] min-h-[58px] w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm leading-6 text-[var(--text)] outline-none placeholder:text-[var(--muted)] focus:ring-0"
-        aria-label="Pesan"
-      />
+      <div className="relative">
+        {isEmpty && <span className="pointer-events-none absolute left-1 top-1 z-10 text-sm leading-6 text-[var(--muted)]">{placeholder}</span>}
+        <div
+          ref={editorRef}
+          contentEditable={!disabled && !isSending}
+          role="textbox"
+          aria-multiline="true"
+          aria-label="Pesan"
+          onInput={handleEditorInput}
+          className="max-h-[220px] min-h-[58px] w-full overflow-y-auto px-1 py-1 text-sm leading-6 text-[var(--text)] outline-none"
+          suppressContentEditableWarning
+        />
+      </div>
       <div className="mt-2 flex items-center justify-between gap-3 border-t border-[var(--border)] pt-2">
         <div className="flex items-center gap-1 text-[var(--muted)]">
-          {toolbarButtons.map(button => { const Icon = button.icon; return <button key={button.label} type="button" disabled={disabled || isSending} aria-label={button.label} title={button.label} onClick={() => applyFormat(button)} className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45"><Icon size={16} /></button>; })}
+          {toolbarButtons.map(button => { const Icon = button.icon; return <button key={button.label} type="button" disabled={disabled || isSending} aria-label={button.label} title={button.label} onMouseDown={event => event.preventDefault()} onClick={() => applyFormat(button.command)} className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45"><Icon size={16} /></button>; })}
           <button type="button" disabled={disabled} aria-label="Lampiran" title="Lampiran (segera hadir)" className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg opacity-55"><Paperclip size={16} /></button>
           <button type="button" disabled={disabled} aria-label="Emoji" title="Emoji (segera hadir)" className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg opacity-55"><Smile size={16} /></button>
         </div>
