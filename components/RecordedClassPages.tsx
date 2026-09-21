@@ -21,6 +21,7 @@ import {
   Loader2,
   LockKeyhole,
   Mail,
+  MessageCircle,
   Plus,
   RefreshCw,
   Save,
@@ -51,6 +52,7 @@ import {
 import { Badge, Button, Card, Input, Textarea } from './UI';
 import { setPublicMetadata } from './PublicMetadata';
 import logoUtama from '../src/logo-utama.png';
+import { CHAT_CENTER_SPACE_LABEL } from './ChatCenterPages';
 
 const DEFAULT_QUIZ_TITLE = 'Post-Test Kelas';
 export const RECORDED_CLASS_SPACE_LABEL = 'Intensive & Mini Class Series';
@@ -1518,6 +1520,23 @@ export const SpacesDashboard: React.FC<{ courses: Course[] }> = ({ courses }) =>
             </div>
             <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Buat dashboard personal per mentee untuk recording, kalender, task, dan catatan mentor dengan link tanpa login.</p>
             <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--success-text)]">Buka ruang <ChevronRight size={15} /></span>
+          </Card>
+        </Link>
+
+        <Link to="/admin/chat-center" className="group block">
+          <Card className="h-full p-4 group-hover:border-[var(--border-strong)] md:p-5">
+            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
+              <MessageCircle size={19} />
+            </div>
+            <div className="flex items-start justify-between gap-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 09</p>
+                <h2 className="mt-1.5 text-lg font-bold">{CHAT_CENTER_SPACE_LABEL}</h2>
+              </div>
+              <Badge>Privat</Badge>
+            </div>
+            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Kelola percakapan 1:1 melalui link publik yang aman, dengan durasi akses yang bisa diatur.</p>
+            <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent-strong)]">Buka ruang <ChevronRight size={15} /></span>
           </Card>
         </Link>
       </div>
