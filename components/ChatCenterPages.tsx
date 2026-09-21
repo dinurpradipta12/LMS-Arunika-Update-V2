@@ -38,6 +38,7 @@ interface ChatRoom {
   title: string;
   participantName: string;
   participantEmail: string;
+  adminDisplayName: string;
   status: ChatRoomStatus;
   isOnline: boolean;
   messageRetentionMinutes: number;
@@ -77,6 +78,7 @@ const publicChatErrorMessage = (error: any, action: 'open' | 'send' = 'open') =>
   if (raw.includes('ROOM_EXPIRED') || raw.includes('ROOM_CLOSED')) return 'Room chat sudah ditutup atau masa aksesnya berakhir.';
   if (raw.includes('RATE_LIMITED')) return 'Terlalu banyak pesan dalam waktu singkat. Coba lagi sebentar.';
   if (raw.includes('INVALID_MESSAGE')) return 'Pesan tidak valid atau terlalu panjang.';
+  if (raw.includes('INVALID_ADMIN_DISPLAY_NAME')) return 'Nama admin maksimal 120 karakter.';
   if (raw.includes('INVALID_REPLY')) return 'Pesan yang dibalas sudah tidak tersedia. Muat ulang room lalu coba lagi.';
   if (raw.includes('SCHEMA CACHE') || raw.includes('FUNCTION PUBLIC.') || raw.includes('NOT FOUND')) {
     return action === 'send' ? 'Pesan belum dapat dikirim. Coba lagi nanti.' : 'Room chat tidak ditemukan atau link sudah tidak berlaku.';
@@ -89,6 +91,7 @@ const mapRoom = (row: any): ChatRoom => ({
   title: row.title || CHAT_CENTER_SPACE_LABEL,
   participantName: row.participant_name || '',
   participantEmail: row.participant_email || '',
+  adminDisplayName: row.admin_display_name || 'Admin',
   status: row.status === 'closed' ? 'closed' : row.status === 'active' ? 'active' : 'expired',
   isOnline: row.is_online !== false,
   messageRetentionMinutes: Number(row.message_retention_minutes || row.duration_minutes || 1440),
@@ -233,11 +236,11 @@ const ChatMessages: React.FC<{ messages: ChatMessage[]; viewer: 'admin' | 'guest
     requestAnimationFrame(() => { element.scrollTop = element.scrollHeight; });
   }, [visibleMessages.length, latestMessageId]);
 
-  return <div ref={scrollRef} className={`flex h-full min-h-0 flex-col gap-3 overflow-y-auto overscroll-contain scroll-smooth rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 md:p-6 ${className}`}>
+  return <div ref={scrollRef} className={`flex h-full min-h-0 flex-col gap-2 overflow-y-auto overscroll-contain scroll-smooth rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 md:p-5 ${className}`}>
     {visibleMessages.length === 0 ? <div className="m-auto max-w-xs text-center text-sm text-[var(--muted)]"><MessageCircle size={30} className="mx-auto mb-3" /><p>Belum ada pesan.</p><p className="mt-1 text-xs">Kirim pesan pertama untuk memulai percakapan.</p></div> : visibleMessages.map(message => {
       const mine = message.senderRole === viewer;
       return <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
-        <div className={`max-w-[88%] rounded-2xl px-4 py-3 shadow-sm ${mine ? 'rounded-br-md bg-[var(--accent)] text-white' : 'rounded-bl-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]'}`}>
+        <div className={`max-w-[88%] rounded-2xl px-3 py-2.5 shadow-sm ${mine ? 'rounded-br-md bg-[var(--accent)] text-white' : 'rounded-bl-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]'}`}>
           <p className={`mb-1 text-[10px] font-semibold ${mine ? 'text-white/75' : 'text-[var(--muted)]'}`}>{message.senderName || (mine ? 'Anda' : 'Peserta')}</p>
           {message.replyTo && <div className={`mb-2 rounded-lg border-l-2 px-2.5 py-1.5 text-xs ${mine ? 'border-white/60 bg-white/10 text-white/85' : 'border-[var(--accent)] bg-[var(--surface-soft)] text-[var(--muted)]'}`}><p className="font-semibold">{message.replyTo.senderName || 'Pesan'}</p><p className="mt-0.5 truncate">{messagePreview(message.replyTo.body)}</p></div>}
           <p className="break-words text-sm leading-relaxed">{renderChatBody(message.body)}</p>
@@ -303,7 +306,7 @@ const ChatComposer: React.FC<{
     const editor = editorRef.current;
     if (!editor) return;
     editor.style.height = 'auto';
-    editor.style.height = `${Math.min(Math.max(editor.scrollHeight, 58), 220)}px`;
+    editor.style.height = `${Math.min(Math.max(editor.scrollHeight, 36), 160)}px`;
   };
   const toolbarButtons = [
     { label: 'Tebal', icon: Bold, command: 'bold' },
@@ -348,8 +351,8 @@ const ChatComposer: React.FC<{
     handleEditorInput();
   };
 
-  return <form className="shrink-0 border-t border-[var(--border)] bg-transparent px-0 py-3 md:px-0 md:py-5" onSubmit={onSubmit}>
-    <div className={`rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 transition-all focus-within:border-[var(--border-strong)] focus-within:ring-4 focus-within:ring-[color-mix(in_srgb,var(--accent)_10%,transparent)] ${disabled ? 'opacity-70' : ''}`}>
+  return <form className="shrink-0 border-t border-[var(--border)] bg-transparent px-0 py-2 md:py-3" onSubmit={onSubmit}>
+    <div className={`rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-2.5 transition-all focus-within:border-[var(--border-strong)] focus-within:ring-4 focus-within:ring-[color-mix(in_srgb,var(--accent)_10%,transparent)] md:p-3 ${disabled ? 'opacity-70' : ''}`}>
       {replyingTo && <div className="mb-2 flex items-start gap-2 rounded-xl border-l-2 border-[var(--accent)] bg-[var(--surface)] px-3 py-2 text-xs"><Reply size={14} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div className="min-w-0 flex-1"><p className="font-semibold">Membalas {replyingTo.senderName || 'pesan'}</p><p className="mt-0.5 truncate text-[var(--muted)]">{messagePreview(replyingTo.body)}</p></div>{onCancelReply && <button type="button" onClick={onCancelReply} className="rounded-md p-1 text-[var(--muted)] hover:bg-[var(--surface-soft)]" aria-label="Batal membalas"><X size={14} /></button>}</div>}
       <div className="relative">
         {isEmpty && <span className="pointer-events-none absolute left-1 top-1 z-10 text-sm leading-6 text-[var(--muted)]">{placeholder}</span>}
@@ -360,21 +363,34 @@ const ChatComposer: React.FC<{
           aria-multiline="true"
           aria-label="Pesan"
           onInput={handleEditorInput}
-          className="max-h-[220px] min-h-[58px] w-full overflow-y-auto px-1 py-1 text-sm leading-6 text-[var(--text)] outline-none"
+          className="max-h-[160px] min-h-[36px] w-full overflow-y-auto px-1 py-0.5 text-sm leading-5 text-[var(--text)] outline-none"
           suppressContentEditableWarning
         />
       </div>
-      <div className="mt-2 flex items-center justify-between gap-3 border-t border-[var(--border)] pt-2">
+      <div className="mt-1.5 flex items-center justify-between gap-2 border-t border-[var(--border)] pt-1.5">
         <div className="flex items-center gap-1 text-[var(--muted)]">
-          {toolbarButtons.map(button => { const Icon = button.icon; return <button key={button.label} type="button" disabled={disabled || isSending} aria-label={button.label} title={button.label} onMouseDown={event => event.preventDefault()} onClick={() => applyFormat(button.command)} className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45"><Icon size={16} /></button>; })}
-          <button type="button" disabled={disabled} aria-label="Lampiran" title="Lampiran (segera hadir)" className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg opacity-55"><Paperclip size={16} /></button>
-          <button type="button" disabled={disabled} aria-label="Emoji" title="Emoji (segera hadir)" className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg opacity-55"><Smile size={16} /></button>
+          {toolbarButtons.map(button => { const Icon = button.icon; return <button key={button.label} type="button" disabled={disabled || isSending} aria-label={button.label} title={button.label} onMouseDown={event => event.preventDefault()} onClick={() => applyFormat(button.command)} className="flex h-7 w-7 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45"><Icon size={14} /></button>; })}
+          <button type="button" disabled={disabled} aria-label="Lampiran" title="Lampiran (segera hadir)" className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-lg opacity-55"><Paperclip size={14} /></button>
+          <button type="button" disabled={disabled} aria-label="Emoji" title="Emoji (segera hadir)" className="flex h-7 w-7 cursor-not-allowed items-center justify-center rounded-lg opacity-55"><Smile size={14} /></button>
         </div>
-        <div className="flex items-center gap-2"><span className="hidden text-[10px] text-[var(--muted)] sm:inline">Enter untuk baris baru</span><Button type="submit" icon={Send} isLoading={isSending} disabled={disabled || isSending || !value.trim()} className="min-h-[42px] px-4">Kirim</Button></div>
+        <div className="flex items-center gap-2"><span className="hidden text-[10px] text-[var(--muted)] sm:inline">Enter untuk baris baru</span><Button type="submit" icon={Send} isLoading={isSending} disabled={disabled || isSending || !value.trim()} className="min-h-9 px-3 text-xs">Kirim</Button></div>
       </div>
     </div>
   </form>;
 };
+
+const AdminDisplayNameEditor: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+  onSubmit: (event: React.FormEvent) => void;
+  isSaving?: boolean;
+}> = ({ value, onChange, onSubmit, isSaving = false }) => <form className="shrink-0 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-2.5 md:px-6" onSubmit={onSubmit}>
+  <div className="mx-auto flex w-full max-w-4xl items-center gap-2">
+    <label htmlFor="chat-admin-display-name" className="shrink-0 text-[11px] font-semibold text-[var(--muted)]">Nama tampil</label>
+    <input id="chat-admin-display-name" value={value} onChange={event => onChange(event.target.value)} maxLength={120} placeholder="Nama admin" className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1.5 text-xs text-[var(--text)] outline-none transition focus:border-[var(--border-strong)] focus:ring-2 focus:ring-[color-mix(in_srgb,var(--accent)_12%,transparent)]" />
+    <Button type="submit" isLoading={isSaving} disabled={isSaving || !value.trim()} className="min-h-8 px-3 text-xs">Simpan</Button>
+  </div>
+</form>;
 
 export const ChatCenterPage: React.FC<{ client: any }> = ({ client }) => {
   const navigate = useNavigate();
@@ -478,17 +494,20 @@ export const ChatCenterRoomPage: React.FC<{ client: any; standalone?: boolean }>
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [token, setToken] = useState<string>(() => (location.state as any)?.chatToken || '');
   const [message, setMessage] = useState('');
+  const [adminDisplayName, setAdminDisplayName] = useState('Admin');
   const [messageRetentionMinutes, setMessageRetentionMinutes] = useState('1440');
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
   const [isSavingPresence, setIsSavingPresence] = useState(false);
+  const [isSavingAdminName, setIsSavingAdminName] = useState(false);
   const [showAdminLinkModal, setShowAdminLinkModal] = useState(false);
   const [adminLinkToken, setAdminLinkToken] = useState('');
   const [isCreatingAdminLink, setIsCreatingAdminLink] = useState(false);
   const [isRevokingAdminLink, setIsRevokingAdminLink] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
+  const adminNameDirtyRef = useRef(false);
 
   const fetchRoom = useCallback(async (showLoader = false) => {
     if (!id || !client) return;
@@ -502,6 +521,7 @@ export const ChatCenterRoomPage: React.FC<{ client: any; standalone?: boolean }>
     else if (roomRow) {
       const nextRoom = mapRoom(roomRow);
       setRoom(nextRoom);
+      if (!adminNameDirtyRef.current) setAdminDisplayName(nextRoom.adminDisplayName);
       setMessageRetentionMinutes(String(nextRoom.messageRetentionMinutes));
     }
     if (messageError) setNotice({ tone: 'error', message: databaseErrorMessage(messageError) });
@@ -515,12 +535,17 @@ export const ChatCenterRoomPage: React.FC<{ client: any; standalone?: boolean }>
     return () => window.clearInterval(timer);
   }, [fetchRoom]);
 
+  useEffect(() => {
+    adminNameDirtyRef.current = false;
+  }, [id]);
+
   const sendMessage = async (event: React.FormEvent) => {
     event.preventDefault();
     const body = message.trim();
     if (!id || !body || isSending) return;
     setIsSending(true);
-    const { data, error } = await client.from('chat_messages').insert({ room_id: id, sender_role: 'admin', sender_name: 'Admin', body, reply_to_message_id: replyingTo?.id || null }).select('*').single();
+    const senderName = adminDisplayName.trim() || room?.adminDisplayName || 'Admin';
+    const { data, error } = await client.from('chat_messages').insert({ room_id: id, sender_role: 'admin', sender_name: senderName, body, reply_to_message_id: replyingTo?.id || null }).select('*').single();
     if (error) setNotice({ tone: 'error', message: databaseErrorMessage(error) });
     else {
       await client.from('chat_rooms').update({ last_message_at: new Date().toISOString() }).eq('id', id);
@@ -529,6 +554,27 @@ export const ChatCenterRoomPage: React.FC<{ client: any; standalone?: boolean }>
       setReplyingTo(null);
     }
     setIsSending(false);
+  };
+
+  const saveAdminDisplayName = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!id) return;
+    const displayName = adminDisplayName.trim();
+    if (!displayName) {
+      setNotice({ tone: 'error', message: 'Nama tampil admin wajib diisi.' });
+      return;
+    }
+    setIsSavingAdminName(true);
+    const { data, error } = await client.rpc('update_chat_room_admin_display_name', { p_room_id: id, p_display_name: displayName });
+    if (error) setNotice({ tone: 'error', message: databaseErrorMessage(error) });
+    else {
+      const savedName = String(data?.displayName || displayName);
+      adminNameDirtyRef.current = false;
+      setAdminDisplayName(savedName);
+      setRoom(current => current ? { ...current, adminDisplayName: savedName } : current);
+      setNotice({ tone: 'success', message: `Nama admin disimpan sebagai “${savedName}”.` });
+    }
+    setIsSavingAdminName(false);
   };
 
   const savePresence = async (isOnline: boolean) => {
@@ -611,7 +657,7 @@ export const ChatCenterRoomPage: React.FC<{ client: any; standalone?: boolean }>
 
   const conversationCard = <Card className={`flex ${standalone ? 'min-h-0 flex-1' : 'min-h-[calc(100vh-14rem)]'} flex-col gap-0 overflow-hidden bg-[var(--surface-soft)] p-0 shadow-sm`}>
     <div className="flex shrink-0 items-start justify-between gap-3 border-b border-[var(--border)] bg-[var(--surface)] px-5 py-4 md:px-6"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Percakapan</p><h2 className="mt-2 text-xl font-bold">Pesan room</h2></div><div className="flex items-center gap-2 text-xs text-[var(--muted)]"><ShieldCheck size={15} /> Akses admin terverifikasi</div></div>
-    <div className="min-h-0 flex-1 overflow-hidden"><ChatMessages messages={messages} viewer="admin" onReply={setReplyingTo} className="h-full min-h-0 rounded-none border-0 bg-transparent" /></div>
+    <AdminDisplayNameEditor value={adminDisplayName} onChange={value => { adminNameDirtyRef.current = true; setAdminDisplayName(value); }} onSubmit={saveAdminDisplayName} isSaving={isSavingAdminName} /><div className="min-h-0 flex-1 overflow-hidden"><ChatMessages messages={messages} viewer="admin" onReply={setReplyingTo} className="h-full min-h-0 rounded-none border-0 bg-transparent" /></div>
     <ChatComposer value={message} onChange={setMessage} onSubmit={sendMessage} placeholder="Tulis balasan..." isSending={isSending} replyingTo={replyingTo} onCancelReply={() => setReplyingTo(null)} />
   </Card>;
 
@@ -739,19 +785,22 @@ export const PublicChatRoomPage: React.FC<{ client: any; tokenOverride?: string 
   if (error && !room) return <main className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-5"><Card className="w-full max-w-md space-y-5 text-center"><MessageCircle size={38} className="mx-auto text-[var(--muted)]" /><div><h1 className="text-xl font-bold">Room chat tidak tersedia</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{error}</p></div><Button variant="secondary" icon={RefreshCw} onClick={() => void fetchRoom(true)} className="mx-auto">Coba lagi</Button></Card></main>;
   if (!room) return null;
 
-  return <main className="h-[100dvh] min-h-[100dvh] overflow-hidden bg-[var(--app-bg)] p-0 sm:p-4 md:p-8"><style>{'@keyframes chat-toast-in { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }'}</style><div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)] shadow-sm sm:h-[calc(100dvh-2rem)] sm:rounded-3xl md:h-[calc(100dvh-4rem)]"><header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-5 py-4 md:px-7"><div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--surface-soft)]"><img src={logoUtama} alt="Arunika LMS" className="h-8 w-9 object-contain" /></div><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{CHAT_CENTER_SPACE_LABEL}</p><h1 className="truncate text-lg font-bold">{room.title}</h1><p className="truncate text-xs text-[var(--muted)]">Chat privat 1:1{room.participantName ? ` · ${room.participantName}` : ''}</p></div></div><div className="flex items-center gap-2"><Badge color={room.status === 'active' && room.isOnline ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.status !== 'active' ? 'Ditutup' : room.isOnline ? 'Online' : 'Offline'}</Badge>{installPrompt && !isStandalone && <Button variant="secondary" icon={Download} onClick={() => void installPwa} className="hidden sm:inline-flex">Instal</Button>}</div></header><div className="relative flex min-h-0 flex-1 flex-col gap-4 bg-[var(--surface-soft)] p-4 md:p-6">{showPrivateNotice && <div className="pointer-events-none absolute inset-x-4 top-3 z-30 animate-[chat-toast-in_220ms_ease-out] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm shadow-lg md:inset-x-6"><div className="flex items-start gap-3"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div><p className="font-semibold">Percakapan privat</p><p className="mt-1 leading-relaxed text-[var(--muted)]">Pesan tersimpan selama {formatDuration(room.messageRetentionMinutes)} lalu otomatis dihapus. Room tetap tersedia selama admin belum menutupnya.</p></div></div></div>}{!isStandalone && <details className="shrink-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm"><summary className="flex cursor-pointer list-none items-center gap-2 font-semibold"><Download size={17} className="text-[var(--accent-strong)]" /> Instal chat di perangkat ini</summary><div className="mt-3 space-y-3 text-xs leading-relaxed text-[var(--muted)]"><p>Setelah terpasang, aplikasi akan membuka room chat terakhir di perangkat ini.</p>{installPrompt && <Button variant="secondary" icon={Download} onClick={() => void installPwa}>Instal aplikasi</Button>}<ol className="list-decimal space-y-1 pl-5"><li>Android/Chrome: pilih tombol Instal aplikasi atau menu browser <strong>Install app</strong>.</li><li>iPhone/iPad: pilih Share lalu <strong>Add to Home Screen</strong> di Safari.</li><li>Desktop Chrome/Edge: pilih ikon Install di sisi kanan address bar.</li></ol><p className="text-[var(--muted)]">Jangan instal di perangkat bersama karena link publik tersimpan sebagai akses terakhir.</p></div></details>}<div className="min-h-0 flex-1 overflow-hidden"><ChatMessages messages={room.messages} viewer="guest" onReply={setReplyingTo} className="h-full min-h-0 rounded-2xl border-0 bg-transparent p-2 md:p-4" /></div>{error && <p className="shrink-0 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}<ChatComposer value={message} onChange={setMessage} onSubmit={sendMessage} placeholder={room.available ? 'Tulis pesan...' : 'Room ini sudah ditutup'} disabled={!room.available} isSending={isSending} replyingTo={replyingTo} onCancelReply={() => setReplyingTo(null)} /></div><footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-center text-[11px] text-[var(--muted)]">Powered by Arunika LMS · Jangan bagikan link room kepada orang lain.</footer></div></main>;
+  return <main className="h-[100dvh] min-h-[100dvh] overflow-hidden bg-[var(--app-bg)] p-0 sm:p-4 md:p-8"><style>{'@keyframes chat-toast-in { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }'}</style><div className="mx-auto flex h-full min-h-0 w-full max-w-3xl flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)] shadow-sm sm:h-[calc(100dvh-2rem)] sm:rounded-3xl md:h-[calc(100dvh-4rem)]"><header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3 md:px-7 md:py-4"><div className="flex min-w-0 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--surface-soft)]"><img src={logoUtama} alt="Arunika LMS" className="h-8 w-9 object-contain" /></div><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{CHAT_CENTER_SPACE_LABEL}</p><h1 className="truncate text-base font-bold">{room.title}</h1><p className="truncate text-xs text-[var(--muted)]">Chat privat 1:1{room.participantName ? ` · ${room.participantName}` : ''}</p></div></div><div className="flex items-center gap-2"><Badge color={room.status === 'active' && room.isOnline ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.status !== 'active' ? 'Ditutup' : room.isOnline ? 'Online' : 'Offline'}</Badge>{installPrompt && !isStandalone && <Button variant="secondary" icon={Download} onClick={() => void installPwa} className="hidden sm:inline-flex">Instal</Button>}</div></header><div className="relative flex min-h-0 flex-1 flex-col gap-4 bg-[var(--surface-soft)] p-4 md:p-6">{showPrivateNotice && <div className="pointer-events-none absolute inset-x-4 top-3 z-30 animate-[chat-toast-in_220ms_ease-out] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm shadow-lg md:inset-x-6"><div className="flex items-start gap-3"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div><p className="font-semibold">Percakapan privat</p><p className="mt-1 leading-relaxed text-[var(--muted)]">Pesan tersimpan selama {formatDuration(room.messageRetentionMinutes)} lalu otomatis dihapus. Room tetap tersedia selama admin belum menutupnya.</p></div></div></div>}{!isStandalone && <details className="shrink-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm"><summary className="flex cursor-pointer list-none items-center gap-2 font-semibold"><Download size={17} className="text-[var(--accent-strong)]" /> Instal chat di perangkat ini</summary><div className="mt-3 space-y-3 text-xs leading-relaxed text-[var(--muted)]"><p>Setelah terpasang, aplikasi akan membuka room chat terakhir di perangkat ini.</p>{installPrompt && <Button variant="secondary" icon={Download} onClick={() => void installPwa}>Instal aplikasi</Button>}<ol className="list-decimal space-y-1 pl-5"><li>Android/Chrome: pilih tombol Instal aplikasi atau menu browser <strong>Install app</strong>.</li><li>iPhone/iPad: pilih Share lalu <strong>Add to Home Screen</strong> di Safari.</li><li>Desktop Chrome/Edge: pilih ikon Install di sisi kanan address bar.</li></ol><p className="text-[var(--muted)]">Jangan instal di perangkat bersama karena link publik tersimpan sebagai akses terakhir.</p></div></details>}<div className="min-h-0 flex-1 overflow-hidden"><ChatMessages messages={room.messages} viewer="guest" onReply={setReplyingTo} className="h-full min-h-0 rounded-2xl border-0 bg-transparent p-2 md:p-4" /></div>{error && <p className="shrink-0 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}<ChatComposer value={message} onChange={setMessage} onSubmit={sendMessage} placeholder={room.available ? 'Tulis pesan...' : 'Room ini sudah ditutup'} disabled={!room.available} isSending={isSending} replyingTo={replyingTo} onCancelReply={() => setReplyingTo(null)} /></div><footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-center text-[11px] text-[var(--muted)]">Powered by Arunika LMS · Jangan bagikan link room kepada orang lain.</footer></div></main>;
 };
 
 export const PublicAdminChatRoomPage: React.FC<{ client: any; tokenOverride?: string }> = ({ client, tokenOverride }) => {
   const { token: routeToken } = useParams<{ token: string }>();
   const token = tokenOverride || routeToken || '';
-  const [room, setRoom] = useState<{ id: string; title: string; participantName: string; status: ChatRoomStatus; available: boolean; isOnline: boolean; messages: ChatMessage[] } | null>(null);
+  const [room, setRoom] = useState<{ id: string; title: string; participantName: string; status: ChatRoomStatus; available: boolean; isOnline: boolean; adminDisplayName: string; messages: ChatMessage[] } | null>(null);
   const [message, setMessage] = useState('');
+  const [adminDisplayName, setAdminDisplayName] = useState('Admin');
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
+  const [isSavingAdminName, setIsSavingAdminName] = useState(false);
   const [error, setError] = useState('');
   const [showAdminNotice, setShowAdminNotice] = useState(true);
+  const adminNameDirtyRef = useRef(false);
 
   const fetchRoom = useCallback(async (showLoader = false) => {
     if (!client || !token) {
@@ -760,7 +809,10 @@ export const PublicAdminChatRoomPage: React.FC<{ client: any; tokenOverride?: st
       return;
     }
     if (showLoader) setIsLoading(true);
-    const { data, error: requestError } = await client.rpc('get_admin_chat_room', { p_token: token });
+    const [{ data, error: requestError }, { data: nameData }] = await Promise.all([
+      client.rpc('get_admin_chat_room', { p_token: token }),
+      client.rpc('get_admin_chat_display_name', { p_token: token })
+    ]);
     if (requestError || !data) {
       setError(requestError ? publicChatErrorMessage(requestError) : 'Link admin sudah dicabut atau tidak valid.');
       setRoom(current => current ? { ...current, available: false, status: 'expired' } : current);
@@ -768,7 +820,9 @@ export const PublicAdminChatRoomPage: React.FC<{ client: any; tokenOverride?: st
     else {
       setError('');
       const nextMessages = Array.isArray(data.messages) ? data.messages.map(mapMessage) : [];
-      setRoom({ id: data.id, title: data.title || CHAT_CENTER_SPACE_LABEL, participantName: data.participantName || '', status: data.status === 'closed' ? 'closed' : data.status === 'expired' ? 'expired' : 'active', available: data.available === true, isOnline: data.isOnline !== false, messages: hydrateMessages(nextMessages) });
+      const nextAdminName = String(nameData?.displayName || 'Admin');
+      if (!adminNameDirtyRef.current) setAdminDisplayName(nextAdminName);
+      setRoom({ id: data.id, title: data.title || CHAT_CENTER_SPACE_LABEL, participantName: data.participantName || '', status: data.status === 'closed' ? 'closed' : data.status === 'expired' ? 'expired' : 'active', available: data.available === true, isOnline: data.isOnline !== false, adminDisplayName: nextAdminName, messages: hydrateMessages(nextMessages) });
     }
     setIsLoading(false);
   }, [client, token]);
@@ -805,11 +859,27 @@ export const PublicAdminChatRoomPage: React.FC<{ client: any; tokenOverride?: st
     setIsSending(false);
   };
 
+  const saveAdminDisplayName = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const displayName = adminDisplayName.trim();
+    if (!displayName || isSavingAdminName) return;
+    setIsSavingAdminName(true);
+    const { data, error: requestError } = await client.rpc('update_admin_chat_display_name', { p_token: token, p_display_name: displayName });
+    if (requestError) setError(publicChatErrorMessage(requestError, 'send'));
+    else {
+      const savedName = String(data?.displayName || displayName);
+      adminNameDirtyRef.current = false;
+      setAdminDisplayName(savedName);
+      setRoom(current => current ? { ...current, adminDisplayName: savedName } : current);
+    }
+    setIsSavingAdminName(false);
+  };
+
   if (isLoading && !room) return <div className="flex min-h-screen items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--muted)]"><Loader2 size={20} className="animate-spin" /> Membuka chat admin...</div>;
   if (error && !room) return <main className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-5"><Card className="w-full max-w-md space-y-5 text-center"><ShieldCheck size={38} className="mx-auto text-[var(--muted)]" /><div><h1 className="text-xl font-bold">Link admin tidak tersedia</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{error}</p></div></Card></main>;
   if (!room) return null;
 
-  return <main className="h-[100dvh] min-h-[100dvh] overflow-hidden bg-[var(--app-bg)] p-0 sm:p-4 md:p-8"><div className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)] shadow-sm sm:h-[calc(100dvh-2rem)] sm:rounded-3xl md:h-[calc(100dvh-4rem)]"><header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-5 py-4 md:px-7"><div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--surface-soft)]"><img src={logoUtama} alt="Arunika LMS" className="h-8 w-9 object-contain" /></div><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{CHAT_CENTER_SPACE_LABEL} · ADMIN</p><h1 className="truncate text-lg font-bold">{room.title}</h1><p className="truncate text-xs text-[var(--muted)]">Balas customer{room.participantName ? ` · ${room.participantName}` : ''}</p></div></div><div className="flex items-center gap-2"><Badge color="var(--accent-soft)">Admin</Badge><Badge color={room.status === 'active' && room.isOnline ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.status !== 'active' ? 'Ditutup' : room.isOnline ? 'Online' : 'Offline'}</Badge></div></header><div className="relative flex min-h-0 flex-1 flex-col gap-4 bg-[var(--surface-soft)] p-4 md:p-6">{showAdminNotice && <div className="pointer-events-none absolute inset-x-4 top-3 z-30 animate-[chat-toast-in_220ms_ease-out] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm shadow-lg md:inset-x-6"><div className="flex items-start gap-3"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div><p className="font-semibold">Akses chat admin</p><p className="mt-1 leading-relaxed text-[var(--muted)]">Halaman ini hanya untuk membalas customer. Link admin tidak kedaluwarsa otomatis dan tetap aktif sampai dicabut manual. Pesan mengikuti retensi room dan tetap terhapus otomatis.</p></div></div></div>}<div className="min-h-0 flex-1 overflow-hidden"><ChatMessages messages={room.messages} viewer="admin" onReply={setReplyingTo} className="h-full min-h-0 rounded-2xl border-0 bg-transparent p-2 md:p-4" /></div>{error && <p className="shrink-0 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}<ChatComposer value={message} onChange={setMessage} onSubmit={sendMessage} placeholder={room.available ? 'Tulis balasan ke customer...' : 'Room ini sudah ditutup'} disabled={!room.available} isSending={isSending} replyingTo={replyingTo} onCancelReply={() => setReplyingTo(null)} /></div><footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-center text-[11px] text-[var(--muted)]">Link chat khusus admin · Jangan bagikan kepada orang lain.</footer></div></main>;
+  return <main className="h-[100dvh] min-h-[100dvh] overflow-hidden bg-[var(--app-bg)] p-0 sm:p-4 md:p-8"><div className="mx-auto flex h-full min-h-0 w-full max-w-4xl flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)] shadow-sm sm:h-[calc(100dvh-2rem)] sm:rounded-3xl md:h-[calc(100dvh-4rem)]"><header className="sticky top-0 z-20 flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-4 py-3 md:px-7 md:py-4"><div className="flex min-w-0 items-center gap-3"><div className="flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--surface-soft)]"><img src={logoUtama} alt="Arunika LMS" className="h-8 w-9 object-contain" /></div><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{CHAT_CENTER_SPACE_LABEL} · ADMIN</p><h1 className="truncate text-base font-bold">{room.title}</h1><p className="truncate text-xs text-[var(--muted)]">Balas customer{room.participantName ? ` · ${room.participantName}` : ''}</p></div></div><div className="flex items-center gap-2"><Badge color="var(--accent-soft)">{adminDisplayName || 'Admin'}</Badge><Badge color={room.status === 'active' && room.isOnline ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.status !== 'active' ? 'Ditutup' : room.isOnline ? 'Online' : 'Offline'}</Badge></div></header><AdminDisplayNameEditor value={adminDisplayName} onChange={value => { adminNameDirtyRef.current = true; setAdminDisplayName(value); }} onSubmit={saveAdminDisplayName} isSaving={isSavingAdminName} /><div className="relative flex min-h-0 flex-1 flex-col gap-4 bg-[var(--surface-soft)] p-4 md:p-6">{showAdminNotice && <div className="pointer-events-none absolute inset-x-4 top-3 z-30 animate-[chat-toast-in_220ms_ease-out] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm shadow-lg md:inset-x-6"><div className="flex items-start gap-3"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div><p className="font-semibold">Akses chat admin</p><p className="mt-1 leading-relaxed text-[var(--muted)]">Halaman ini hanya untuk membalas customer. Link admin tidak kedaluwarsa otomatis dan tetap aktif sampai dicabut manual. Pesan mengikuti retensi room dan tetap terhapus otomatis.</p></div></div></div>}<div className="min-h-0 flex-1 overflow-hidden"><ChatMessages messages={room.messages} viewer="admin" onReply={setReplyingTo} className="h-full min-h-0 rounded-2xl border-0 bg-transparent p-2 md:p-4" /></div>{error && <p className="shrink-0 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}<ChatComposer value={message} onChange={setMessage} onSubmit={sendMessage} placeholder={room.available ? 'Tulis balasan ke customer...' : 'Room ini sudah ditutup'} disabled={!room.available} isSending={isSending} replyingTo={replyingTo} onCancelReply={() => setReplyingTo(null)} /></div><footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-center text-[11px] text-[var(--muted)]">Link chat khusus admin · Jangan bagikan kepada orang lain.</footer></div></main>;
 };
 
 export const PublicChatEntryPage: React.FC = () => {
