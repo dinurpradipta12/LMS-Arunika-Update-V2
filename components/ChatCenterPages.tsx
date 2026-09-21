@@ -197,6 +197,13 @@ const ChatComposer: React.FC<{
   isSending?: boolean;
 }> = ({ value, onChange, onSubmit, placeholder, disabled = false, isSending = false }) => {
   const textareaRef = useRef<HTMLTextAreaElement | null>(null);
+  const resizeTextarea = () => {
+    const textarea = textareaRef.current;
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const nextHeight = Math.min(Math.max(textarea.scrollHeight, 58), 220);
+    textarea.style.height = `${nextHeight}px`;
+  };
   const toolbarButtons = [
     { label: 'Tebal', icon: Bold },
     { label: 'Miring', icon: Italic },
@@ -204,17 +211,24 @@ const ChatComposer: React.FC<{
     { label: 'Daftar', icon: List }
   ];
 
+  useEffect(() => {
+    resizeTextarea();
+  }, [value]);
+
   return <form className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] p-3 md:p-5" onSubmit={onSubmit}>
     <div className={`rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 transition-all focus-within:border-[var(--border-strong)] focus-within:ring-4 focus-within:ring-[color-mix(in_srgb,var(--accent)_10%,transparent)] ${disabled ? 'opacity-70' : ''}`}>
       <textarea
         ref={textareaRef}
         value={value}
-        onChange={event => onChange(event.target.value)}
+        onChange={event => {
+          onChange(event.target.value);
+          requestAnimationFrame(resizeTextarea);
+        }}
         placeholder={placeholder}
-        rows={3}
+        rows={1}
         maxLength={4000}
         disabled={disabled || isSending}
-        className="min-h-[112px] w-full resize-none border-0 bg-transparent px-1 py-1 text-sm leading-6 text-[var(--text)] outline-none placeholder:text-[var(--muted)] focus:ring-0 md:min-h-[132px]"
+        className="max-h-[220px] min-h-[58px] w-full resize-none overflow-y-auto border-0 bg-transparent px-1 py-1 text-sm leading-6 text-[var(--text)] outline-none placeholder:text-[var(--muted)] focus:ring-0"
         aria-label="Pesan"
       />
       <div className="mt-2 flex items-center justify-between gap-3 border-t border-[var(--border)] pt-2">
