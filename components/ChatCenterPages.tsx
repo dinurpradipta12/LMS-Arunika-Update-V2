@@ -73,6 +73,7 @@ const databaseErrorMessage = (error: any) => {
 
 const publicChatErrorMessage = (error: any, action: 'open' | 'send' = 'open') => {
   const raw = String(error?.message || error?.details || '').toUpperCase();
+  if (raw.includes('ADMIN_LINK_EXPIRED') || raw.includes('INVALID_ADMIN_LINK')) return 'Link admin sudah kedaluwarsa, dicabut, atau tidak valid.';
   if (raw.includes('ROOM_EXPIRED') || raw.includes('ROOM_CLOSED')) return 'Room chat sudah ditutup atau masa aksesnya berakhir.';
   if (raw.includes('RATE_LIMITED')) return 'Terlalu banyak pesan dalam waktu singkat. Coba lagi sebentar.';
   if (raw.includes('INVALID_MESSAGE')) return 'Pesan tidak valid atau terlalu panjang.';
@@ -144,6 +145,17 @@ const chatLink = (token: string) => {
     return url.toString();
   } catch {
     return `${window.location.origin}${window.location.pathname}#/chat/${encodeURIComponent(token)}`;
+  }
+};
+
+const adminPublicChatLink = (token: string) => {
+  try {
+    const url = new URL(getPublicBaseUrl());
+    url.search = '';
+    url.hash = `/chat-admin/${encodeURIComponent(token)}`;
+    return url.toString();
+  } catch {
+    return `${window.location.origin}${window.location.pathname}#/chat-admin/${encodeURIComponent(token)}`;
   }
 };
 
@@ -470,6 +482,12 @@ export const ChatCenterRoomPage: React.FC<{ client: any; standalone?: boolean }>
   const [isSending, setIsSending] = useState(false);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
   const [isSavingPresence, setIsSavingPresence] = useState(false);
+  const [showAdminLinkModal, setShowAdminLinkModal] = useState(false);
+  const [adminLinkToken, setAdminLinkToken] = useState('');
+  const [adminLinkExpiresAt, setAdminLinkExpiresAt] = useState('');
+  const [adminLinkDurationMinutes, setAdminLinkDurationMinutes] = useState('1440');
+  const [isCreatingAdminLink, setIsCreatingAdminLink] = useState(false);
+  const [isRevokingAdminLink, setIsRevokingAdminLink] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
 
   const fetchRoom = useCallback(async (showLoader = false) => {
@@ -525,6 +543,42 @@ export const ChatCenterRoomPage: React.FC<{ client: any; standalone?: boolean }>
     setIsSavingPresence(false);
   };
 
+  const createAdminLink = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!id) return;
+    const durationMinutes = Number(adminLinkDurationMinutes);
+    if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 43200) {
+      setNotice({ tone: 'error', message: 'Durasi link admin harus antara 5 menit dan 30 hari.' });
+      return;
+    }
+    setIsCreatingAdminLink(true);
+    const { data, error } = await client.rpc('create_chat_admin_link', { p_room_id: id, p_duration_minutes: durationMinutes });
+    if (error || !data?.token) {
+      setNotice({ tone: 'error', message: databaseErrorMessage(error || data) });
+    } else {
+      const nextToken = String(data.token);
+      const nextLink = adminPublicChatLink(nextToken);
+      setAdminLinkToken(nextToken);
+      setAdminLinkExpiresAt(String(data.expiresAt || ''));
+      try { await copyText(nextLink); } catch { /* link tetap dapat disalin dari modal */ }
+      setNotice({ tone: 'success', message: 'Link chat khusus admin dibuat dan disalin ke clipboard.' });
+    }
+    setIsCreatingAdminLink(false);
+  };
+
+  const revokeAdminLink = async () => {
+    if (!id) return;
+    setIsRevokingAdminLink(true);
+    const { error } = await client.rpc('revoke_chat_admin_link', { p_room_id: id });
+    if (error) setNotice({ tone: 'error', message: databaseErrorMessage(error) });
+    else {
+      setAdminLinkToken('');
+      setAdminLinkExpiresAt('');
+      setNotice({ tone: 'success', message: 'Link admin dicabut. Link tersebut tidak bisa digunakan lagi.' });
+    }
+    setIsRevokingAdminLink(false);
+  };
+
   const saveAccess = async (status: 'active' | 'closed') => {
     if (!id) return;
     const minutes = Number(messageRetentionMinutes);
@@ -570,8 +624,8 @@ export const ChatCenterRoomPage: React.FC<{ client: any; standalone?: boolean }>
 
   if (standalone) return <main className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8"><div className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-[1100px] flex-col gap-5 md:min-h-[calc(100vh-4rem)]"><div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><Link to={`/admin/chat-center/${room.id}`} className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> Pengaturan room</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">{room.title}</h1><Badge color={status === 'active' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(status)}</Badge><Badge color={room.isOnline ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.isOnline ? 'Online' : 'Offline'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Chat 1:1 dengan {room.participantName}{room.participantEmail ? ` · ${room.participantEmail}` : ''}</p></div><Button variant="secondary" icon={RefreshCw} onClick={() => void fetchRoom(true)}>Refresh</Button></div><NoticeMessage notice={notice} />{conversationCard}</div></main>;
 
-  return <div className="mx-auto w-full max-w-[1500px] space-y-6 p-4 md:p-6 lg:p-8">
-    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><Link to="/admin/chat-center" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> Semua room chat</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">{room.title}</h1><Badge color={status === 'active' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(status)}</Badge><Badge color={room.isOnline ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.isOnline ? 'Online' : 'Offline'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Chat 1:1 dengan {room.participantName}{room.participantEmail ? ` · ${room.participantEmail}` : ''}</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} onClick={openStandaloneChat}>Buka chat saja</Button><Button variant="secondary" icon={RefreshCw} onClick={() => void fetchRoom(true)}>Refresh</Button></div></div>
+  return <><div className="mx-auto w-full max-w-[1500px] space-y-6 p-4 md:p-6 lg:p-8">
+    <div className="flex flex-col justify-between gap-4 md:flex-row md:items-end"><div><Link to="/admin/chat-center" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> Semua room chat</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">{room.title}</h1><Badge color={status === 'active' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(status)}</Badge><Badge color={room.isOnline ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.isOnline ? 'Online' : 'Offline'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Chat 1:1 dengan {room.participantName}{room.participantEmail ? ` · ${room.participantEmail}` : ''}</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={LinkIcon} onClick={() => setShowAdminLinkModal(true)}>Link admin</Button><Button variant="secondary" icon={ExternalLink} onClick={openStandaloneChat}>Buka chat saja</Button><Button variant="secondary" icon={RefreshCw} onClick={() => void fetchRoom(true)}>Refresh</Button></div></div>
     <NoticeMessage notice={notice} />
     <div className="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
       {conversationCard}
@@ -580,7 +634,21 @@ export const ChatCenterRoomPage: React.FC<{ client: any; standalone?: boolean }>
         <Card className="space-y-3"><div className="flex items-center gap-2"><Clock3 size={18} className="text-[var(--accent-strong)]" /><h2 className="font-semibold">Aturan room</h2></div><p className="text-sm leading-relaxed text-[var(--muted)]">Link ini tidak membutuhkan login, jadi perlakukan sebagai kunci akses. Room tetap tersedia sampai ditutup admin. Setiap pesan akan dihapus otomatis dari database dan tidak lagi tampil setelah retensinya habis.</p></Card>
       </div>
     </div>
-  </div>;
+  </div>
+  <ChatModal open={showAdminLinkModal} title="Bagikan link chat admin" onClose={() => setShowAdminLinkModal(false)}>
+    {adminLinkToken ? <div className="space-y-4">
+      <div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-sm"><p className="font-semibold">Link chat khusus admin siap dibagikan</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Link ini hanya membuka percakapan room ini dan dapat membalas sebagai Admin. Link tidak membuka dashboard atau room lain.</p></div>
+      <Input label="Link admin" value={adminPublicChatLink(adminLinkToken)} readOnly />
+      <p className="text-xs text-[var(--muted)]">Berlaku sampai {formatDate(adminLinkExpiresAt)}. Siapa pun yang memiliki link ini dapat membalas sebagai Admin, jadi kirim hanya ke admin tepercaya.</p>
+      <div className="flex flex-wrap gap-2"><Button variant="secondary" icon={Copy} className="flex-1" onClick={() => void copyText(adminPublicChatLink(adminLinkToken))}>Salin link</Button><Button variant="secondary" icon={ExternalLink} className="flex-1" onClick={() => window.open(adminPublicChatLink(adminLinkToken), '_blank', 'noopener,noreferrer')}>Buka link</Button></div>
+      <div className="flex flex-wrap justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setAdminLinkToken('')}>Buat ulang</Button><Button type="button" variant="danger" onClick={() => void revokeAdminLink()} isLoading={isRevokingAdminLink} disabled={isRevokingAdminLink}>Cabut link</Button></div>
+    </div> : <form className="space-y-4" onSubmit={createAdminLink}>
+      <p className="text-sm leading-relaxed text-[var(--muted)]">Buat link terpisah agar admin dapat fokus membalas customer tanpa masuk ke aplikasi utama.</p>
+      <Input label="Link berlaku selama (menit)" type="number" min="5" max="43200" value={adminLinkDurationMinutes} onChange={event => setAdminLinkDurationMinutes(event.target.value)} />
+      <p className="text-xs leading-relaxed text-[var(--muted)]">Contoh: 60 = 1 jam, 1440 = 1 hari. Maksimal 30 hari. Link dapat dicabut dari halaman room kapan saja.</p>
+      <div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setShowAdminLinkModal(false)}>Batal</Button><Button type="submit" icon={LinkIcon} isLoading={isCreatingAdminLink}>Buat link admin</Button></div>
+    </form>}
+  </ChatModal></>;
 };
 
 export const PublicChatRoomPage: React.FC<{ client: any; tokenOverride?: string }> = ({ client, tokenOverride }) => {
@@ -680,6 +748,69 @@ export const PublicChatRoomPage: React.FC<{ client: any; tokenOverride?: string 
   if (!room) return null;
 
   return <main className="min-h-screen bg-[var(--app-bg)] p-0 sm:p-4 md:p-8"><style>{'@keyframes chat-toast-in { from { opacity: 0; transform: translateY(-12px); } to { opacity: 1; transform: translateY(0); } }'}</style><div className="mx-auto flex min-h-screen w-full max-w-3xl flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)] shadow-sm sm:min-h-[calc(100vh-2rem)] sm:rounded-3xl md:min-h-[calc(100vh-4rem)]"><header className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-5 py-4 md:px-7"><div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--surface-soft)]"><img src={logoUtama} alt="Arunika LMS" className="h-8 w-9 object-contain" /></div><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{CHAT_CENTER_SPACE_LABEL}</p><h1 className="truncate text-lg font-bold">{room.title}</h1><p className="truncate text-xs text-[var(--muted)]">Chat privat 1:1{room.participantName ? ` · ${room.participantName}` : ''}</p></div></div><div className="flex items-center gap-2"><Badge color={room.status === 'active' && room.isOnline ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.status !== 'active' ? 'Ditutup' : room.isOnline ? 'Online' : 'Offline'}</Badge>{installPrompt && !isStandalone && <Button variant="secondary" icon={Download} onClick={() => void installPwa} className="hidden sm:inline-flex">Instal</Button>}</div></header><div className="relative flex min-h-0 flex-1 flex-col gap-4 bg-[var(--surface-soft)] p-4 md:p-6">{showPrivateNotice && <div className="pointer-events-none absolute inset-x-4 top-3 z-30 animate-[chat-toast-in_220ms_ease-out] rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm shadow-lg md:inset-x-6"><div className="flex items-start gap-3"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div><p className="font-semibold">Percakapan privat</p><p className="mt-1 leading-relaxed text-[var(--muted)]">Pesan tersimpan selama {formatDuration(room.messageRetentionMinutes)} lalu otomatis dihapus. Room tetap tersedia selama admin belum menutupnya.</p></div></div></div>}{!isStandalone && <details className="shrink-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm"><summary className="flex cursor-pointer list-none items-center gap-2 font-semibold"><Download size={17} className="text-[var(--accent-strong)]" /> Instal chat di perangkat ini</summary><div className="mt-3 space-y-3 text-xs leading-relaxed text-[var(--muted)]"><p>Setelah terpasang, aplikasi akan membuka room chat terakhir di perangkat ini.</p>{installPrompt && <Button variant="secondary" icon={Download} onClick={() => void installPwa}>Instal aplikasi</Button>}<ol className="list-decimal space-y-1 pl-5"><li>Android/Chrome: pilih tombol Instal aplikasi atau menu browser <strong>Install app</strong>.</li><li>iPhone/iPad: pilih Share lalu <strong>Add to Home Screen</strong> di Safari.</li><li>Desktop Chrome/Edge: pilih ikon Install di sisi kanan address bar.</li></ol><p className="text-[var(--muted)]">Jangan instal di perangkat bersama karena link publik tersimpan sebagai akses terakhir.</p></div></details>}<div className="min-h-0 flex-1 overflow-hidden"><ChatMessages messages={room.messages} viewer="guest" onReply={setReplyingTo} className="h-full min-h-0 rounded-2xl border-0 bg-transparent p-2 md:p-4" /></div>{error && <p className="shrink-0 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}<ChatComposer value={message} onChange={setMessage} onSubmit={sendMessage} placeholder={room.available ? 'Tulis pesan...' : 'Room ini sudah ditutup'} disabled={!room.available} isSending={isSending} replyingTo={replyingTo} onCancelReply={() => setReplyingTo(null)} /></div><footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-center text-[11px] text-[var(--muted)]">Powered by Arunika LMS · Jangan bagikan link room kepada orang lain.</footer></div></main>;
+};
+
+export const PublicAdminChatRoomPage: React.FC<{ client: any; tokenOverride?: string }> = ({ client, tokenOverride }) => {
+  const { token: routeToken } = useParams<{ token: string }>();
+  const token = tokenOverride || routeToken || '';
+  const [room, setRoom] = useState<{ id: string; title: string; participantName: string; status: ChatRoomStatus; available: boolean; isOnline: boolean; adminLinkExpiresAt: string; messages: ChatMessage[] } | null>(null);
+  const [message, setMessage] = useState('');
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState('');
+
+  const fetchRoom = useCallback(async (showLoader = false) => {
+    if (!client || !token) {
+      setError('Link admin tidak valid.');
+      setIsLoading(false);
+      return;
+    }
+    if (showLoader) setIsLoading(true);
+    const { data, error: requestError } = await client.rpc('get_admin_chat_room', { p_token: token });
+    if (requestError || !data) {
+      setError(requestError ? publicChatErrorMessage(requestError) : 'Link admin sudah kedaluwarsa atau dicabut.');
+      setRoom(current => current ? { ...current, available: false, status: 'expired' } : current);
+    }
+    else {
+      setError('');
+      const nextMessages = Array.isArray(data.messages) ? data.messages.map(mapMessage) : [];
+      setRoom({ id: data.id, title: data.title || CHAT_CENTER_SPACE_LABEL, participantName: data.participantName || '', status: data.status === 'closed' ? 'closed' : data.status === 'expired' ? 'expired' : 'active', available: data.available === true, isOnline: data.isOnline !== false, adminLinkExpiresAt: data.adminLinkExpiresAt || '', messages: hydrateMessages(nextMessages) });
+    }
+    setIsLoading(false);
+  }, [client, token]);
+
+  useEffect(() => { void fetchRoom(true); }, [fetchRoom]);
+  useEffect(() => {
+    const timer = window.setInterval(() => { void fetchRoom(false); }, 3000);
+    return () => window.clearInterval(timer);
+  }, [fetchRoom]);
+  useEffect(() => {
+    setPublicMetadata({ title: room?.title ? `${room.title} · Admin` : 'Chat admin · Chat Center', description: 'Halaman chat khusus admin untuk membalas percakapan customer.' });
+  }, [room?.title]);
+
+  const sendMessage = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const body = message.trim();
+    if (!body || !room?.available || isSending) return;
+    setIsSending(true);
+    const clientMessageId = `admin-${Date.now()}-${Math.random().toString(36).slice(2, 9)}`;
+    const { data, error: requestError } = await client.rpc('send_admin_chat_message', { p_token: token, p_body: body, p_client_message_id: clientMessageId, p_reply_to_message_id: replyingTo?.id || null });
+    if (requestError) setError(publicChatErrorMessage(requestError, 'send'));
+    else {
+      setMessage('');
+      setReplyingTo(null);
+      if (data) setRoom(current => current ? { ...current, messages: hydrateMessages([...current.messages.filter(item => item.id !== data.id), mapMessage(data)]) } : current);
+      void fetchRoom(false);
+    }
+    setIsSending(false);
+  };
+
+  if (isLoading && !room) return <div className="flex min-h-screen items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--muted)]"><Loader2 size={20} className="animate-spin" /> Membuka chat admin...</div>;
+  if (error && !room) return <main className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-5"><Card className="w-full max-w-md space-y-5 text-center"><ShieldCheck size={38} className="mx-auto text-[var(--muted)]" /><div><h1 className="text-xl font-bold">Link admin tidak tersedia</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{error}</p></div></Card></main>;
+  if (!room) return null;
+
+  return <main className="min-h-screen bg-[var(--app-bg)] p-0 sm:p-4 md:p-8"><div className="mx-auto flex min-h-screen w-full max-w-4xl flex-col overflow-hidden border border-[var(--border)] bg-[var(--surface-soft)] shadow-sm sm:min-h-[calc(100vh-2rem)] sm:rounded-3xl md:min-h-[calc(100vh-4rem)]"><header className="flex shrink-0 items-center justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-5 py-4 md:px-7"><div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--surface-soft)]"><img src={logoUtama} alt="Arunika LMS" className="h-8 w-9 object-contain" /></div><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{CHAT_CENTER_SPACE_LABEL} · ADMIN</p><h1 className="truncate text-lg font-bold">{room.title}</h1><p className="truncate text-xs text-[var(--muted)]">Balas customer{room.participantName ? ` · ${room.participantName}` : ''}</p></div></div><div className="flex items-center gap-2"><Badge color="var(--accent-soft)">Admin</Badge><Badge color={room.status === 'active' && room.isOnline ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.status !== 'active' ? 'Ditutup' : room.isOnline ? 'Online' : 'Offline'}</Badge></div></header><div className="relative flex min-h-0 flex-1 flex-col gap-4 bg-[var(--surface-soft)] p-4 md:p-6"><div className="shrink-0 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 text-sm"><div className="flex items-start gap-3"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div><p className="font-semibold">Akses chat admin</p><p className="mt-1 leading-relaxed text-[var(--muted)]">Halaman ini hanya untuk membalas customer. Link berlaku sampai {formatDate(room.adminLinkExpiresAt)} dan tidak membuka dashboard admin.</p></div></div></div><div className="min-h-0 flex-1 overflow-hidden"><ChatMessages messages={room.messages} viewer="admin" onReply={setReplyingTo} className="h-full min-h-0 rounded-2xl border-0 bg-transparent p-2 md:p-4" /></div>{error && <p className="shrink-0 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}<ChatComposer value={message} onChange={setMessage} onSubmit={sendMessage} placeholder={room.available ? 'Tulis balasan ke customer...' : 'Room ini sudah ditutup'} disabled={!room.available} isSending={isSending} replyingTo={replyingTo} onCancelReply={() => setReplyingTo(null)} /></div><footer className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-5 py-3 text-center text-[11px] text-[var(--muted)]">Link chat khusus admin · Jangan bagikan kepada orang lain.</footer></div></main>;
 };
 
 export const PublicChatEntryPage: React.FC = () => {

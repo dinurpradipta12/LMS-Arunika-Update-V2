@@ -106,7 +106,7 @@ import { PublicQnaPage, QNA_SPACE_LABEL } from './components/QnaPages';
 import { QnaAdminCreatePage, QnaAdminDetailPage, QnaAdminListPage } from './components/QnaAdminPages';
 import { VideoClipperPage } from './components/VideoClipperPages';
 import { OneToOneEditorPage, OneToOneSpacePage, PublicOneToOnePage, ONE_TO_ONE_SPACE_LABEL } from './components/OneToOnePages';
-import { ChatCenterPage, ChatCenterRoomPage, PublicChatEntryPage, PublicChatRoomPage, CHAT_CENTER_SPACE_LABEL } from './components/ChatCenterPages';
+import { ChatCenterPage, ChatCenterRoomPage, PublicAdminChatRoomPage, PublicChatEntryPage, PublicChatRoomPage, CHAT_CENTER_SPACE_LABEL } from './components/ChatCenterPages';
 import logoUtama from './src/logo-utama.png';
 import faviconLogo from './src/favicon.png';
 
@@ -2302,6 +2302,7 @@ const App: React.FC = () => {
         <Route path="/qna/:slug" element={<PublicQnaPage client={getPublicSupabaseClient()} />} />
         <Route path="/one-to-one/:token" element={<PublicOneToOnePage client={getPublicSupabaseClient()} />} />
         <Route path="/one-to-one" element={<PublicNotFoundPage />} />
+        <Route path="/chat-admin/:token" element={<PublicAdminChatRoomPage client={getPublicSupabaseClient()} />} />
         <Route path="/chat/:token" element={<PublicChatRoomPage client={getPublicSupabaseClient()} />} />
         <Route path="/chat" element={<PublicChatEntryPage />} />
         <Route path="/" element={isCustomCatalogHostRoute ? <PublicCatalogPageView client={getPublicSupabaseClient()} domainOverride={window.location.hostname} /> : authStatus === 'loading' ? <AuthLoading /> : <Navigate to={isAdmin ? '/admin' : '/login'} replace />} />
@@ -2344,6 +2345,8 @@ const directOneToOnePathMatch = window.location.hash ? null : window.location.pa
 const directOneToOneToken = directOneToOnePathMatch ? decodeURIComponent(directOneToOnePathMatch[1]) : null;
 const directChatPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/chat\/([^/]+)\/?$/);
 const directChatToken = directChatPathMatch ? decodeURIComponent(directChatPathMatch[1]) : null;
+const directAdminChatPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/chat-admin\/([^/]+)\/?$/);
+const directAdminChatToken = directAdminChatPathMatch ? decodeURIComponent(directAdminChatPathMatch[1]) : null;
 const directChatEntryPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/chat\/?$/);
 const directPwaChatEntry = !window.location.hash && new URLSearchParams(window.location.search).get('pwa') === 'chat';
 root.render(directPublicNotFoundPathMatch
@@ -2360,6 +2363,8 @@ root.render(directPublicNotFoundPathMatch
     ? <MemoryRouter initialEntries={[`/one-to-one/${encodeURIComponent(directOneToOneToken)}`]}><PublicOneToOnePage client={getPublicSupabaseClient()} tokenOverride={directOneToOneToken} /></MemoryRouter>
   : directChatToken
     ? <MemoryRouter initialEntries={[`/chat/${encodeURIComponent(directChatToken)}`]}><PublicChatRoomPage client={getPublicSupabaseClient()} tokenOverride={directChatToken} /></MemoryRouter>
+  : directAdminChatToken
+    ? <MemoryRouter initialEntries={[`/chat-admin/${encodeURIComponent(directAdminChatToken)}`]}><PublicAdminChatRoomPage client={getPublicSupabaseClient()} tokenOverride={directAdminChatToken} /></MemoryRouter>
   : directChatEntryPathMatch
     ? <MemoryRouter initialEntries={['/chat']}><PublicChatEntryPage /></MemoryRouter>
   : directPwaChatEntry
