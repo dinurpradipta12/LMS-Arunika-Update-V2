@@ -140,6 +140,7 @@ const mapPublicQuiz = (row: any): PublicCourseQuiz => ({
   moduleId: row.moduleId || row.module_id || null,
   title: row.title || DEFAULT_QUIZ_TITLE,
   description: row.description || '',
+  enabled: row.enabled !== false,
   passingScore: Number(row.passingScore ?? row.passing_score ?? 70),
   maxAttempts: Number(row.maxAttempts ?? row.max_attempts ?? 3),
   feedbackEnabled: row.feedbackEnabled === true || row.feedback_enabled === true,
@@ -2529,7 +2530,7 @@ export const PublicRecordedClassView: React.FC<{
           const quizzes = Array.isArray(quizSetData.quizzes) ? quizSetData.quizzes.map(mapPublicQuiz) : [];
           const mode = quizSetData.mode === 'per_material' ? 'per_material' : 'tab';
           setQuizSet({ mode, quizzes });
-          setQuiz(quizzes.find(item => item.placement === 'tab') || null);
+          setQuiz(quizzes.find(item => item.placement === 'tab' && item.enabled && item.questions.length > 0) || null);
         } else {
           const { data: quizData, error: quizRequestError } = await withRequestTimeout<any>(
             client.rpc('get_public_class_quiz', { p_course_id: courseId }) as PromiseLike<any>
@@ -2639,7 +2640,12 @@ export const PublicRecordedClassView: React.FC<{
   };
 
   const openModuleQuiz = (moduleId: string) => {
-    if (!moduleQuizById[moduleId] || completedQuizModuleIds.includes(moduleId)) return;
+    const moduleQuiz = moduleQuizById[moduleId];
+    if (!moduleQuiz || completedQuizModuleIds.includes(moduleId)) return;
+    if (!moduleQuiz.enabled || moduleQuiz.questions.length === 0) {
+      setModuleQuizError('Post-test materi ini sedang ditutup. Materi berikutnya tetap terkunci sampai post-test dibuka kembali dan diselesaikan.');
+      return;
+    }
     if (!completedModuleIds.includes(moduleId)) {
       setModuleQuizError('Tandai materi ini sebagai selesai sebelum mengerjakan post-test.');
       return;
@@ -2653,7 +2659,10 @@ export const PublicRecordedClassView: React.FC<{
 
   const handleModuleQuizSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!selectedModuleQuiz || !moduleQuizModalId || !client) return;
+    if (!selectedModuleQuiz || !selectedModuleQuiz.enabled || selectedModuleQuiz.questions.length === 0 || !moduleQuizModalId || !client) {
+      setModuleQuizError('Post-test materi ini sedang ditutup atau belum siap diisi.');
+      return;
+    }
     if (!participantName.trim() || !participantEmail.trim()) {
       setModuleQuizError('Nama dan email peserta wajib diisi.');
       return;
@@ -2874,16 +2883,19 @@ export const PublicRecordedClassView: React.FC<{
                     <h3 className="text-xl font-semibold mt-3">{selectedModule.title}</h3>
                     {selectedModule.description && <p className="text-sm text-[var(--muted)] leading-7 mt-3 whitespace-pre-wrap">{selectedModule.description}</p>}
                     <p className="mt-6 border-t border-[var(--border)] pt-5 text-xs text-[var(--muted)]">{completedModuleIds.length} dari {course.modules.length} materi selesai</p>
-                    {perMaterialMode && moduleQuizById[selectedModule.id] && (
-                      <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
+                    {perMaterialMode && moduleQuizById[selectedModule.id] && (() => {
+                      const selectedQuiz = moduleQuizById[selectedModule.id];
+                      const quizAvailable = selectedQuiz.enabled && selectedQuiz.questions.length > 0;
+                      const quizCompleted = completedQuizModuleIds.includes(selectedModule.id);
+                      return <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
                         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                          <div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Evaluasi materi</p><p className="mt-1 text-sm font-semibold">{completedQuizModuleIds.includes(selectedModule.id) ? 'Post-test sudah dikirim' : 'Selesaikan post-test sebelum lanjut'}</p></div>
-                          <Button type="button" variant={completedQuizModuleIds.includes(selectedModule.id) ? 'green' : 'secondary'} icon={completedQuizModuleIds.includes(selectedModule.id) ? CheckCircle2 : ClipboardCheck} onClick={() => openModuleQuiz(selectedModule.id)} disabled={!completedModuleIds.includes(selectedModule.id) || completedQuizModuleIds.includes(selectedModule.id)} className="text-xs">
-                            {completedQuizModuleIds.includes(selectedModule.id) ? 'Selesai' : 'Kerjakan post-test'}
+                          <div><p className="text-xs font-semibold uppercase tracking-[0.12em] text-[var(--muted)]">Evaluasi materi</p><p className="mt-1 text-sm font-semibold">{quizCompleted ? 'Post-test sudah dikirim' : !quizAvailable ? 'Post-test sedang ditutup' : 'Selesaikan post-test sebelum lanjut'}</p>{!quizAvailable && !quizCompleted && <p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Materi berikutnya tetap terkunci sampai admin membuka post-test ini kembali.</p>}</div>
+                          <Button type="button" variant={quizCompleted ? 'green' : 'secondary'} icon={quizCompleted ? CheckCircle2 : ClipboardCheck} onClick={() => openModuleQuiz(selectedModule.id)} disabled={!quizAvailable || !completedModuleIds.includes(selectedModule.id) || quizCompleted} className="text-xs">
+                            {quizCompleted ? 'Selesai' : !quizAvailable ? 'Ditutup' : 'Kerjakan post-test'}
                           </Button>
                         </div>
-                      </div>
-                    )}
+                      </div>;
+                    })()}
                   </div>
                 </Card>
               ) : (
@@ -3031,11 +3043,12 @@ export const PublicRecordedClassView: React.FC<{
                 const moduleQuiz = perMaterialMode ? moduleQuizById[module.id] : null;
                 const moduleCompleted = completedModuleIds.includes(module.id);
                 const quizCompleted = completedQuizModuleIds.includes(module.id);
+                const moduleQuizAvailable = Boolean(moduleQuiz?.enabled && moduleQuiz.questions.length > 0);
                 return <div key={module.id} className="space-y-1">
                   <button key={module.id} type="button" disabled={!unlocked} onClick={() => unlocked && setSelectedModule(module)} className={`w-full text-left p-3 rounded-xl border transition-colors ${!unlocked ? 'cursor-not-allowed border-transparent opacity-55' : selectedModule?.id === module.id ? 'bg-[var(--accent-soft)] border-[var(--border-strong)]' : 'border-transparent hover:bg-[var(--surface-soft)]'}`}>
                     <div className="flex gap-3"><span className={`w-8 h-8 rounded-lg border flex items-center justify-center text-xs font-semibold flex-shrink-0 ${moduleCompleted ? 'bg-[var(--success-soft)] border-[var(--border)] text-[var(--success-text)]' : 'border-[var(--border)] bg-[var(--surface)]'}`}>{!unlocked ? <LockKeyhole size={14} /> : moduleCompleted ? <Check size={15} /> : index + 1}</span><div className="min-w-0"><p className="text-xs font-semibold break-words leading-snug">{module.title}</p><p className="text-[10px] text-[var(--muted)] mt-1">{!unlocked ? 'Selesaikan materi dan post-test sebelumnya' : moduleCompleted ? 'Selesai' : module.duration || (module.type === 'video' ? 'Video' : 'Teks')}</p></div></div>
                   </button>
-                  {moduleQuiz && <button type="button" disabled={!moduleCompleted || quizCompleted} onClick={() => openModuleQuiz(module.id)} className={`ml-11 flex w-[calc(100%-2.75rem)] items-center gap-2 rounded-lg px-3 py-2 text-left text-[11px] font-semibold transition-colors ${quizCompleted ? 'cursor-default bg-[var(--success-soft)] text-[var(--success-text)]' : moduleCompleted ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]' : 'cursor-not-allowed bg-[var(--surface-soft)] text-[var(--muted)]'}`}><ClipboardCheck size={14} />{quizCompleted ? 'Post-test selesai' : moduleCompleted ? 'Kerjakan post-test materi' : 'Tandai materi selesai dulu'}</button>}
+                  {moduleQuiz && <button type="button" disabled={!moduleCompleted || quizCompleted || !moduleQuizAvailable} onClick={() => openModuleQuiz(module.id)} className={`ml-11 flex w-[calc(100%-2.75rem)] items-center gap-2 rounded-lg px-3 py-2 text-left text-[11px] font-semibold transition-colors ${quizCompleted ? 'cursor-default bg-[var(--success-soft)] text-[var(--success-text)]' : !moduleQuizAvailable ? 'cursor-not-allowed bg-[var(--surface-soft)] text-[var(--muted)]' : moduleCompleted ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]' : 'cursor-not-allowed bg-[var(--surface-soft)] text-[var(--muted)]'}`}><ClipboardCheck size={14} />{quizCompleted ? 'Post-test selesai' : !moduleQuizAvailable ? 'Post-test sedang ditutup' : moduleCompleted ? 'Kerjakan post-test materi' : 'Tandai materi selesai dulu'}</button>}
                 </div>;
               })}
               {course.modules.length === 0 && <p className="text-xs text-[var(--muted)]">Belum ada materi.</p>}

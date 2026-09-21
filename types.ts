@@ -90,6 +90,8 @@ export interface PublicCourseQuiz {
   moduleId?: string | null;
   title: string;
   description: string;
+  /** False when the admin has temporarily closed this post-test. */
+  enabled: boolean;
   passingScore: number;
   maxAttempts: number;
   feedbackEnabled: boolean;
