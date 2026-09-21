@@ -77,3 +77,15 @@
     animation-play-state: paused;
   }
 }
+
+/* iOS Safari zooms the page when a form control is focused below 16px. Keep
+   mobile chat controls at the browser's no-zoom threshold while preserving
+   the compact desktop sizing. */
+@media (max-width: 767px) {
+  input,
+  textarea,
+  select,
+  [contenteditable="true"] {
+    font-size: 16px !important;
+  }
+}
