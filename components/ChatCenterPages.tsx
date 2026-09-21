@@ -166,6 +166,34 @@ const ChatModal: React.FC<{ open: boolean; title: string; onClose: () => void; c
   </div>;
 };
 
+const renderInlineChatText = (text: string, keyPrefix: string): React.ReactNode[] => {
+  const tokenPattern = /(\*\*[^*\n]+\*\*|\+\+[^+\n]+\+\+|\*[^*\n]+\*|`[^`\n]+`)/g;
+  const nodes: React.ReactNode[] = [];
+  let cursor = 0;
+  let match: RegExpExecArray | null;
+  while ((match = tokenPattern.exec(text)) !== null) {
+    const token = match[0];
+    if (match.index > cursor) nodes.push(text.slice(cursor, match.index));
+    if (token.startsWith('**')) nodes.push(<strong key={`${keyPrefix}-${match.index}`}>{token.slice(2, -2)}</strong>);
+    else if (token.startsWith('++')) nodes.push(<u key={`${keyPrefix}-${match.index}`}>{token.slice(2, -2)}</u>);
+    else if (token.startsWith('*')) nodes.push(<em key={`${keyPrefix}-${match.index}`}>{token.slice(1, -1)}</em>);
+    else nodes.push(<code key={`${keyPrefix}-${match.index}`} className="rounded bg-black/5 px-1 py-0.5 text-[0.9em] dark:bg-white/10">{token.slice(1, -1)}</code>);
+    cursor = match.index + token.length;
+  }
+  if (cursor < text.length) nodes.push(text.slice(cursor));
+  return nodes;
+};
+
+const renderChatBody = (body: string): React.ReactNode => body.split('\n').map((line, index, lines) => {
+  const listMatch = line.match(/^\s*[-*]\s+(.*)$/);
+  const content = listMatch ? listMatch[1] : line;
+  return <React.Fragment key={`line-${index}`}>
+    {listMatch && <span className="mr-1">•</span>}
+    {renderInlineChatText(content, `line-${index}`)}
+    {index < lines.length - 1 && <br />}
+  </React.Fragment>;
+});
+
 const ChatMessages: React.FC<{ messages: ChatMessage[]; viewer: 'admin' | 'guest'; className?: string }> = ({ messages, viewer, className = '' }) => {
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const visibleMessages = messages.filter(message => !message.expiresAt || new Date(message.expiresAt).getTime() > Date.now());
@@ -180,7 +208,7 @@ const ChatMessages: React.FC<{ messages: ChatMessage[]; viewer: 'admin' | 'guest
       return <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
         <div className={`max-w-[88%] rounded-2xl px-4 py-3 shadow-sm ${mine ? 'rounded-br-md bg-[var(--accent)] text-white' : 'rounded-bl-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]'}`}>
           <p className={`mb-1 text-[10px] font-semibold ${mine ? 'text-white/75' : 'text-[var(--muted)]'}`}>{message.senderName || (mine ? 'Anda' : 'Peserta')}</p>
-          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">{message.body}</p>
+          <p className="break-words text-sm leading-relaxed">{renderChatBody(message.body)}</p>
           <p className={`mt-2 text-[10px] ${mine ? 'text-white/70' : 'text-[var(--muted)]'}`}>{formatDate(message.createdAt)}</p>
         </div>
       </div>;
@@ -205,11 +233,37 @@ const ChatComposer: React.FC<{
     textarea.style.height = `${nextHeight}px`;
   };
   const toolbarButtons = [
-    { label: 'Tebal', icon: Bold },
-    { label: 'Miring', icon: Italic },
-    { label: 'Garis bawah', icon: Underline },
-    { label: 'Daftar', icon: List }
+    { label: 'Tebal', icon: Bold, prefix: '**', suffix: '**', placeholder: 'teks tebal', format: 'wrap' as const },
+    { label: 'Miring', icon: Italic, prefix: '*', suffix: '*', placeholder: 'teks miring', format: 'wrap' as const },
+    { label: 'Garis bawah', icon: Underline, prefix: '++', suffix: '++', placeholder: 'teks bergaris bawah', format: 'wrap' as const },
+    { label: 'Daftar', icon: List, prefix: '- ', suffix: '', placeholder: '', format: 'list' as const }
   ];
+
+  const applyFormat = (button: typeof toolbarButtons[number]) => {
+    const textarea = textareaRef.current;
+    if (!textarea || disabled || isSending) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    if (button.format === 'list') {
+      const lineStart = value.lastIndexOf('\n', Math.max(0, start - 1)) + 1;
+      const nextValue = `${value.slice(0, lineStart)}- ${value.slice(lineStart)}`;
+      onChange(nextValue);
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(start + 2, end + 2);
+      });
+      return;
+    }
+    const selectedText = value.slice(start, end);
+    const textToInsert = selectedText || button.placeholder;
+    const nextValue = `${value.slice(0, start)}${button.prefix}${textToInsert}${button.suffix}${value.slice(end)}`;
+    onChange(nextValue);
+    requestAnimationFrame(() => {
+      textarea.focus();
+      const selectionStart = start + button.prefix.length;
+      textarea.setSelectionRange(selectionStart, selectionStart + textToInsert.length);
+    });
+  };
 
   useEffect(() => {
     resizeTextarea();
@@ -233,7 +287,7 @@ const ChatComposer: React.FC<{
       />
       <div className="mt-2 flex items-center justify-between gap-3 border-t border-[var(--border)] pt-2">
         <div className="flex items-center gap-1 text-[var(--muted)]">
-          {toolbarButtons.map(({ label, icon: Icon }) => <button key={label} type="button" disabled aria-label={label} title={`${label} (segera hadir)`} className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg opacity-55"><Icon size={16} /></button>)}
+          {toolbarButtons.map(button => { const Icon = button.icon; return <button key={button.label} type="button" disabled={disabled || isSending} aria-label={button.label} title={button.label} onClick={() => applyFormat(button)} className="flex h-8 w-8 items-center justify-center rounded-lg transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-45"><Icon size={16} /></button>; })}
           <button type="button" disabled={disabled} aria-label="Lampiran" title="Lampiran (segera hadir)" className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg opacity-55"><Paperclip size={16} /></button>
           <button type="button" disabled={disabled} aria-label="Emoji" title="Emoji (segera hadir)" className="flex h-8 w-8 cursor-not-allowed items-center justify-center rounded-lg opacity-55"><Smile size={16} /></button>
         </div>
