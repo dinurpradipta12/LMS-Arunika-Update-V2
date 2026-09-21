@@ -9,7 +9,9 @@
     "/qna",
     "/qna/*",
     "/catalog",
-    "/catalog/*"
+    "/catalog/*",
+    "/chat",
+    "/chat/*"
   ],
   "exclude": []
 }

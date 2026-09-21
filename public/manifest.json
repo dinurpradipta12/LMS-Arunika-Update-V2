@@ -1,6 +1,7 @@
 {
   "short_name": "Arunika",
   "name": "Arunika Learning Hub",
+  "id": "/?pwa=chat",
   "icons": [
     {
       "src": "/icon-192.png",
@@ -15,7 +16,7 @@
       "purpose": "any maskable"
     }
   ],
-  "start_url": "/",
+  "start_url": "/?pwa=chat",
   "background_color": "#f3f6f9",
   "theme_color": "#173b5e",
   "display": "standalone",
