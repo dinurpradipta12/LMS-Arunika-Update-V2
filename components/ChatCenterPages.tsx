@@ -334,8 +334,8 @@ const ChatComposer: React.FC<{
     handleEditorInput();
   };
 
-  return <form className="shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-0 py-3 md:px-0 md:py-5" onSubmit={onSubmit}>
-    <div className={`rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 transition-all focus-within:border-[var(--border-strong)] focus-within:ring-4 focus-within:ring-[color-mix(in_srgb,var(--accent)_10%,transparent)] ${disabled ? 'opacity-70' : ''}`}>
+  return <form className="-mx-4 w-[calc(100%+2rem)] shrink-0 border-t border-[var(--border)] bg-[var(--surface)] px-0 py-3 md:-mx-6 md:w-[calc(100%+3rem)] md:px-0 md:py-5" onSubmit={onSubmit}>
+    <div className={`rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 transition-all focus-within:border-[var(--border-strong)] focus-within:ring-4 focus-within:ring-[color-mix(in_srgb,var(--accent)_10%,transparent)] ${disabled ? 'opacity-70' : ''}`}>
       {replyingTo && <div className="mb-2 flex items-start gap-2 rounded-xl border-l-2 border-[var(--accent)] bg-[var(--surface)] px-3 py-2 text-xs"><Reply size={14} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div className="min-w-0 flex-1"><p className="font-semibold">Membalas {replyingTo.senderName || 'pesan'}</p><p className="mt-0.5 truncate text-[var(--muted)]">{messagePreview(replyingTo.body)}</p></div>{onCancelReply && <button type="button" onClick={onCancelReply} className="rounded-md p-1 text-[var(--muted)] hover:bg-[var(--surface-soft)]" aria-label="Batal membalas"><X size={14} /></button>}</div>}
       <div className="relative">
         {isEmpty && <span className="pointer-events-none absolute left-1 top-1 z-10 text-sm leading-6 text-[var(--muted)]">{placeholder}</span>}
