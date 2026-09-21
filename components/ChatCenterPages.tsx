@@ -30,8 +30,7 @@ interface ChatRoom {
   participantName: string;
   participantEmail: string;
   status: ChatRoomStatus;
-  durationMinutes: number;
-  expiresAt: string;
+  messageRetentionMinutes: number;
   lastMessageAt: string | null;
   createdAt: string;
   updatedAt: string;
@@ -45,6 +44,7 @@ interface ChatMessage {
   body: string;
   clientMessageId?: string | null;
   readAt?: string | null;
+  expiresAt?: string | null;
   createdAt: string;
 }
 
@@ -72,8 +72,7 @@ const mapRoom = (row: any): ChatRoom => ({
   participantName: row.participant_name || '',
   participantEmail: row.participant_email || '',
   status: row.status === 'closed' ? 'closed' : row.status === 'active' ? 'active' : 'expired',
-  durationMinutes: Number(row.duration_minutes || 1440),
-  expiresAt: row.expires_at || '',
+  messageRetentionMinutes: Number(row.message_retention_minutes || row.duration_minutes || 1440),
   lastMessageAt: row.last_message_at || null,
   createdAt: row.created_at || '',
   updatedAt: row.updated_at || '',
@@ -89,6 +88,7 @@ const mapMessage = (row: any): ChatMessage => {
     body: row.body || '',
     clientMessageId: row.client_message_id || row.clientMessageId || null,
     readAt: row.read_at || row.readAt || null,
+    expiresAt: row.expires_at || row.expiresAt || null,
     createdAt: row.created_at || row.createdAt || ''
   };
 };
@@ -106,8 +106,7 @@ const formatDuration = (minutes: number) => {
   return `${minutes} menit`;
 };
 
-const isRoomExpired = (room: ChatRoom) => room.status === 'active' && Boolean(room.expiresAt) && new Date(room.expiresAt).getTime() <= Date.now();
-const roomStatus = (room: ChatRoom): ChatRoomStatus => room.status === 'closed' ? 'closed' : isRoomExpired(room) ? 'expired' : 'active';
+const roomStatus = (room: ChatRoom): ChatRoomStatus => room.status === 'closed' ? 'closed' : 'active';
 const statusLabel = (status: ChatRoomStatus) => status === 'active' ? 'Aktif' : status === 'expired' ? 'Kedaluwarsa' : 'Ditutup';
 
 const chatLink = (token: string) => {
@@ -153,9 +152,10 @@ const ChatModal: React.FC<{ open: boolean; title: string; onClose: () => void; c
   </div>;
 };
 
-const ChatMessages: React.FC<{ messages: ChatMessage[]; viewer: 'admin' | 'guest' }> = ({ messages, viewer }) => (
-  <div className="flex min-h-[360px] flex-col gap-3 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 md:p-6">
-    {messages.length === 0 ? <div className="m-auto max-w-xs text-center text-sm text-[var(--muted)]"><MessageCircle size={30} className="mx-auto mb-3" /><p>Belum ada pesan.</p><p className="mt-1 text-xs">Kirim pesan pertama untuk memulai percakapan.</p></div> : messages.map(message => {
+const ChatMessages: React.FC<{ messages: ChatMessage[]; viewer: 'admin' | 'guest' }> = ({ messages, viewer }) => {
+  const visibleMessages = messages.filter(message => !message.expiresAt || new Date(message.expiresAt).getTime() > Date.now());
+  return <div className="flex min-h-[360px] flex-col gap-3 overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 md:p-6">
+    {visibleMessages.length === 0 ? <div className="m-auto max-w-xs text-center text-sm text-[var(--muted)]"><MessageCircle size={30} className="mx-auto mb-3" /><p>Belum ada pesan.</p><p className="mt-1 text-xs">Kirim pesan pertama untuk memulai percakapan.</p></div> : visibleMessages.map(message => {
       const mine = message.senderRole === viewer;
       return <div key={message.id} className={`flex ${mine ? 'justify-end' : 'justify-start'}`}>
         <div className={`max-w-[88%] rounded-2xl px-4 py-3 shadow-sm ${mine ? 'rounded-br-md bg-[var(--accent)] text-white' : 'rounded-bl-md border border-[var(--border)] bg-[var(--surface)] text-[var(--text)]'}`}>
@@ -165,8 +165,8 @@ const ChatMessages: React.FC<{ messages: ChatMessage[]; viewer: 'admin' | 'guest
         </div>
       </div>;
     })}
-  </div>
-);
+  </div>;
+};
 
 export const ChatCenterPage: React.FC<{ client: any }> = ({ client }) => {
   const navigate = useNavigate();
@@ -176,7 +176,7 @@ export const ChatCenterPage: React.FC<{ client: any }> = ({ client }) => {
   const [isCreating, setIsCreating] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
-  const [createForm, setCreateForm] = useState({ title: '', participantName: '', participantEmail: '', durationMinutes: '1440' });
+  const [createForm, setCreateForm] = useState({ title: '', participantName: '', participantEmail: '', messageRetentionMinutes: '1440' });
 
   const fetchRooms = useCallback(async () => {
     if (!client) {
@@ -195,13 +195,13 @@ export const ChatCenterPage: React.FC<{ client: any }> = ({ client }) => {
 
   const createRoom = async (event: React.FormEvent) => {
     event.preventDefault();
-    const durationMinutes = Number(createForm.durationMinutes);
+    const messageRetentionMinutes = Number(createForm.messageRetentionMinutes);
     if (!createForm.participantName.trim()) {
       setNotice({ tone: 'error', message: 'Nama peserta wajib diisi.' });
       return;
     }
-    if (!Number.isFinite(durationMinutes) || durationMinutes < 5 || durationMinutes > 43200) {
-      setNotice({ tone: 'error', message: 'Durasi harus antara 5 menit dan 30 hari.' });
+    if (!Number.isFinite(messageRetentionMinutes) || messageRetentionMinutes < 5 || messageRetentionMinutes > 43200) {
+      setNotice({ tone: 'error', message: 'Retensi pesan harus antara 5 menit dan 30 hari.' });
       return;
     }
     setIsCreating(true);
@@ -209,7 +209,7 @@ export const ChatCenterPage: React.FC<{ client: any }> = ({ client }) => {
       p_title: createForm.title.trim() || `Chat dengan ${createForm.participantName.trim()}`,
       p_participant_name: createForm.participantName.trim(),
       p_participant_email: createForm.participantEmail.trim(),
-      p_duration_minutes: durationMinutes
+      p_duration_minutes: messageRetentionMinutes
     });
     if (error || !data?.roomId || !data?.token) {
       setNotice({ tone: 'error', message: databaseErrorMessage(error || data) });
@@ -219,7 +219,7 @@ export const ChatCenterPage: React.FC<{ client: any }> = ({ client }) => {
     const token = String(data.token);
     setTokens(current => ({ ...current, [data.roomId]: token }));
     try { await copyText(chatLink(token)); } catch { /* link tetap tersedia di halaman detail */ }
-    setCreateForm({ title: '', participantName: '', participantEmail: '', durationMinutes: '1440' });
+    setCreateForm({ title: '', participantName: '', participantEmail: '', messageRetentionMinutes: '1440' });
     setShowCreate(false);
     setNotice({ tone: 'success', message: 'Room chat dibuat dan link publik disalin ke clipboard.' });
     setIsCreating(false);
@@ -254,11 +254,11 @@ export const ChatCenterPage: React.FC<{ client: any }> = ({ client }) => {
       const token = tokens[room.id];
       return <Card key={room.id} className="flex h-full flex-col gap-5">
         <div className="flex items-start justify-between gap-4"><div className="flex min-w-0 items-start gap-3"><div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-2xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><MessageCircle size={21} /></div><div className="min-w-0"><h2 className="truncate text-lg font-bold">{room.title}</h2><p className="mt-1 truncate text-sm text-[var(--muted)]">{room.participantName}{room.participantEmail ? ` · ${room.participantEmail}` : ''}</p></div></div><Badge color={status === 'active' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(status)}</Badge></div>
-        <div className="grid gap-3 text-sm sm:grid-cols-3"><div className="rounded-xl bg-[var(--surface-soft)] p-3"><p className="text-xs text-[var(--muted)]">Durasi awal</p><p className="mt-1 font-semibold">{formatDuration(room.durationMinutes)}</p></div><div className="rounded-xl bg-[var(--surface-soft)] p-3"><p className="text-xs text-[var(--muted)]">Berakhir</p><p className="mt-1 font-semibold">{formatDate(room.expiresAt)}</p></div><div className="rounded-xl bg-[var(--surface-soft)] p-3"><p className="text-xs text-[var(--muted)]">Pesan terakhir</p><p className="mt-1 font-semibold">{formatDate(room.lastMessageAt, false)}</p></div></div>
+        <div className="grid gap-3 text-sm sm:grid-cols-2"><div className="rounded-xl bg-[var(--surface-soft)] p-3"><p className="text-xs text-[var(--muted)]">Retensi pesan</p><p className="mt-1 font-semibold">{formatDuration(room.messageRetentionMinutes)}</p></div><div className="rounded-xl bg-[var(--surface-soft)] p-3"><p className="text-xs text-[var(--muted)]">Pesan terakhir</p><p className="mt-1 font-semibold">{formatDate(room.lastMessageAt, false)}</p></div></div>
         <div className="mt-auto flex flex-wrap gap-2"><Button variant="secondary" onClick={() => navigate(`/admin/chat-center/${room.id}`, { state: token ? { chatToken: token } : undefined })}>Buka chat</Button>{token ? <Button variant="secondary" icon={Copy} onClick={() => void copyText(chatLink(token))}>Salin link</Button> : <Button variant="secondary" icon={LinkIcon} onClick={() => void rotateToken(room.id)}>Buat link</Button>}{token && <Button variant="secondary" icon={ExternalLink} onClick={() => window.open(chatLink(token), '_blank', 'noopener,noreferrer')}>Buka publik</Button>}<Button variant="danger" icon={RotateCcw} onClick={() => void rotateToken(room.id)}>Perbarui link</Button></div>
       </Card>;
     })}</div>}
-    <ChatModal open={showCreate} title="Buat room chat 1:1" onClose={() => setShowCreate(false)}><form className="space-y-4" onSubmit={createRoom}><Input label="Nama peserta" required value={createForm.participantName} onChange={event => setCreateForm({ ...createForm, participantName: event.target.value })} placeholder="Contoh: Nabila" /><Input label="Email peserta (opsional)" type="email" value={createForm.participantEmail} onChange={event => setCreateForm({ ...createForm, participantEmail: event.target.value })} placeholder="nabila@email.com" /><Input label="Judul room (opsional)" value={createForm.title} onChange={event => setCreateForm({ ...createForm, title: event.target.value })} placeholder="Chat konsultasi Social Media" /><Input label="Durasi akses (menit)" type="number" min="5" max="43200" value={createForm.durationMinutes} onChange={event => setCreateForm({ ...createForm, durationMinutes: event.target.value })} /><p className="text-xs leading-relaxed text-[var(--muted)]">Contoh: 60 = 1 jam, 360 = 6 jam, 1440 = 1 hari. Maksimal 30 hari.</p><div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setShowCreate(false)}>Batal</Button><Button type="submit" icon={Plus} isLoading={isCreating}>Buat room</Button></div></form></ChatModal>
+    <ChatModal open={showCreate} title="Buat room chat 1:1" onClose={() => setShowCreate(false)}><form className="space-y-4" onSubmit={createRoom}><Input label="Nama peserta" required value={createForm.participantName} onChange={event => setCreateForm({ ...createForm, participantName: event.target.value })} placeholder="Contoh: Nabila" /><Input label="Email peserta (opsional)" type="email" value={createForm.participantEmail} onChange={event => setCreateForm({ ...createForm, participantEmail: event.target.value })} placeholder="nabila@email.com" /><Input label="Judul room (opsional)" value={createForm.title} onChange={event => setCreateForm({ ...createForm, title: event.target.value })} placeholder="Chat konsultasi Social Media" /><Input label="Pesan disimpan selama (menit)" type="number" min="5" max="43200" value={createForm.messageRetentionMinutes} onChange={event => setCreateForm({ ...createForm, messageRetentionMinutes: event.target.value })} /><p className="text-xs leading-relaxed text-[var(--muted)]">Setiap pesan akan terhapus otomatis setelah waktu ini. Contoh: 60 = 1 jam, 360 = 6 jam, 1440 = 1 hari. Maksimal 30 hari.</p><div className="flex justify-end gap-2"><Button type="button" variant="secondary" onClick={() => setShowCreate(false)}>Batal</Button><Button type="submit" icon={Plus} isLoading={isCreating}>Buat room</Button></div></form></ChatModal>
   </div>;
 };
 
@@ -270,7 +270,7 @@ export const ChatCenterRoomPage: React.FC<{ client: any }> = ({ client }) => {
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [token, setToken] = useState<string>(() => (location.state as any)?.chatToken || '');
   const [message, setMessage] = useState('');
-  const [durationMinutes, setDurationMinutes] = useState('1440');
+  const [messageRetentionMinutes, setMessageRetentionMinutes] = useState('1440');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
   const [isSavingAccess, setIsSavingAccess] = useState(false);
@@ -279,15 +279,16 @@ export const ChatCenterRoomPage: React.FC<{ client: any }> = ({ client }) => {
   const fetchRoom = useCallback(async (showLoader = false) => {
     if (!id || !client) return;
     if (showLoader) setIsLoading(true);
+    await client.rpc('cleanup_expired_chat_messages');
     const [{ data: roomRow, error: roomError }, { data: messageRows, error: messageError }] = await Promise.all([
       client.from('chat_rooms').select('*').eq('id', id).maybeSingle(),
-      client.from('chat_messages').select('*').eq('room_id', id).order('created_at', { ascending: true }).limit(200)
+      client.from('chat_messages').select('*').eq('room_id', id).gt('expires_at', new Date().toISOString()).order('created_at', { ascending: true }).limit(200)
     ]);
     if (roomError) setNotice({ tone: 'error', message: databaseErrorMessage(roomError) });
     else if (roomRow) {
       const nextRoom = mapRoom(roomRow);
       setRoom(nextRoom);
-      setDurationMinutes(String(nextRoom.durationMinutes));
+      setMessageRetentionMinutes(String(nextRoom.messageRetentionMinutes));
     }
     if (messageError) setNotice({ tone: 'error', message: databaseErrorMessage(messageError) });
     else setMessages((messageRows || []).map(mapMessage));
@@ -317,16 +318,16 @@ export const ChatCenterRoomPage: React.FC<{ client: any }> = ({ client }) => {
 
   const saveAccess = async (status: 'active' | 'closed') => {
     if (!id) return;
-    const minutes = Number(durationMinutes);
+    const minutes = Number(messageRetentionMinutes);
     if (!Number.isFinite(minutes) || minutes < 5 || minutes > 43200) {
-      setNotice({ tone: 'error', message: 'Durasi harus antara 5 menit dan 30 hari.' });
+      setNotice({ tone: 'error', message: 'Retensi pesan harus antara 5 menit dan 30 hari.' });
       return;
     }
     setIsSavingAccess(true);
     const { data, error } = await client.rpc('update_chat_room_access', { p_room_id: id, p_status: status, p_duration_minutes: minutes });
     if (error) setNotice({ tone: 'error', message: databaseErrorMessage(error) });
     else {
-      setNotice({ tone: 'success', message: status === 'active' ? 'Room dibuka kembali dengan durasi baru.' : 'Room ditutup. Link publik tidak dapat mengirim pesan.' });
+      setNotice({ tone: 'success', message: status === 'active' ? 'Room tetap aktif dan retensi pesan diperbarui.' : 'Room ditutup. Link publik tidak dapat mengirim pesan baru.' });
       await fetchRoom(false);
     }
     setIsSavingAccess(false);
@@ -358,8 +359,8 @@ export const ChatCenterRoomPage: React.FC<{ client: any }> = ({ client }) => {
         <form className="flex items-end gap-2" onSubmit={sendMessage}><Textarea label="" value={message} onChange={event => setMessage(event.target.value)} placeholder="Tulis balasan..." className="min-h-[76px] flex-1" maxLength={4000} /><Button type="submit" icon={Send} isLoading={isSending} disabled={isSending || !message.trim()}>Kirim</Button></form>
       </Card>
       <div className="space-y-6">
-        <Card className="space-y-4"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Akses publik</p><h2 className="mt-2 text-lg font-bold">Durasi dan link</h2></div><div className="rounded-xl bg-[var(--surface-soft)] p-3"><p className="text-xs text-[var(--muted)]">Berakhir</p><p className="mt-1 font-semibold">{formatDate(room.expiresAt)}</p><p className="mt-1 text-xs text-[var(--muted)]">Durasi terakhir: {formatDuration(room.durationMinutes)}</p></div><Input label="Durasi saat dibuka kembali (menit)" type="number" min="5" max="43200" value={durationMinutes} onChange={event => setDurationMinutes(event.target.value)} /><div className="flex flex-wrap gap-2"><Button className="flex-1" onClick={() => void saveAccess('active')} isLoading={isSavingAccess} disabled={isSavingAccess}>Buka / perpanjang</Button><Button variant="danger" className="flex-1" onClick={() => void saveAccess('closed')} isLoading={isSavingAccess} disabled={isSavingAccess}>Tutup room</Button></div>{token ? <><div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="break-all text-xs text-[var(--muted)]">{publicLink}</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={Copy} className="flex-1" onClick={() => void copyText(publicLink)}>Salin link</Button><Button variant="secondary" icon={ExternalLink} className="flex-1" onClick={() => window.open(publicLink, '_blank', 'noopener,noreferrer')}>Buka publik</Button></div></> : <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-3 text-xs leading-relaxed text-[var(--muted)]">Token asli tidak disimpan oleh server. Buat link baru jika halaman ini dibuka ulang tanpa token.</div>}<Button variant="secondary" icon={RotateCcw} className="w-full" onClick={() => void rotateToken()}>Perbarui link publik</Button></Card>
-        <Card className="space-y-3"><div className="flex items-center gap-2"><Clock3 size={18} className="text-[var(--accent-strong)]" /><h2 className="font-semibold">Aturan room</h2></div><p className="text-sm leading-relaxed text-[var(--muted)]">Link ini tidak membutuhkan login, jadi perlakukan sebagai kunci akses. Perbarui link jika tersebar. Setelah waktu habis, room hanya bisa dibuka kembali dari halaman admin.</p></Card>
+        <Card className="space-y-4"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Akses publik</p><h2 className="mt-2 text-lg font-bold">Retensi pesan dan link</h2></div><div className="rounded-xl bg-[var(--surface-soft)] p-3"><p className="text-xs text-[var(--muted)]">Pesan tersimpan selama</p><p className="mt-1 font-semibold">{formatDuration(room.messageRetentionMinutes)}</p><p className="mt-1 text-xs text-[var(--muted)]">Pesan terhapus otomatis setelah waktu ini.</p></div><Input label="Simpan pesan selama (menit)" type="number" min="5" max="43200" value={messageRetentionMinutes} onChange={event => setMessageRetentionMinutes(event.target.value)} /><div className="flex flex-wrap gap-2"><Button className="flex-1" onClick={() => void saveAccess('active')} isLoading={isSavingAccess} disabled={isSavingAccess}>Simpan retensi</Button><Button variant="danger" className="flex-1" onClick={() => void saveAccess('closed')} isLoading={isSavingAccess} disabled={isSavingAccess}>Tutup room</Button></div>{token ? <><div className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><p className="break-all text-xs text-[var(--muted)]">{publicLink}</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={Copy} className="flex-1" onClick={() => void copyText(publicLink)}>Salin link</Button><Button variant="secondary" icon={ExternalLink} className="flex-1" onClick={() => window.open(publicLink, '_blank', 'noopener,noreferrer')}>Buka publik</Button></div></> : <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-3 text-xs leading-relaxed text-[var(--muted)]">Token asli tidak disimpan oleh server. Buat link baru jika halaman ini dibuka ulang tanpa token.</div>}<Button variant="secondary" icon={RotateCcw} className="w-full" onClick={() => void rotateToken()}>Perbarui link publik</Button></Card>
+        <Card className="space-y-3"><div className="flex items-center gap-2"><Clock3 size={18} className="text-[var(--accent-strong)]" /><h2 className="font-semibold">Aturan room</h2></div><p className="text-sm leading-relaxed text-[var(--muted)]">Link ini tidak membutuhkan login, jadi perlakukan sebagai kunci akses. Room tetap tersedia sampai ditutup admin. Setiap pesan akan dihapus otomatis dari database dan tidak lagi tampil setelah retensinya habis.</p></Card>
       </div>
     </div>
   </div>;
@@ -368,7 +369,7 @@ export const ChatCenterRoomPage: React.FC<{ client: any }> = ({ client }) => {
 export const PublicChatRoomPage: React.FC<{ client: any; tokenOverride?: string }> = ({ client, tokenOverride }) => {
   const { token: routeToken } = useParams<{ token: string }>();
   const token = tokenOverride || routeToken || '';
-  const [room, setRoom] = useState<{ id: string; title: string; participantName: string; status: ChatRoomStatus; available: boolean; expiresAt: string; messages: ChatMessage[] } | null>(null);
+  const [room, setRoom] = useState<{ id: string; title: string; participantName: string; status: ChatRoomStatus; available: boolean; messageRetentionMinutes: number; messages: ChatMessage[] } | null>(null);
   const [message, setMessage] = useState('');
   const [isLoading, setIsLoading] = useState(true);
   const [isSending, setIsSending] = useState(false);
@@ -385,7 +386,7 @@ export const PublicChatRoomPage: React.FC<{ client: any; tokenOverride?: string 
     if (requestError || !data) setError(requestError ? publicChatErrorMessage(requestError) : 'Room chat tidak ditemukan atau link sudah tidak berlaku.');
     else {
       setError('');
-      setRoom({ id: data.id, title: data.title || CHAT_CENTER_SPACE_LABEL, participantName: data.participantName || '', status: data.status === 'closed' ? 'closed' : data.status === 'expired' ? 'expired' : 'active', available: data.available === true, expiresAt: data.expiresAt || '', messages: Array.isArray(data.messages) ? data.messages.map(mapMessage) : [] });
+      setRoom({ id: data.id, title: data.title || CHAT_CENTER_SPACE_LABEL, participantName: data.participantName || '', status: data.status === 'closed' ? 'closed' : 'active', available: data.available === true, messageRetentionMinutes: Number(data.messageRetentionMinutes || 1440), messages: Array.isArray(data.messages) ? data.messages.map(mapMessage) : [] });
     }
     setIsLoading(false);
   }, [client, token]);
@@ -419,5 +420,5 @@ export const PublicChatRoomPage: React.FC<{ client: any; tokenOverride?: string 
   if (error && !room) return <main className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-5"><Card className="w-full max-w-md space-y-5 text-center"><MessageCircle size={38} className="mx-auto text-[var(--muted)]" /><div><h1 className="text-xl font-bold">Room chat tidak tersedia</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{error}</p></div><Button variant="secondary" icon={RefreshCw} onClick={() => void fetchRoom(true)} className="mx-auto">Coba lagi</Button></Card></main>;
   if (!room) return null;
 
-  return <main className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8"><div className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-sm md:min-h-[calc(100vh-4rem)]"><header className="flex items-center justify-between gap-4 border-b border-[var(--border)] px-5 py-4 md:px-7"><div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--surface-soft)]"><img src={logoUtama} alt="Arunika LMS" className="h-8 w-9 object-contain" /></div><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{CHAT_CENTER_SPACE_LABEL}</p><h1 className="truncate text-lg font-bold">{room.title}</h1><p className="truncate text-xs text-[var(--muted)]">Chat privat 1:1{room.participantName ? ` · ${room.participantName}` : ''}</p></div></div><Badge color={room.available ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.available ? 'Online' : room.status === 'expired' ? 'Kedaluwarsa' : 'Ditutup'}</Badge></header><div className="flex flex-1 flex-col gap-4 p-4 md:p-6"><div className="flex items-start gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div><p className="font-semibold">Percakapan privat</p><p className="mt-1 leading-relaxed text-[var(--muted)]">Room ini hanya untuk Anda dan admin. Akses otomatis berakhir pada {formatDate(room.expiresAt)}.</p></div></div><div className="flex-1"><ChatMessages messages={room.messages} viewer="guest" /></div>{error && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}<form className="flex items-end gap-2" onSubmit={sendMessage}><Textarea label="" value={message} onChange={event => setMessage(event.target.value)} placeholder={room.available ? 'Tulis pesan...' : 'Room ini sudah tidak menerima pesan'} className="min-h-[76px] flex-1" maxLength={4000} disabled={!room.available || isSending} /><Button type="submit" icon={Send} isLoading={isSending} disabled={!room.available || isSending || !message.trim()}>Kirim</Button></form></div><footer className="border-t border-[var(--border)] px-5 py-3 text-center text-[11px] text-[var(--muted)]">Powered by Arunika LMS · Jangan bagikan link room kepada orang lain.</footer></div></main>;
+  return <main className="min-h-screen bg-[var(--app-bg)] p-4 md:p-8"><div className="mx-auto flex min-h-[calc(100vh-2rem)] w-full max-w-3xl flex-col overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-sm md:min-h-[calc(100vh-4rem)]"><header className="flex items-center justify-between gap-4 border-b border-[var(--border)] px-5 py-4 md:px-7"><div className="flex min-w-0 items-center gap-3"><div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-xl bg-[var(--surface-soft)]"><img src={logoUtama} alt="Arunika LMS" className="h-8 w-9 object-contain" /></div><div className="min-w-0"><p className="text-[10px] font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">{CHAT_CENTER_SPACE_LABEL}</p><h1 className="truncate text-lg font-bold">{room.title}</h1><p className="truncate text-xs text-[var(--muted)]">Chat privat 1:1{room.participantName ? ` · ${room.participantName}` : ''}</p></div></div><Badge color={room.available ? 'var(--success-soft)' : 'var(--surface-soft)'}>{room.available ? 'Online' : 'Ditutup'}</Badge></header><div className="flex flex-1 flex-col gap-4 p-4 md:p-6"><div className="flex items-start gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm"><ShieldCheck size={18} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><div><p className="font-semibold">Percakapan privat</p><p className="mt-1 leading-relaxed text-[var(--muted)]">Pesan tersimpan selama {formatDuration(room.messageRetentionMinutes)} lalu otomatis dihapus. Room tetap tersedia selama admin belum menutupnya.</p></div></div><div className="flex-1"><ChatMessages messages={room.messages} viewer="guest" /></div>{error && <p className="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">{error}</p>}<form className="flex items-end gap-2" onSubmit={sendMessage}><Textarea label="" value={message} onChange={event => setMessage(event.target.value)} placeholder={room.available ? 'Tulis pesan...' : 'Room ini sudah ditutup'} className="min-h-[76px] flex-1" maxLength={4000} disabled={!room.available || isSending} /><Button type="submit" icon={Send} isLoading={isSending} disabled={!room.available || isSending || !message.trim()}>Kirim</Button></form></div><footer className="border-t border-[var(--border)] px-5 py-3 text-center text-[11px] text-[var(--muted)]">Powered by Arunika LMS · Jangan bagikan link room kepada orang lain.</footer></div></main>;
 };
