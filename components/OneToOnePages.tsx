@@ -49,6 +49,7 @@ export const ONE_TO_ONE_SPACE_LABEL = '1:1 Mentorship';
 
 type Notice = { tone: 'success' | 'error'; message: string } | null;
 type OneToOneTab = 'overview' | 'recordings' | 'schedule' | 'tasks' | 'notes';
+type OneToOneSpaceView = 'rooms' | 'booking';
 
 const themeOptions: Array<{ value: OneToOneTheme; label: string; color: string }> = [
   { value: 'navy', label: 'Navy', color: '#16436b' },
@@ -321,9 +322,11 @@ const OneToOneImageField: React.FC<{
 export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
   const navigate = useNavigate();
   const [portals, setPortals] = useState<OneToOnePortal[]>([]);
+  const [bookingEvents, setBookingEvents] = useState<OneToOneScheduleEvent[]>([]);
   const [tokens, setTokens] = useState<Record<string, string>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [activeView, setActiveView] = useState<OneToOneSpaceView>('rooms');
   const [notice, setNotice] = useState<Notice>(null);
   const [createForm, setCreateForm] = useState({ title: '', menteeName: '', menteeEmail: '' });
 
@@ -334,9 +337,14 @@ export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
       return;
     }
     setIsLoading(true);
-    const { data, error } = await client.from('one_to_one_portals').select('*').order('created_at', { ascending: false });
-    if (error) setNotice({ tone: 'error', message: databaseErrorMessage(error) });
-    else setPortals((data || []).map(mapPortal));
+    const [portalsResult, bookingResult] = await Promise.all([
+      client.from('one_to_one_portals').select('*').order('created_at', { ascending: false }),
+      client.from('one_to_one_schedule_events').select('*').order('starts_at')
+    ]);
+    const firstError = portalsResult.error || bookingResult.error;
+    if (firstError) setNotice({ tone: 'error', message: databaseErrorMessage(firstError) });
+    if (!portalsResult.error) setPortals((portalsResult.data || []).map(mapPortal));
+    if (!bookingResult.error) setBookingEvents((bookingResult.data || []).map(mapSchedule));
     setIsLoading(false);
   };
 
@@ -379,6 +387,45 @@ export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
     setNotice({ tone: 'success', message: 'Link privat baru dibuat dan disalin. Link lama tidak lagi aktif.' });
   };
 
+  const createBooking = async (row: OneToOneScheduleEvent) => {
+    const { error } = await client.from('one_to_one_schedule_events').insert({
+      portal_id: row.portalId,
+      title: row.title,
+      description: row.description,
+      starts_at: isoDateTime(row.startsAt),
+      ends_at: isoDateTime(row.endsAt),
+      location: row.location,
+      meeting_url: row.meetingUrl,
+      status: row.status,
+      sort_order: bookingEvents.length
+    });
+    setNotice(error ? { tone: 'error', message: databaseErrorMessage(error) } : { tone: 'success', message: 'Booking berhasil ditambahkan. Slot ini akan tampil sebagai Terisi di public space.' });
+    if (!error) await fetchPortals();
+  };
+
+  const saveBooking = async (row: OneToOneScheduleEvent) => {
+    const { error } = await client.from('one_to_one_schedule_events').update({
+      portal_id: row.portalId,
+      title: row.title,
+      description: row.description,
+      starts_at: isoDateTime(row.startsAt),
+      ends_at: isoDateTime(row.endsAt),
+      location: row.location,
+      meeting_url: row.meetingUrl,
+      status: row.status,
+      sort_order: row.sortOrder
+    }).eq('id', row.id);
+    setNotice(error ? { tone: 'error', message: databaseErrorMessage(error) } : { tone: 'success', message: 'Booking berhasil diperbarui.' });
+    if (!error) await fetchPortals();
+  };
+
+  const deleteBooking = async (row: OneToOneScheduleEvent) => {
+    if (!window.confirm('Hapus booking ini? Slot akan kembali tersedia di public space.')) return;
+    const { error } = await client.from('one_to_one_schedule_events').delete().eq('id', row.id);
+    setNotice(error ? { tone: 'error', message: databaseErrorMessage(error) } : { tone: 'success', message: 'Booking dihapus dan slot kembali tersedia.' });
+    if (!error) await fetchPortals();
+  };
+
   return (
     <div className="mx-auto w-full max-w-[1600px] space-y-7 p-4 md:p-6 lg:p-8">
       <div className="flex flex-col justify-between gap-5 md:flex-row md:items-end">
@@ -387,12 +434,17 @@ export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
           <h1 className="mt-4 text-3xl font-bold tracking-tight">{ONE_TO_ONE_SPACE_LABEL}</h1>
           <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">Buat ruang privat untuk setiap mentee. Mereka dapat membuka recording, jadwal, task, dan catatan mentor melalui link personal tanpa login.</p>
         </div>
-        <Button icon={Plus} onClick={() => document.getElementById('one-to-one-create-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>Buat ruang baru</Button>
+        {activeView === 'rooms' && <Button icon={Plus} onClick={() => document.getElementById('one-to-one-create-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' })}>Buat ruang baru</Button>}
       </div>
 
       <NoticeMessage notice={notice} />
 
-      <div id="one-to-one-create-form" className="scroll-mt-6"><Card className="space-y-5">
+      <div className="flex gap-2 overflow-x-auto border-b border-[var(--border)] pb-2">
+        <button type="button" onClick={() => setActiveView('rooms')} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeView === 'rooms' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'}`}><Users size={16} />Ruang mentee</button>
+        <button type="button" onClick={() => setActiveView('booking')} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeView === 'booking' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'}`}><CalendarDays size={16} />Booking mentor</button>
+      </div>
+
+      {activeView === 'rooms' && <><div id="one-to-one-create-form" className="scroll-mt-6"><Card className="space-y-5">
         <div>
           <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Ruang baru</p>
           <h2 className="mt-2 text-xl font-bold">Buat link personal mentee</h2>
@@ -421,7 +473,9 @@ export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
             </Card>;
           })}
         </div>
-      )}
+      )}</>}
+
+      {activeView === 'booking' && <BookingBoard rows={bookingEvents} portals={portals} onCreate={createBooking} onSave={saveBooking} onDelete={deleteBooking} />}
     </div>
   );
 };
@@ -774,6 +828,32 @@ const ScheduleEditor: React.FC<{ rows: OneToOneScheduleEvent[]; onCreate: (row: 
   </>;
 };
 
+const BookingBoard: React.FC<{ rows: OneToOneScheduleEvent[]; portals: OneToOnePortal[]; onCreate: (row: OneToOneScheduleEvent) => Promise<void>; onSave: (row: OneToOneScheduleEvent) => Promise<void>; onDelete: (row: OneToOneScheduleEvent) => Promise<void> }> = ({ rows, portals, onCreate, onSave, onDelete }) => {
+  const [editing, setEditing] = useState<OneToOneModalState<OneToOneScheduleEvent>>(null);
+  const [isSaving, setIsSaving] = useState(false);
+  const portalById = useMemo(() => new Map(portals.map(portal => [portal.id, portal])), [portals]);
+  const openCreate = () => setEditing({ mode: 'create', row: { id: '', portalId: portals[0]?.id || '', title: 'Booking konsultasi', description: '', startsAt: new Date().toISOString(), endsAt: new Date(Date.now() + 60 * 60 * 1000).toISOString(), location: '', meetingUrl: '', status: 'scheduled', sortOrder: rows.length } });
+  const update = (values: Partial<OneToOneScheduleEvent>) => setEditing(current => current ? { ...current, row: { ...current.row, ...values } } : current);
+  const submit = async (event: React.FormEvent) => { event.preventDefault(); if (!editing || !editing.row.portalId) return; const current = editing; setIsSaving(true); try { await (current.mode === 'create' ? onCreate(current.row) : onSave(current.row)); setEditing(null); } finally { setIsSaving(false); } };
+  const statusLabel = (status: OneToOneScheduleEvent['status']) => status === 'scheduled' ? 'Terjadwal · slot terisi' : status === 'completed' ? 'Selesai' : 'Dibatalkan · slot tersedia';
+
+  return <>
+    <div className="space-y-5">
+      <div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-end"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Kelola jadwal mentor</p><h2 className="mt-2 text-xl font-bold">Booking konsultasi</h2><p className="mt-1 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">Tambahkan booking dari satu tempat. Booking berstatus Terjadwal akan menghilangkan waktu tersebut dari ketersediaan semua public space mentee; mentee lain hanya melihat label Terisi tanpa detail booking.</p></div><Button type="button" icon={Plus} onClick={openCreate} disabled={portals.length === 0}>Tambah booking</Button></div>
+      <Card className="flex items-start gap-3 border-[var(--border)] bg-[var(--surface-soft)]"><CalendarDays size={19} className="mt-0.5 shrink-0 text-[var(--accent-strong)]" /><p className="text-sm leading-relaxed text-[var(--muted)]">Pilih ruang mentee yang terkait dengan booking. Di ruang tersebut detail sesi tampil normal; di ruang mentee lain tanggal dan jam yang sama otomatis ditandai sebagai <strong className="text-[var(--text)]">Terisi</strong>.</p></Card>
+      {portals.length === 0 ? <Card className="text-sm text-[var(--muted)]">Buat ruang mentee terlebih dahulu sebelum menambahkan booking.</Card> : rows.length === 0 ? <Card className="flex min-h-[220px] flex-col items-center justify-center gap-3 text-center"><CalendarDays size={34} className="text-[var(--muted)]" /><div><p className="font-semibold">Belum ada booking</p><p className="mt-1 text-sm text-[var(--muted)]">Tambahkan jadwal konsultasi untuk mulai memblokir slot mentor.</p></div></Card> : <div className="grid gap-4 xl:grid-cols-2">{rows.map(row => { const portal = portalById.get(row.portalId); return <Card key={row.id} className="space-y-4"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">{portal?.menteeName || 'Mentee tidak ditemukan'}</p><h3 className="mt-1 truncate text-lg font-bold">{row.title || 'Booking konsultasi'}</h3><p className="mt-1 text-sm text-[var(--muted)]">{formatDate(row.startsAt, true)} – {row.endsAt ? formatDate(row.endsAt, true) : '1 jam'}</p><p className="mt-1 text-xs text-[var(--muted)]">{statusLabel(row.status)}{row.location ? ` · ${row.location}` : ''}</p></div><Badge color={row.status === 'scheduled' ? 'var(--accent-soft)' : row.status === 'completed' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{row.status === 'scheduled' ? 'Terisi' : row.status === 'completed' ? 'Selesai' : 'Dibatalkan'}</Badge></div><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" icon={Pencil} onClick={() => setEditing({ mode: 'edit', row: { ...row } })}>Edit</Button><Button type="button" variant="danger" icon={Trash2} onClick={() => void onDelete(row)}>Hapus</Button></div></Card>; })}</div>}
+    </div>
+    <OneToOneContentModal open={Boolean(editing)} title={editing?.mode === 'create' ? 'Tambah booking' : 'Edit booking'} description="Tentukan ruang mentee, tanggal, dan jam. Hanya booking berstatus Terjadwal yang menutup slot di public space lain." onClose={() => { if (!isSaving) setEditing(null); }}>
+      {editing && <form className="space-y-4" onSubmit={submit}>
+        <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Ruang / mentee</span><select required value={editing.row.portalId} onChange={event => update({ portalId: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 text-sm outline-none focus:border-[var(--accent)]"><option value="" disabled>Pilih mentee</option>{portals.map(portal => <option key={portal.id} value={portal.id}>{portal.menteeName || portal.title}</option>)}</select></label>
+        <div className="grid gap-4 md:grid-cols-2"><Input label="Judul booking" required value={editing.row.title} onChange={event => update({ title: event.target.value })} placeholder="Contoh: Konsultasi mingguan" /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status</span><select value={editing.row.status} onChange={event => update({ status: event.target.value as OneToOneScheduleEvent['status'] })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 text-sm"><option value="scheduled">Terjadwal · slot terisi</option><option value="completed">Selesai</option><option value="cancelled">Dibatalkan · slot tersedia</option></select></label><Input label="Mulai" required type="datetime-local" value={inputDateTime(editing.row.startsAt)} onChange={event => update({ startsAt: event.target.value })} /><Input label="Selesai" required type="datetime-local" value={inputDateTime(editing.row.endsAt)} onChange={event => update({ endsAt: event.target.value })} /><Input label="Lokasi (opsional)" value={editing.row.location} onChange={event => update({ location: event.target.value })} placeholder="Zoom / Google Meet / Offline" /><Input label="Link meeting (opsional)" type="url" value={editing.row.meetingUrl} onChange={event => update({ meetingUrl: event.target.value })} placeholder="https://..." /></div>
+        <Textarea label="Catatan sesi (opsional)" value={editing.row.description} onChange={event => update({ description: event.target.value })} className="min-h-[100px]" placeholder="Agenda atau catatan untuk mentee terkait..." />
+        <OneToOneModalActions onClose={() => setEditing(null)} isSaving={isSaving} label={editing.mode === 'create' ? 'Tambah booking' : 'Simpan booking'} />
+      </form>}
+    </OneToOneContentModal>
+  </>;
+};
+
 const TaskEditor: React.FC<{ rows: OneToOneTask[]; onCreate: (row: OneToOneTask) => Promise<void>; onSave: (row: OneToOneTask) => Promise<void>; onDelete: (row: OneToOneTask) => Promise<void> }> = ({ rows, onCreate, onSave, onDelete }) => {
   const [editing, setEditing] = useState<OneToOneModalState<OneToOneTask>>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -893,7 +973,7 @@ const LegacyPublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string }
       </section>
       <section className="rounded-3xl border border-white/70 bg-white p-4 shadow-sm md:p-6"><div className="flex gap-2 overflow-x-auto pb-2">{tabs.map(tab => <button key={tab.value} type="button" onClick={() => setActiveTab(tab.value)} className={`inline-flex min-h-11 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold ${activeTab === tab.value ? 'text-white' : 'text-slate-600 hover:bg-slate-50'}`} style={activeTab === tab.value ? { backgroundColor: accent } : undefined}><tab.icon size={17} />{tab.label}</button>)}</div><div className="mt-6 space-y-4">
         {activeTab === 'recordings' && (recordings.length === 0 ? <EmptyPublic label="Belum ada materi recording." icon={Video} /> : recordings.map((item: any) => <article key={item.id} className="rounded-2xl border border-slate-200 p-5"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div><h2 className="font-bold text-slate-900">{item.title}</h2>{item.duration && <p className="mt-1 text-xs text-slate-500">{item.duration}</p>}</div>{item.videoUrl && <a href={item.videoUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white" style={{ backgroundColor: accent }}><PlayCircle size={16} /> Buka recording</a>}</div>{item.description && <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-600">{item.description}</p>}{item.materialUrl && <a href={item.materialUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold" style={{ color: accent }}><LinkIcon size={15} /> Buka materi unduhan <ExternalLink size={14} /></a>}</article>))}
-        {activeTab === 'schedule' && (schedule.length === 0 ? <EmptyPublic label="Belum ada jadwal mentoring." icon={CalendarDays} /> : <div className="space-y-5"><PublicScheduleCalendar items={schedule} accent={accent} />{schedule.map((item: any) => <article key={item.id} className="rounded-2xl border border-slate-200 p-5"><div className="flex flex-col gap-4 sm:flex-row"><div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-2xl text-white" style={{ backgroundColor: accent }}><span className="text-[10px] font-bold uppercase">{item.startsAt ? new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(new Date(item.startsAt)) : '—'}</span><span className="text-xl font-bold">{item.startsAt ? new Date(item.startsAt).getDate() : '—'}</span></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="font-bold text-slate-900">{item.title}</h2><Badge color={item.status === 'completed' ? 'var(--success-soft)' : item.status === 'cancelled' ? '#fee2e2' : `${accent}18`}>{item.status === 'completed' ? 'Selesai' : item.status === 'cancelled' ? 'Dibatalkan' : 'Terjadwal'}</Badge></div><p className="mt-1 text-sm text-slate-600">{formatDate(item.startsAt, true)}{item.endsAt ? ` – ${new Intl.DateTimeFormat('id-ID', { timeStyle: 'short' }).format(new Date(item.endsAt))}` : ''}</p>{item.location && <p className="mt-1 text-sm text-slate-500">{item.location}</p>}{item.description && <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-600">{item.description}</p>}{item.meetingUrl && item.status !== 'cancelled' && <a href={item.meetingUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold" style={{ color: accent }}>Buka link meeting <ExternalLink size={14} /></a>}</div></div></article>)}</div>)}
+        {activeTab === 'schedule' && (schedule.length === 0 ? <EmptyPublic label="Belum ada jadwal mentoring." icon={CalendarDays} /> : <div className="space-y-5"><PublicScheduleCalendar items={schedule} busyItems={data.mentorBusySlots || []} timezone={data.consultationTimezone} accent={accent} />{schedule.map((item: any) => <article key={item.id} className="rounded-2xl border border-slate-200 p-5"><div className="flex flex-col gap-4 sm:flex-row"><div className="flex h-14 w-14 shrink-0 flex-col items-center justify-center rounded-2xl text-white" style={{ backgroundColor: accent }}><span className="text-[10px] font-bold uppercase">{item.startsAt ? new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(new Date(item.startsAt)) : '—'}</span><span className="text-xl font-bold">{item.startsAt ? new Date(item.startsAt).getDate() : '—'}</span></div><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><h2 className="font-bold text-slate-900">{item.title}</h2><Badge color={item.status === 'completed' ? 'var(--success-soft)' : item.status === 'cancelled' ? '#fee2e2' : `${accent}18`}>{item.status === 'completed' ? 'Selesai' : item.status === 'cancelled' ? 'Dibatalkan' : 'Terjadwal'}</Badge></div><p className="mt-1 text-sm text-slate-600">{formatDate(item.startsAt, true)}{item.endsAt ? ` – ${new Intl.DateTimeFormat('id-ID', { timeStyle: 'short' }).format(new Date(item.endsAt))}` : ''}</p>{item.location && <p className="mt-1 text-sm text-slate-500">{item.location}</p>}{item.description && <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-600">{item.description}</p>}{item.meetingUrl && item.status !== 'cancelled' && <a href={item.meetingUrl} target="_blank" rel="noreferrer" className="mt-4 inline-flex items-center gap-2 text-sm font-semibold" style={{ color: accent }}>Buka link meeting <ExternalLink size={14} /></a>}</div></div></article>)}</div>)}
         {activeTab === 'tasks' && (tasks.length === 0 ? <EmptyPublic label="Belum ada task untuk Anda." icon={CheckCircle2} /> : tasks.map((item: any) => <article key={item.id} className="rounded-2xl border border-slate-200 p-5"><div className="flex items-start gap-3"><div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl" style={{ backgroundColor: `${accent}16`, color: accent }}><Check size={17} /></div><div className="min-w-0 flex-1"><div className="flex flex-wrap items-center gap-2"><h2 className="font-bold text-slate-900">{item.title}</h2><Badge color={item.status === 'done' ? 'var(--success-soft)' : item.priority === 'high' ? '#fee2e2' : `${accent}18`}>{item.status === 'done' ? 'Selesai' : item.status === 'in_progress' ? 'Sedang dikerjakan' : item.priority === 'high' ? 'Prioritas tinggi' : 'Belum mulai'}</Badge></div>{item.description && <p className="mt-2 whitespace-pre-line text-sm leading-relaxed text-slate-600">{item.description}</p>}{item.dueAt && <p className="mt-3 text-xs font-semibold text-slate-500">Deadline: {formatDate(item.dueAt, true)}</p>}</div></div></article>))}
         {activeTab === 'notes' && (notes.length === 0 ? <EmptyPublic label="Belum ada catatan mentor." icon={FileText} /> : notes.map((item: any) => <article key={item.id} className="rounded-2xl border border-slate-200 p-5"><p className="text-xs font-semibold uppercase tracking-[0.14em]" style={{ color: accent }}>{item.noteDate ? formatDate(item.noteDate) : 'Catatan mentor'}</p><h2 className="mt-2 font-bold text-slate-900">{item.title}</h2><p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-slate-600">{item.body}</p></article>))}
       </div></section><p className="text-center text-xs text-slate-500">Link ini bersifat privat. Jangan bagikan kepada orang lain.</p>
@@ -1110,6 +1190,7 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
   const accent = data.accentColor || '#16436b';
   const recordings = data.recordings || [];
   const schedule = data.schedule || [];
+  const busySlots: OneToOneBusySlot[] = data.mentorBusySlots || [];
   const tasks = data.tasks || [];
   const notes = data.notes || [];
   const greeting = getPublicGreeting(data.menteeName, data.consultationTimezone);
@@ -1150,7 +1231,7 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(270px,0.8fr)]">
         <div className="min-w-0 space-y-4">
           <PublicDashboardPanel title="Kalender & jadwal" icon={CalendarDays} accent={accent}>
-            <PublicScheduleCalendar items={schedule} accent={accent} />
+            <PublicScheduleCalendar items={schedule} busyItems={busySlots} timezone={data.consultationTimezone} accent={accent} />
             {schedule.length === 0 ? <p className="text-sm text-slate-500">Belum ada jadwal mentoring.</p> : <div className="space-y-2">{schedule.slice(0, 4).map((item: any) => <article key={item.id} className="flex items-center gap-3 rounded-xl border border-slate-100 p-3"><div className="flex h-10 w-10 shrink-0 flex-col items-center justify-center rounded-lg text-white" style={{ backgroundColor: accent }}><span className="text-[9px] font-bold uppercase">{item.startsAt ? new Intl.DateTimeFormat('id-ID', { month: 'short' }).format(new Date(item.startsAt)) : '—'}</span><span className="text-sm font-bold">{item.startsAt ? new Date(item.startsAt).getDate() : '—'}</span></div><div className="min-w-0"><p className="truncate text-sm font-semibold text-slate-800">{item.title}</p><p className="mt-0.5 truncate text-xs text-slate-500">{formatDate(item.startsAt, true)}{item.location ? ` · ${item.location}` : ''}</p></div></article>)}</div>}
           </PublicDashboardPanel>
           <PublicConsultationPanel portal={data} accent={accent} />
@@ -1180,16 +1261,24 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
   </main>;
 };
 
-const PublicScheduleCalendar: React.FC<{ items: any[]; accent: string }> = ({ items, accent }) => {
-  const [month, setMonth] = useState(() => new Date(new Date().getFullYear(), new Date().getMonth(), 1));
+const PublicScheduleCalendar: React.FC<{ items: any[]; busyItems?: OneToOneBusySlot[]; accent: string; timezone?: string }> = ({ items, busyItems = [], accent, timezone = 'Asia/Makassar' }) => {
+  const nowParts = getZonedCalendarParts(new Date(), timezone);
+  const [month, setMonth] = useState(() => {
+    const [year, monthNumber] = nowParts.dateKey.split('-').map(Number);
+    return new Date(year, (monthNumber || 1) - 1, 1);
+  });
   const year = month.getFullYear();
   const monthIndex = month.getMonth();
   const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
   const firstDayOffset = (new Date(year, monthIndex, 1).getDay() + 6) % 7;
   const eventDays = new Set(items.filter(item => item.status !== 'cancelled' && item.startsAt).map(item => {
-    const date = new Date(item.startsAt);
-    return date.getFullYear() === year && date.getMonth() === monthIndex ? date.getDate() : null;
+    const date = getZonedCalendarParts(item.startsAt, timezone);
+    return date.dateKey.startsWith(`${year}-${String(monthIndex + 1).padStart(2, '0')}-`) ? Number(date.dateKey.slice(-2)) : null;
+  }).filter(Boolean));
+  const busyDays = new Set(busyItems.filter(item => item.startsAt).map(item => {
+    const date = getZonedCalendarParts(item.startsAt, timezone);
+    return date.dateKey.startsWith(`${year}-${String(monthIndex + 1).padStart(2, '0')}-`) ? Number(date.dateKey.slice(-2)) : null;
   }).filter(Boolean));
   const monthLabel = new Intl.DateTimeFormat('id-ID', { month: 'long', year: 'numeric' }).format(month);
-  return <div className="rounded-2xl border border-slate-200 p-4 sm:p-5"><div className="flex items-center justify-between gap-3"><h2 className="font-bold capitalize text-slate-900">{monthLabel}</h2><div className="flex gap-1"><button type="button" aria-label="Bulan sebelumnya" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ChevronLeft size={17} /></button><button type="button" aria-label="Bulan berikutnya" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ChevronRight size={17} /></button></div></div><div className="mt-4 grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">{['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map(day => <span key={day} className="py-1">{day}</span>)}{Array.from({ length: firstDayOffset }).map((_, index) => <span key={`empty-${index}`} />)}{Array.from({ length: daysInMonth }).map((_, index) => { const day = index + 1; const hasEvent = eventDays.has(day); return <span key={day} className="relative flex h-9 items-center justify-center rounded-lg text-sm text-slate-700" style={hasEvent ? { backgroundColor: `${accent}15`, color: accent, fontWeight: 700 } : undefined}>{day}{hasEvent && <i className="absolute bottom-1 h-1 w-1 rounded-full" style={{ backgroundColor: accent }} />}</span>; })}</div><p className="mt-3 text-xs text-slate-500">Tanggal bertanda warna memiliki sesi mentoring.</p></div>;
+  return <div className="rounded-2xl border border-slate-200 p-4 sm:p-5"><div className="flex items-center justify-between gap-3"><h2 className="font-bold capitalize text-slate-900">{monthLabel}</h2><div className="flex gap-1"><button type="button" aria-label="Bulan sebelumnya" onClick={() => setMonth(new Date(year, monthIndex - 1, 1))} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ChevronLeft size={17} /></button><button type="button" aria-label="Bulan berikutnya" onClick={() => setMonth(new Date(year, monthIndex + 1, 1))} className="rounded-lg p-2 text-slate-500 hover:bg-slate-100"><ChevronRight size={17} /></button></div></div><div className="mt-4 grid grid-cols-7 gap-1 text-center text-[10px] font-bold uppercase tracking-wide text-slate-400">{['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'].map(day => <span key={day} className="py-1">{day}</span>)}{Array.from({ length: firstDayOffset }).map((_, index) => <span key={`empty-${index}`} />)}{Array.from({ length: daysInMonth }).map((_, index) => { const day = index + 1; const hasEvent = eventDays.has(day); const hasBusy = busyDays.has(day); return <span key={day} className="relative flex h-9 items-center justify-center rounded-lg text-sm text-slate-700" title={hasBusy && !hasEvent ? 'Ada waktu mentor yang terisi' : hasEvent ? 'Ada sesi mentoring' : undefined} style={hasEvent ? { backgroundColor: `${accent}15`, color: accent, fontWeight: 700 } : hasBusy ? { backgroundColor: '#fef3c7', color: '#b45309', fontWeight: 700 } : undefined}>{day}{(hasEvent || hasBusy) && <i className="absolute bottom-1 h-1 w-1 rounded-full" style={{ backgroundColor: hasEvent ? accent : '#d97706' }} />}</span>; })}</div><div className="mt-3 flex flex-wrap gap-x-4 gap-y-1 text-[11px] text-slate-500"><span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full" style={{ backgroundColor: accent }} />Sesi Anda</span><span className="inline-flex items-center gap-1.5"><i className="h-2 w-2 rounded-full bg-amber-500" />Waktu mentor terisi</span></div></div>;
 };
