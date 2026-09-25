@@ -32,6 +32,7 @@ import {
 
 import {
   OneToOneNote,
+  OneToOneBusySlot,
   OneToOneConsultationHours,
   OneToOneWeekday,
   OneToOnePortal,
@@ -150,6 +151,12 @@ const mapSchedule = (row: any): OneToOneScheduleEvent => ({
   meetingUrl: row.meeting_url || '',
   status: row.status || 'scheduled',
   sortOrder: row.sort_order || 0
+});
+
+const mapBusySlot = (row: any): OneToOneBusySlot => ({
+  id: row.id,
+  startsAt: row.starts_at || row.startsAt || '',
+  endsAt: row.ends_at || row.endsAt || ''
 });
 
 const mapTask = (row: any): OneToOneTask => ({
@@ -754,7 +761,7 @@ const ScheduleEditor: React.FC<{ rows: OneToOneScheduleEvent[]; onCreate: (row: 
   const update = (values: Partial<OneToOneScheduleEvent>) => setEditing(current => current ? { ...current, row: { ...current.row, ...values } } : current);
   const submit = async (event: React.FormEvent) => { event.preventDefault(); if (!editing) return; const current = editing; setIsSaving(true); try { await (current.mode === 'create' ? onCreate(current.row) : onSave(current.row)); setEditing(null); } finally { setIsSaving(false); } };
   return <>
-    <EditorShell title="Kalender penjadwalan" description="Atur tanggal sesi, lokasi, dan link meeting untuk mentee." onAdd={openCreate} addLabel="Tambah jadwal">
+    <EditorShell title="Kalender penjadwalan" description="Atur tanggal sesi, lokasi, dan link meeting untuk mentee. Jadwal berstatus Terjadwal otomatis menandai waktu mentor sebagai Terisi di ruang mentee lain; detail sesi tetap hanya terlihat di ruang ini." onAdd={openCreate} addLabel="Tambah jadwal">
       {rows.length === 0 ? <Card className="text-sm text-[var(--muted)]">Belum ada jadwal.</Card> : rows.map(row => <Card key={row.id} className="space-y-4"><div className="flex flex-col justify-between gap-3 sm:flex-row sm:items-start"><div className="min-w-0"><h3 className="font-semibold">{row.title || 'Sesi tanpa judul'}</h3><p className="mt-1 text-sm text-[var(--muted)]">{formatDate(row.startsAt, true)} – {formatDate(row.endsAt, true)}</p><p className="mt-1 text-xs text-[var(--muted)]">{row.location || 'Lokasi belum diatur'} · {row.status === 'scheduled' ? 'Terjadwal' : row.status === 'completed' ? 'Selesai' : 'Dibatalkan'}</p></div><div className="flex shrink-0 gap-2"><Button type="button" variant="secondary" icon={Pencil} onClick={() => setEditing({ mode: 'edit', row: { ...row } })}>Edit</Button><Button type="button" variant="danger" icon={Trash2} onClick={() => void onDelete(row)}>Hapus</Button></div></div></Card>)}
     </EditorShell>
     <OneToOneContentModal open={Boolean(editing)} title={editing?.mode === 'create' ? 'Tambah jadwal' : 'Edit jadwal'} description="Tentukan waktu dan detail sesi yang akan terlihat di kalender mentee." onClose={() => { if (!isSaving) setEditing(null); }}>
@@ -904,28 +911,99 @@ const consultationMinutes = (value: string) => {
   return (hours * 60) + minutes;
 };
 
-const getCurrentConsultationState = (hours: OneToOneConsultationHours, timezone: string) => {
-  const options: Intl.DateTimeFormatOptions = { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: timezone || 'Asia/Makassar' };
+type ZonedCalendarParts = { dateKey: string; weekday: OneToOneWeekday; minutes: number; time: string; dateLabel: string };
+
+const getZonedCalendarParts = (value: Date | string | number, timezone: string): ZonedCalendarParts => {
+  const date = value instanceof Date ? value : new Date(value);
+  const safeTimezone = timezone || 'Asia/Makassar';
+  const options: Intl.DateTimeFormatOptions = { weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: safeTimezone };
   let parts: Record<string, string> = {};
   try {
-    parts = new Intl.DateTimeFormat('en-US', options).formatToParts(new Date()).reduce<Record<string, string>>((result, part) => {
+    parts = new Intl.DateTimeFormat('en-US', options).formatToParts(date).reduce<Record<string, string>>((result, part) => {
       result[part.type] = part.value;
       return result;
     }, {});
   } catch {
-    parts = new Intl.DateTimeFormat('en-US', { weekday: 'short', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(new Date()).reduce<Record<string, string>>((result, part) => {
+    parts = new Intl.DateTimeFormat('en-US', { weekday: 'short', year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).formatToParts(date).reduce<Record<string, string>>((result, part) => {
       result[part.type] = part.value;
       return result;
     }, {});
   }
-  const day = publicWeekdayMap[parts.weekday] || 'mon';
+  const hour = Number(parts.hour === '24' ? '0' : parts.hour || '0');
+  const minute = Number(parts.minute || '0');
+  let dateLabel = `${parts.day || '--'} ${parts.month || '--'}`;
+  try {
+    dateLabel = new Intl.DateTimeFormat('id-ID', { weekday: 'short', day: 'numeric', month: 'short', timeZone: safeTimezone }).format(date);
+  } catch { /* use the numeric fallback above */ }
+  return {
+    dateKey: `${parts.year || '0000'}-${parts.month || '00'}-${parts.day || '00'}`,
+    weekday: publicWeekdayMap[parts.weekday] || 'mon',
+    minutes: (hour * 60) + minute,
+    time: `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`,
+    dateLabel
+  };
+};
+
+const getCurrentConsultationState = (hours: OneToOneConsultationHours, timezone: string, busySlots: OneToOneBusySlot[] = []) => {
+  const parts = getZonedCalendarParts(new Date(), timezone);
+  const day = parts.weekday;
   const dayHours = hours[day];
-  const currentMinutes = (Number(parts.hour === '24' ? '0' : parts.hour || '0') * 60) + Number(parts.minute || '0');
   const start = consultationMinutes(dayHours?.start || '');
   const end = consultationMinutes(dayHours?.end || '');
-  const isOpen = Boolean(dayHours?.enabled && start !== null && end !== null && end > start && currentMinutes >= start && currentMinutes < end);
-  return { day, dayHours, isOpen, currentTime: `${parts.hour || '00'}:${parts.minute || '00'}` };
+  const now = Date.now();
+  const isBusy = busySlots.some(slot => {
+    const startsAt = Date.parse(slot.startsAt);
+    const endsAt = Date.parse(slot.endsAt);
+    return Number.isFinite(startsAt) && Number.isFinite(endsAt) && now >= startsAt && now < endsAt;
+  });
+  const isOpen = Boolean(dayHours?.enabled && start !== null && end !== null && end > start && parts.minutes >= start && parts.minutes < end && !isBusy);
+  return { day, dayHours, isBusy, isOpen, currentTime: parts.time };
 };
+
+type PublicAvailabilitySegment = { start: number; end: number; status: 'available' | 'busy' };
+type PublicAvailabilityDay = { dateKey: string; label: string; segments: PublicAvailabilitySegment[] };
+
+const formatAvailabilityClock = (minutes: number) => `${String(Math.floor(minutes / 60)).padStart(2, '0')}:${String(minutes % 60).padStart(2, '0')}`;
+
+const getAvailabilityPreview = (hours: OneToOneConsultationHours, timezone: string, busySlots: OneToOneBusySlot[]): PublicAvailabilityDay[] => Array.from({ length: 7 }, (_, index) => {
+  const day = getZonedCalendarParts(Date.now() + (index * 24 * 60 * 60 * 1000), timezone);
+  const dayHours = hours[day.weekday];
+  const start = consultationMinutes(dayHours?.start || '');
+  const end = consultationMinutes(dayHours?.end || '');
+  if (!dayHours?.enabled || start === null || end === null || end <= start) {
+    return { dateKey: day.dateKey, label: day.dateLabel, segments: [] };
+  }
+
+  const busyIntervals = busySlots.map(slot => {
+    const startsAt = new Date(slot.startsAt);
+    const endsAt = new Date(slot.endsAt);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) return null;
+    const startParts = getZonedCalendarParts(startsAt, timezone);
+    const endParts = getZonedCalendarParts(endsAt, timezone);
+    if (startParts.dateKey > day.dateKey || endParts.dateKey < day.dateKey) return null;
+    const busyStart = startParts.dateKey < day.dateKey ? 0 : startParts.minutes;
+    const busyEnd = endParts.dateKey > day.dateKey ? 1440 : endParts.minutes;
+    const from = Math.max(start, busyStart);
+    const to = Math.min(end, busyEnd);
+    return from < to ? { start: from, end: to } : null;
+  }).filter((item): item is { start: number; end: number } => Boolean(item)).sort((left, right) => left.start - right.start);
+
+  const mergedBusy = busyIntervals.reduce<Array<{ start: number; end: number }>>((result, item) => {
+    const previous = result[result.length - 1];
+    if (previous && item.start <= previous.end) previous.end = Math.max(previous.end, item.end);
+    else result.push({ ...item });
+    return result;
+  }, []);
+  const segments: PublicAvailabilitySegment[] = [];
+  let cursor = start;
+  mergedBusy.forEach(item => {
+    if (item.start > cursor) segments.push({ start: cursor, end: item.start, status: 'available' });
+    segments.push({ start: item.start, end: item.end, status: 'busy' });
+    cursor = Math.max(cursor, item.end);
+  });
+  if (cursor < end) segments.push({ start: cursor, end, status: 'available' });
+  return { dateKey: day.dateKey, label: day.dateLabel, segments };
+});
 
 const getPublicGreeting = (menteeName: string, timezone: string) => {
   let hour = new Date().getHours();
@@ -954,7 +1032,9 @@ const PublicConsultationPanel: React.FC<{ portal: any; accent: string }> = ({ po
     return () => window.clearInterval(timer);
   }, []);
   const hours = normaliseConsultationHours(portal.consultationHours);
-  const state = getCurrentConsultationState(hours, portal.consultationTimezone);
+  const busySlots = Array.isArray(portal.mentorBusySlots) ? portal.mentorBusySlots.map(mapBusySlot) : [];
+  const state = getCurrentConsultationState(hours, portal.consultationTimezone, busySlots);
+  const availability = getAvailabilityPreview(hours, portal.consultationTimezone, busySlots);
   const rawPhone = String(portal.consultationPhone || '').replace(/\D/g, '');
   const phone = rawPhone.startsWith('0') ? `62${rawPhone.slice(1)}` : rawPhone.startsWith('8') ? `62${rawPhone}` : rawPhone;
   const canChat = Boolean(phone && state.isOpen);
@@ -964,11 +1044,12 @@ const PublicConsultationPanel: React.FC<{ portal: any; accent: string }> = ({ po
 
   return <PublicDashboardPanel title="Konsultasi mentor" icon={MessageCircle} accent={accent}>
     <div className="flex items-start justify-between gap-3 rounded-xl bg-slate-50 p-3">
-      <div><p className="text-sm font-semibold text-slate-800">{state.isOpen ? 'Mentor sedang tersedia' : 'Di luar jam konsultasi'}</p><p className="mt-1 text-xs text-slate-500">Sekarang {state.currentTime} · {portal.consultationTimezone || 'Asia/Makassar'}</p></div>
+      <div><p className="text-sm font-semibold text-slate-800">{state.isBusy ? 'Mentor sedang ada jadwal lain' : state.isOpen ? 'Mentor sedang tersedia' : 'Di luar jam konsultasi'}</p><p className="mt-1 text-xs text-slate-500">Sekarang {state.currentTime} · {portal.consultationTimezone || 'Asia/Makassar'}</p></div>
       <span className={`shrink-0 rounded-full px-2.5 py-1 text-[10px] font-bold uppercase tracking-wide ${state.isOpen ? 'bg-emerald-100 text-emerald-700' : 'bg-slate-200 text-slate-500'}`}>{state.isOpen ? 'Online' : 'Offline'}</span>
     </div>
     <p className="text-xs leading-relaxed text-slate-500">{activeHours || 'Jam konsultasi belum diatur oleh mentor.'}</p>
-    {canChat ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white" style={{ backgroundColor: accent }}><MessageCircle size={16} /> Chat via WhatsApp</a> : <button type="button" disabled className="inline-flex min-h-10 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-200 px-4 text-sm font-semibold text-slate-500"><Clock3 size={16} />{phone ? 'Tersedia saat jam konsultasi' : 'Nomor WhatsApp belum diatur'}</button>}
+    {availability.some(day => day.segments.length > 0) && <div className="space-y-2 rounded-xl border border-slate-100 p-3"><div className="flex items-center justify-between gap-3"><p className="text-xs font-semibold text-slate-800">Ketersediaan 7 hari ke depan</p><span className="text-[10px] text-slate-400">{portal.consultationTimezone || 'Asia/Makassar'}</span></div>{availability.map(day => <div key={day.dateKey} className="flex flex-col gap-1.5 border-t border-slate-100 pt-2 first:border-0 first:pt-0 sm:flex-row sm:items-start sm:justify-between sm:gap-3"><span className="shrink-0 text-xs font-semibold text-slate-600">{day.label}</span>{day.segments.length === 0 ? <span className="text-xs text-slate-400">Tidak ada jam konsultasi</span> : <div className="flex flex-wrap gap-1.5 sm:justify-end">{day.segments.map(segment => <span key={`${day.dateKey}-${segment.start}-${segment.end}-${segment.status}`} className={`rounded-full px-2 py-1 text-[10px] font-semibold ${segment.status === 'busy' ? 'bg-amber-100 text-amber-700' : 'bg-emerald-100 text-emerald-700'}`}>{segment.status === 'busy' ? 'Terisi' : 'Tersedia'} {formatAvailabilityClock(segment.start)}–{formatAvailabilityClock(segment.end)}</span>)}</div>}</div>)}</div>}
+    {canChat ? <a href={whatsappUrl} target="_blank" rel="noreferrer" className="inline-flex min-h-10 w-full items-center justify-center gap-2 rounded-xl px-4 text-sm font-semibold text-white" style={{ backgroundColor: accent }}><MessageCircle size={16} /> Chat via WhatsApp</a> : <button type="button" disabled className="inline-flex min-h-10 w-full cursor-not-allowed items-center justify-center gap-2 rounded-xl bg-slate-200 px-4 text-sm font-semibold text-slate-500"><Clock3 size={16} />{state.isBusy ? 'Mentor sedang ada jadwal' : phone ? 'Tersedia saat jam konsultasi' : 'Nomor WhatsApp belum diatur'}</button>}
   </PublicDashboardPanel>;
 };
 
@@ -988,11 +1069,14 @@ export const PublicOneToOnePage: React.FC<{ client: any; tokenOverride?: string 
     const load = async () => {
       if (!client || !token) { setError('Link 1:1 tidak lengkap.'); setIsLoading(false); return; }
       setIsLoading(true);
-      const { data: result, error: requestError } = await client.rpc('get_one_to_one_portal', { p_token: token });
+      const [{ data: result, error: requestError }, { data: busySlots, error: busySlotsError }] = await Promise.all([
+        client.rpc('get_one_to_one_portal', { p_token: token }),
+        client.rpc('get_one_to_one_mentor_busy_slots', { p_token: token })
+      ]);
       if (cancelled) return;
       if (requestError || !result) setError('Link 1:1 tidak ditemukan atau sudah tidak aktif.');
       else {
-        setData({ ...result, consultationHours: normaliseConsultationHours(result.consultationHours) });
+        setData({ ...result, mentorBusySlots: busySlotsError ? [] : (Array.isArray(busySlots) ? busySlots.map(mapBusySlot) : []), consultationHours: normaliseConsultationHours(result.consultationHours) });
         setPublicMetadata({ title: `${result.title || 'Ruang 1:1'} | Arunika`, description: result.welcomeMessage || `Ruang personal untuk ${result.menteeName || 'mentee'}.`, image: result.coverImageUrl || result.logoUrl || logoUtama });
       }
       setIsLoading(false);

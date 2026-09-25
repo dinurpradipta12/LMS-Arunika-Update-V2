@@ -233,6 +233,13 @@ export interface OneToOneScheduleEvent {
   sortOrder: number;
 }
 
+/** A scheduled event's time range as seen by other public mentee portals. */
+export interface OneToOneBusySlot {
+  id: string;
+  startsAt: string;
+  endsAt: string;
+}
+
 export interface OneToOneTask {
   id: string;
   portalId: string;
