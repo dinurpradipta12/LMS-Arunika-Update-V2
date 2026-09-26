@@ -2223,6 +2223,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
   const [attempts, setAttempts] = useState<QuizAttempt[]>([]);
   const [feedbackSubmissions, setFeedbackSubmissions] = useState<ClassFeedbackSubmission[]>([]);
   const [quizzes, setQuizzes] = useState<CourseQuiz[]>([]);
+  const [selectedQuizId, setSelectedQuizId] = useState('all');
   const [selectedAttempt, setSelectedAttempt] = useState<QuizAttempt | null>(null);
   const [reportPreviewAttempt, setReportPreviewAttempt] = useState<QuizAttempt | null>(null);
   const [selectedFeedbackForCard, setSelectedFeedbackForCard] = useState<ClassFeedbackSubmission | null>(null);
@@ -2272,32 +2273,47 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
     return quizzes.find(item => item.id === attempt.quizId) || quizzes.find(item => item.placement !== 'per_material') || null;
   };
 
-  const quizLabel = (attempt: QuizAttempt) => {
-    const attemptQuiz = quizForAttempt(attempt);
-    if (!attemptQuiz) return 'Post-Test';
-    if (attemptQuiz.moduleId) {
-      const moduleIndex = course?.modules.findIndex(module => module.id === attemptQuiz.moduleId) ?? -1;
-      const moduleTitle = course?.modules.find(module => module.id === attemptQuiz.moduleId)?.title;
-      return moduleTitle ? `Materi ${moduleIndex + 1} · ${moduleTitle}` : attemptQuiz.title;
+  const quizLabelFromQuiz = (quiz: CourseQuiz | null) => {
+    if (!quiz) return 'Post-Test';
+    if (quiz.moduleId) {
+      const moduleIndex = course?.modules.findIndex(module => module.id === quiz.moduleId) ?? -1;
+      const moduleTitle = course?.modules.find(module => module.id === quiz.moduleId)?.title;
+      return moduleTitle ? `Materi ${moduleIndex + 1} · ${moduleTitle}` : quiz.title;
     }
-    return attemptQuiz.title || 'Post-Test Kelas';
+    return quiz.title || 'Post-Test Kelas';
   };
 
+  const quizLabel = (attempt: QuizAttempt) => quizLabelFromQuiz(quizForAttempt(attempt));
+  const filterableQuizzes = useMemo(
+    () => quizzes.filter((item): item is CourseQuiz & { id: string } => Boolean(item.id)),
+    [quizzes]
+  );
+  const selectedQuiz = selectedQuizId === 'all' ? null : quizzes.find(item => item.id === selectedQuizId) || null;
+  const visibleAttempts = useMemo(
+    () => selectedQuizId === 'all' ? attempts : attempts.filter(attempt => attempt.quizId === selectedQuizId),
+    [attempts, selectedQuizId]
+  );
+  const hasMultiplePostTests = filterableQuizzes.length > 1;
+
+  useEffect(() => {
+    if (selectedQuizId !== 'all' && !filterableQuizzes.some(item => item.id === selectedQuizId)) setSelectedQuizId('all');
+  }, [filterableQuizzes, selectedQuizId]);
+
   const stats = useMemo(() => {
-    const participantCount = new Set(attempts.map(attempt => attempt.participantEmail.toLowerCase())).size;
-    const average = attempts.length ? Math.round(attempts.reduce((sum, attempt) => sum + attempt.score, 0) / attempts.length) : 0;
-    const reviewedAttempts = attempts.filter(attempt => !attempt.needsReview);
+    const participantCount = new Set(visibleAttempts.map(attempt => attempt.participantEmail.toLowerCase())).size;
+    const average = visibleAttempts.length ? Math.round(visibleAttempts.reduce((sum, attempt) => sum + attempt.score, 0) / visibleAttempts.length) : 0;
+    const reviewedAttempts = visibleAttempts.filter(attempt => !attempt.needsReview);
     const passRate = reviewedAttempts.length ? Math.round((reviewedAttempts.filter(attempt => attempt.passed).length / reviewedAttempts.length) * 100) : 0;
-    const pendingReview = attempts.filter(attempt => attempt.needsReview).length;
+    const pendingReview = visibleAttempts.filter(attempt => attempt.needsReview).length;
     const averageRating = feedbackSubmissions.length ? (feedbackSubmissions.reduce((sum, feedback) => sum + feedback.rating, 0) / feedbackSubmissions.length).toFixed(1) : '—';
     return { participantCount, average, passRate, pendingReview, feedbackCount: feedbackSubmissions.length, averageRating };
-  }, [attempts, feedbackSubmissions]);
+  }, [feedbackSubmissions, visibleAttempts]);
 
   const exportCsv = () => {
     const rows = [
       ['Tipe', 'Nama', 'Email Peserta', 'Email Sertifikat', 'Nilai', 'Status', 'Percobaan', 'Rating', 'Feedback', 'Jawaban', 'Waktu Submit'],
-      ...attempts.map(attempt => [quizLabel(attempt), attempt.participantName, attempt.participantEmail, '', attempt.score, attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus', attempt.attemptNumber, '', attempt.classFeedback || '', JSON.stringify(attempt.answers), new Date(attempt.submittedAt).toLocaleString('id-ID')]),
-      ...feedbackSubmissions.map(feedback => ['Feedback Kelas', feedback.participantName, feedback.participantEmail, feedback.certificateEmail, '', 'Selesai', '', feedback.rating, feedback.feedback, '', new Date(feedback.submittedAt).toLocaleString('id-ID')])
+      ...visibleAttempts.map(attempt => [quizLabel(attempt), attempt.participantName, attempt.participantEmail, '', attempt.score, attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus', attempt.attemptNumber, '', attempt.classFeedback || '', JSON.stringify(attempt.answers), new Date(attempt.submittedAt).toLocaleString('id-ID')]),
+      ...(selectedQuizId === 'all' ? feedbackSubmissions.map(feedback => ['Feedback Kelas', feedback.participantName, feedback.participantEmail, feedback.certificateEmail, '', 'Selesai', '', feedback.rating, feedback.feedback, '', new Date(feedback.submittedAt).toLocaleString('id-ID')]) : [])
     ];
     const csv = rows.map(row => row.map(escapeCsv).join(',')).join('\n');
     const url = URL.createObjectURL(new Blob([`\uFEFF${csv}`], { type: 'text/csv;charset=utf-8' }));
@@ -2353,9 +2369,34 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
         </div>
         <div className="flex gap-2">
           <Button variant="secondary" icon={RefreshCw} onClick={fetchAttempts}>Refresh</Button>
-          <Button icon={FileDown} disabled={attempts.length === 0 && feedbackSubmissions.length === 0} onClick={exportCsv}>Export CSV</Button>
+          <Button icon={FileDown} disabled={selectedQuizId === 'all' ? visibleAttempts.length === 0 && feedbackSubmissions.length === 0 : visibleAttempts.length === 0} onClick={exportCsv}>Export CSV</Button>
         </div>
       </div>
+
+      {hasMultiplePostTests && (
+        <Card className="flex flex-col gap-3 sm:flex-row sm:items-end sm:justify-between">
+          <div>
+            <p className="font-semibold">Filter hasil post-test</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">Pilih materi agar nilai, statistik, dan ekspor CSV tidak tergabung dengan post-test lain.</p>
+          </div>
+          <label className="w-full text-sm font-medium sm:w-80" htmlFor="class-results-quiz-filter">
+            <span className="sr-only">Pilih post-test</span>
+            <select
+              id="class-results-quiz-filter"
+              value={selectedQuizId}
+              onChange={event => {
+                setSelectedQuizId(event.target.value);
+                setSelectedAttempt(null);
+                setReportPreviewAttempt(null);
+              }}
+              className="mt-1 min-h-[44px] w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm text-[var(--text)] outline-none transition focus:border-[var(--border-strong)] focus:ring-2 focus:ring-[var(--accent-soft)]"
+            >
+              <option value="all">Semua post-test</option>
+              {filterableQuizzes.map(quiz => <option key={quiz.id} value={quiz.id}>{quizLabelFromQuiz(quiz)}</option>)}
+            </select>
+          </label>
+        </Card>
+      )}
 
       <div className="grid sm:grid-cols-2 lg:grid-cols-6 gap-4">
         <Card><p className="text-xs text-[var(--muted)]">Peserta Unik</p><p className="text-3xl font-bold mt-2">{stats.participantCount}</p></Card>
@@ -2375,13 +2416,16 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
       ) : (
         <>
           {attempts.length > 0 && <>
+          {visibleAttempts.length === 0 ? (
+            <Card className="py-12 text-center"><ClipboardCheck size={30} className="mx-auto mb-3 text-[var(--muted)]" /><p className="font-semibold">Belum ada hasil untuk {quizLabelFromQuiz(selectedQuiz)}</p><p className="mt-1 text-sm text-[var(--muted)]">Pilih post-test lain atau tunggu peserta mengirim jawaban.</p></Card>
+          ) : <>
           <div className="hidden md:block overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)]">
             <table className="w-full text-left text-sm">
               <thead className="bg-[var(--surface-soft)] text-xs text-[var(--muted)]">
                 <tr><th className="p-4">Peserta</th><th className="p-4">Post-test</th><th className="p-4">Nilai</th><th className="p-4">Status</th><th className="p-4">Percobaan</th><th className="p-4">Dikirim</th><th className="p-4">Detail</th><th className="p-4">Raport</th></tr>
               </thead>
               <tbody>
-                {attempts.map(attempt => (
+                {visibleAttempts.map(attempt => (
                   <tr key={attempt.id} className="border-t border-[var(--border)]">
                     <td className="p-4"><p className="font-semibold">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] mt-1">{attempt.participantEmail}</p></td>
                     <td className="p-4 text-xs font-semibold max-w-[220px]">{quizLabel(attempt)}</td>
@@ -2399,7 +2443,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
             </table>
           </div>
           <div className="md:hidden space-y-3">
-            {attempts.map(attempt => (
+            {visibleAttempts.map(attempt => (
               <Card key={attempt.id} className="space-y-4">
                 <div className="flex items-start justify-between gap-3"><div className="min-w-0"><p className="font-semibold truncate">{attempt.participantName}</p><p className="text-xs text-[var(--muted)] break-all mt-1">{attempt.participantEmail}</p></div><button type="button" onClick={() => setSelectedAttempt(attempt)} className={`rounded-lg px-2 py-1 text-[10px] font-semibold transition hover:ring-2 hover:ring-[var(--accent-soft)] ${attempt.needsReview ? 'bg-[var(--accent-soft)] text-[var(--accent-strong)]' : attempt.passed ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : 'bg-[var(--danger-soft)] text-[var(--danger-text)]'}`} aria-label={`Buka review ${attempt.participantName}`}>{attempt.needsReview ? 'Menunggu review' : attempt.passed ? 'Lulus' : 'Belum Lulus'}</button></div>
                 <p className="rounded-lg bg-[var(--surface-soft)] px-3 py-2 text-xs font-semibold">{quizLabel(attempt)}</p><div className="grid grid-cols-3 gap-3 text-xs"><div><p className="text-[var(--muted)]">Nilai</p><p className="font-bold text-lg mt-1">{attempt.score}</p></div><div><p className="text-[var(--muted)]">Percobaan</p><p className="font-semibold mt-2">#{attempt.attemptNumber}</p></div><div><p className="text-[var(--muted)]">Dikirim</p><p className="font-semibold mt-2">{new Date(attempt.submittedAt).toLocaleDateString('id-ID')}</p></div></div>
@@ -2407,6 +2451,7 @@ export const ClassResultsPage: React.FC<{ courses: Course[]; client: any }> = ({
               </Card>
             ))}
           </div>
+          </>}
           </>}
 
           {feedbackSubmissions.length > 0 && (
