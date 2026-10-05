@@ -25,6 +25,7 @@ import {
   MoveDown,
   MoveUp,
   MousePointerClick,
+  Minus,
   Palette,
   Plus,
   Quote,
@@ -61,6 +62,26 @@ const DEFAULT_LANDING_DESCRIPTION = 'Landing page untuk memperkenalkan produk An
 type Notice = { tone: 'success' | 'error'; message: string };
 
 const asText = (value: unknown, fallback = '') => typeof value === 'string' ? value : value == null ? fallback : String(value);
+
+type LandingPricingAudience = 'individual' | 'team';
+
+const RUPIAH_FORMATTER = new Intl.NumberFormat('id-ID', { maximumFractionDigits: 0 });
+
+const normalizeMoneyAmount = (value: unknown, fallback = 0) => {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.round(value));
+  const digits = asText(value).replace(/[^\d]/g, '');
+  if (!digits) return fallback;
+  const amount = Number(digits);
+  return Number.isFinite(amount) ? Math.max(0, Math.round(amount)) : fallback;
+};
+
+const normalizePositiveInteger = (value: unknown, fallback = 1, minimum = 1, maximum = 50) => {
+  const numericValue = Number(value);
+  const safeValue = Number.isFinite(numericValue) ? Math.round(numericValue) : fallback;
+  return Math.min(maximum, Math.max(minimum, safeValue));
+};
+
+const formatRupiah = (amount: number) => `Rp ${RUPIAH_FORMATTER.format(Math.max(0, Math.round(amount || 0)))}`;
 
 type LandingInsightSummary = {
   landing_page_id: string;
@@ -166,6 +187,11 @@ type LandingPricingPackage = {
   originalPrice: string;
   description: string;
   features: string[];
+  audience: LandingPricingAudience;
+  basePrice: number;
+  includedParticipants: number;
+  maxParticipants: number;
+  additionalParticipantPrice: number;
 };
 
 const normalizeHeroImageScale = (value: unknown, fallback = 1.15) => {
@@ -305,7 +331,12 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
         price: 'Rp 0',
         originalPrice: '',
         description: 'Pilih paket yang paling sesuai dengan kebutuhan Anda.',
-        features: ['Akses materi utama', 'Panduan praktis', 'Dukungan setelah pembelian']
+        features: ['Akses materi utama', 'Panduan praktis', 'Dukungan setelah pembelian'],
+        audience: 'individual',
+        basePrice: 0,
+        includedParticipants: 1,
+        maxParticipants: 1,
+        additionalParticipantPrice: 0
       }],
       price: 'Rp 0',
       body: 'Pilih paket yang paling sesuai dengan kebutuhan Anda.',
@@ -429,35 +460,83 @@ const normalizeWorkflowLayout = (value: unknown): LandingWorkflowLayout => (
   ['vertical', 'horizontal'].includes(asText(value)) ? asText(value) as LandingWorkflowLayout : 'vertical'
 );
 
-const createPricingPackage = (index = 0): LandingPricingPackage => ({
+const createPricingPackage = (index = 0, audience: LandingPricingAudience = 'individual'): LandingPricingPackage => ({
   id: `landing-package-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
-  name: `Paket ${index + 1}`,
-  price: '',
+  name: audience === 'team' ? `Paket Tim ${index + 1}` : `Paket Personal ${index + 1}`,
+  price: 'Rp 0',
   originalPrice: '',
   description: '',
-  features: []
+  features: [],
+  audience,
+  basePrice: 0,
+  includedParticipants: audience === 'team' ? 2 : 1,
+  maxParticipants: audience === 'team' ? 5 : 1,
+  additionalParticipantPrice: 0
 });
+
+const normalizePricingAudience = (value: unknown): LandingPricingAudience => value === 'team' ? 'team' : 'individual';
+
+const normalizePricingPackage = (item: any, index: number): LandingPricingPackage => {
+  const audience = normalizePricingAudience(item?.audience || item?.packageType || item?.package_type);
+  const basePrice = normalizeMoneyAmount(item?.basePrice ?? item?.base_price, normalizeMoneyAmount(item?.price));
+  const includedParticipants = audience === 'team'
+    ? normalizePositiveInteger(item?.includedParticipants ?? item?.included_participants, 2, 2)
+    : 1;
+  const maxParticipants = audience === 'team'
+    ? normalizePositiveInteger(item?.maxParticipants ?? item?.max_participants, Math.max(5, includedParticipants), includedParticipants)
+    : 1;
+  const additionalParticipantPrice = audience === 'team'
+    ? normalizeMoneyAmount(item?.additionalParticipantPrice ?? item?.additional_participant_price)
+    : 0;
+  const legacyPrice = asText(item?.price);
+  return {
+    id: asText(item?.id, `landing-package-${index}`),
+    name: asText(item?.name || item?.title),
+    price: legacyPrice || (basePrice > 0 ? formatRupiah(basePrice) : ''),
+    originalPrice: asText(item?.originalPrice || item?.original_price),
+    description: asText(item?.description || item?.body),
+    features: Array.isArray(item?.features) ? item.features.map((feature: unknown) => asText(feature)).filter(Boolean) : [],
+    audience,
+    basePrice,
+    includedParticipants,
+    maxParticipants,
+    additionalParticipantPrice
+  };
+};
 
 const normalizePricingPackages = (value: unknown, legacyData: Record<string, any> = {}): LandingPricingPackage[] => {
   if (Array.isArray(value)) {
-    return value.slice(0, 12).map((item, index) => ({
-      id: asText(item?.id, `landing-package-${index}`),
-      name: asText(item?.name || item?.title),
-      price: asText(item?.price),
-      originalPrice: asText(item?.originalPrice || item?.original_price),
-      description: asText(item?.description || item?.body),
-      features: Array.isArray(item?.features) ? item.features.map((feature: unknown) => asText(feature)).filter(Boolean) : []
-    }));
+    return value.slice(0, 12).map(normalizePricingPackage);
   }
 
-  return [{
+  return [normalizePricingPackage({
     id: 'landing-package-legacy',
-    name: asText(legacyData.packageName || legacyData.package_name, 'Paket utama'),
-    price: asText(legacyData.price),
-    originalPrice: asText(legacyData.originalPrice || legacyData.original_price),
-    description: asText(legacyData.body),
-    features: Array.isArray(legacyData.features) ? legacyData.features.map((feature: unknown) => asText(feature)).filter(Boolean) : []
-  }];
+    name: legacyData.packageName || legacyData.package_name || 'Paket utama',
+    price: legacyData.price,
+    originalPrice: legacyData.originalPrice || legacyData.original_price,
+    description: legacyData.body,
+    features: legacyData.features
+  }, 0)];
+};
+
+const getMinimumParticipants = (item: LandingPricingPackage) => item.audience === 'team' ? item.includedParticipants : 1;
+
+const clampParticipantCount = (item: LandingPricingPackage, requestedCount: number) => (
+  Math.min(item.maxParticipants, Math.max(getMinimumParticipants(item), Math.round(requestedCount || getMinimumParticipants(item))))
+);
+
+const getPricingSummary = (item: LandingPricingPackage, requestedCount: number) => {
+  const participantCount = clampParticipantCount(item, requestedCount);
+  const additionalParticipants = item.audience === 'team' ? Math.max(0, participantCount - item.includedParticipants) : 0;
+  const additionalAmount = additionalParticipants * item.additionalParticipantPrice;
+  const total = item.basePrice + additionalAmount;
+  return { participantCount, additionalParticipants, additionalAmount, total };
+};
+
+const getPackageDisplayPrice = (item: LandingPricingPackage, requestedCount = getMinimumParticipants(item)) => {
+  const summary = getPricingSummary(item, requestedCount);
+  if (item.audience === 'individual' && item.price.trim()) return item.price;
+  return summary.total > 0 ? formatRupiah(summary.total) : item.price || 'Hubungi kami';
 };
 
 const getPricingPackagesForPage = (page: LandingPage): LandingPricingPackage[] => {
@@ -707,15 +786,20 @@ const normalizeWhatsAppNumber = (value: unknown) => {
   return digits.startsWith('0') ? `62${digits.slice(1)}` : digits;
 };
 
-const whatsappHref = (phone: unknown, pageTitle: string, paymentAmount?: string, selectedPackage?: LandingPricingPackage | null, paymentAccount?: string) => {
+const whatsappHref = (phone: unknown, pageTitle: string, paymentAmount?: string, selectedPackage?: LandingPricingPackage | null, paymentAccount?: string, participantCount = 1) => {
   const normalized = normalizeWhatsAppNumber(phone);
   if (!normalized) return '';
   const packageName = selectedPackage?.name.trim();
-  const amount = selectedPackage?.price.trim() || paymentAmount?.trim() || 'akan saya informasikan melalui chat ini';
+  const pricingSummary = selectedPackage ? getPricingSummary(selectedPackage, participantCount) : null;
+  const amount = selectedPackage
+    ? getPackageDisplayPrice(selectedPackage, pricingSummary?.participantCount)
+    : paymentAmount?.trim() || 'akan saya informasikan melalui chat ini';
   const benefits = selectedPackage?.features.filter(Boolean) || [];
   const message = [
     `Halo, saya ingin melakukan pembayaran untuk ${pageTitle}.`,
     packageName ? `Paket yang dipilih: ${packageName}` : '',
+    selectedPackage?.audience === 'team' && pricingSummary ? `Jumlah peserta: ${pricingSummary.participantCount} orang` : '',
+    pricingSummary?.additionalParticipants ? `Biaya peserta tambahan: ${formatRupiah(pricingSummary.additionalAmount)}` : '',
     `Total pembayaran: ${amount}`,
     benefits.length ? `Benefit paket:\n${benefits.map(feature => `- ${feature}`).join('\n')}` : '',
     paymentAccount?.trim() ? `Transfer ke: ${paymentAccount.trim()}` : '',
@@ -1434,8 +1518,12 @@ export const LandingBlockRenderer: React.FC<{
   onCtaClick?: (label: string) => void;
   selectedPackage?: LandingPricingPackage | null;
   onSelectPackage?: (item: LandingPricingPackage) => void;
+  selectedAudience?: LandingPricingAudience;
+  onSelectAudience?: (audience: LandingPricingAudience) => void;
+  participantCount?: number;
+  onParticipantCountChange?: (nextCount: number) => void;
   hasPricingBlock?: boolean;
-}> = ({ block, pageTitle = 'produk ini', onCtaClick, selectedPackage, onSelectPackage, hasPricingBlock = false }) => {
+}> = ({ block, pageTitle = 'produk ini', onCtaClick, selectedPackage, onSelectPackage, selectedAudience, onSelectAudience, participantCount, onParticipantCountChange, hasPricingBlock = false }) => {
   const data = block.data || {};
   const textBody = asText(data.body);
   const sectionHeadingColor = headingColorValue(data.headingColor);
@@ -1503,30 +1591,52 @@ export const LandingBlockRenderer: React.FC<{
       return <LandingTopicsBlock data={data} />;
     case 'workflow':
       return <LandingWorkflowBlock data={data} />;
-    case 'pricing':
+    case 'pricing': {
       const pricingPackages = normalizePricingPackages(data.packages, data);
       const pricingButtonLabel = asText(data.buttonLabel, 'Pilih paket');
+      const individualPackages = pricingPackages.filter(item => item.audience === 'individual');
+      const teamPackages = pricingPackages.filter(item => item.audience === 'team');
+      const hasAudienceTabs = individualPackages.length > 0 && teamPackages.length > 0;
+      const activeAudience: LandingPricingAudience = hasAudienceTabs
+        ? selectedAudience === 'team' ? 'team' : 'individual'
+        : pricingPackages[0]?.audience === 'team' ? 'team' : 'individual';
+      const visiblePackages = hasAudienceTabs ? pricingPackages.filter(item => item.audience === activeAudience) : pricingPackages;
+      const selectAudience = (audience: LandingPricingAudience) => {
+        const nextPackage = pricingPackages.find(item => item.audience === audience);
+        onSelectAudience?.(audience);
+        if (nextPackage) onSelectPackage?.(nextPackage);
+      };
       return (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm md:p-8">
           <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Pilihan paket')}</h2>
           {textBody && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{textBody}</p>}
+          {hasAudienceTabs && <div className="mt-6 grid max-w-md grid-cols-2 rounded-xl bg-[var(--surface-soft)] p-1" role="tablist" aria-label="Jenis konsultasi">
+            <button type="button" role="tab" aria-selected={activeAudience === 'individual'} onClick={() => selectAudience('individual')} className={`min-h-[42px] rounded-lg px-3 text-sm font-semibold transition-colors ${activeAudience === 'individual' ? 'bg-[var(--surface)] text-[var(--accent-strong)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--text)]'}`}>Personal <span className="hidden sm:inline">· 1 orang</span></button>
+            <button type="button" role="tab" aria-selected={activeAudience === 'team'} onClick={() => selectAudience('team')} className={`min-h-[42px] rounded-lg px-3 text-sm font-semibold transition-colors ${activeAudience === 'team' ? 'bg-[var(--surface)] text-[var(--accent-strong)] shadow-sm' : 'text-[var(--muted)] hover:text-[var(--text)]'}`}>Tim <span className="hidden sm:inline">· 2+ orang</span></button>
+          </div>}
           <div className="mt-6 grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {pricingPackages.map((item, index) => {
+            {visiblePackages.map((item, index) => {
               const isSelected = selectedPackage?.id === item.id;
+              const minimumParticipants = getMinimumParticipants(item);
+              const currentParticipantCount = clampParticipantCount(item, isSelected ? participantCount ?? minimumParticipants : minimumParticipants);
+              const pricingSummary = getPricingSummary(item, currentParticipantCount);
+              const displayPrice = getPackageDisplayPrice(item, currentParticipantCount);
               return (
                 <article key={`${item.id}-${index}`} className={`flex h-full flex-col rounded-2xl border p-5 shadow-sm transition-colors ${isSelected ? 'border-[var(--accent)] bg-[var(--accent-soft)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] bg-[var(--surface-soft)]'}`}>
                   <div className="flex items-start justify-between gap-3">
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">Paket {index + 1}</p>
+                      <p className="text-[10px] font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{item.audience === 'team' ? 'Konsultasi tim' : 'Konsultasi personal'}</p>
                       <h3 className="mt-2 text-lg font-bold">{item.name || `Paket ${index + 1}`}</h3>
                     </div>
                     {isSelected && <Badge color="var(--success-soft)">Dipilih</Badge>}
                   </div>
                   {item.description && <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
                   <div className="mt-5 flex flex-wrap items-baseline gap-2">
-                    {item.originalPrice && <span className="text-sm font-semibold text-[var(--muted)] line-through">{item.originalPrice}</span>}
-                    <p className="text-2xl font-bold text-[var(--accent-strong)]">{item.price || 'Hubungi kami'}</p>
+                    {item.originalPrice && pricingSummary.additionalParticipants === 0 && <span className="text-sm font-semibold text-[var(--muted)] line-through">{item.originalPrice}</span>}
+                    <p className="text-2xl font-bold text-[var(--accent-strong)]">{item.audience === 'team' && !isSelected ? 'Mulai dari ' : ''}{displayPrice}</p>
                   </div>
+                  {item.audience === 'team' && <div className="mt-3 space-y-1 text-xs leading-relaxed text-[var(--muted)]"><p>Termasuk {item.includedParticipants} orang · maksimal {item.maxParticipants} orang</p><p>Tambahan peserta: {formatRupiah(item.additionalParticipantPrice)} / orang</p>{isSelected && pricingSummary.additionalParticipants > 0 && <p className="font-semibold text-[var(--accent-strong)]">Tambahan {pricingSummary.additionalParticipants} orang: {formatRupiah(pricingSummary.additionalAmount)}</p>}</div>}
+                  {item.audience === 'team' && isSelected && <div className="mt-4 flex items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><div><p className="text-xs font-semibold">Jumlah peserta</p><p className="mt-0.5 text-[11px] text-[var(--muted)]">Total akan disesuaikan otomatis.</p></div><div className="flex items-center rounded-lg border border-[var(--border)] bg-[var(--surface-soft)]"><button type="button" aria-label={`Kurangi jumlah peserta ${item.name}`} disabled={currentParticipantCount <= minimumParticipants} onClick={() => onParticipantCountChange?.(currentParticipantCount - 1)} className="flex h-9 w-9 items-center justify-center rounded-l-lg text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-40"><Minus size={16} /></button><output aria-live="polite" className="min-w-8 text-center text-sm font-bold">{currentParticipantCount}</output><button type="button" aria-label={`Tambah jumlah peserta ${item.name}`} disabled={currentParticipantCount >= item.maxParticipants} onClick={() => onParticipantCountChange?.(currentParticipantCount + 1)} className="flex h-9 w-9 items-center justify-center rounded-r-lg text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:cursor-not-allowed disabled:opacity-40"><Plus size={16} /></button></div></div>}
                   {item.features.length > 0 && <ul className="mt-5 flex-1 space-y-2 text-sm text-[var(--muted)]">{item.features.map((feature, featureIndex) => <li key={`${feature}-${featureIndex}`} className="flex items-start gap-2"><Check size={16} className="mt-0.5 shrink-0 text-[var(--success-text)]" /> <span>{feature}</span></li>)}</ul>}
                   <button type="button" onClick={() => { onSelectPackage?.(item); onCtaClick?.(`pricing:${item.name || `Paket ${index + 1}`}`); }} className={`mt-6 inline-flex min-h-[44px] items-center justify-center rounded-xl px-4 py-3 text-sm font-semibold transition-colors ${isSelected ? 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]' : 'border border-[var(--border)] bg-[var(--surface)] text-[var(--text)] hover:border-[var(--border-strong)]'}`}>
                     {isSelected ? 'Paket dipilih' : pricingButtonLabel}
@@ -1538,6 +1648,7 @@ export const LandingBlockRenderer: React.FC<{
           {safeHref(data.buttonUrl) && <ActionLink label={pricingButtonLabel} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('pricing')} className="mt-6" />}
         </section>
       );
+    }
     case 'testimonial':
       return <LandingTestimonialGridBlock data={data} />;
     case 'profile':
@@ -1552,12 +1663,13 @@ export const LandingBlockRenderer: React.FC<{
         </section>
       );
     case 'payment': {
+      const pricingSummary = selectedPackage ? getPricingSummary(selectedPackage, participantCount ?? getMinimumParticipants(selectedPackage)) : null;
       const confirmationHref = hasPricingBlock
-        ? selectedPackage ? whatsappHref(data.whatsapp, pageTitle, asText(data.amount), selectedPackage, asText(data.accountNumber)) : ''
+        ? selectedPackage ? whatsappHref(data.whatsapp, pageTitle, asText(data.amount), selectedPackage, asText(data.accountNumber), pricingSummary?.participantCount) : ''
         : whatsappHref(data.whatsapp, pageTitle, asText(data.amount), null, asText(data.accountNumber)) || safeHref(data.buttonUrl);
       const ctaBeforePrice = asText(data.ctaBeforePrice).trim();
       const originalAmount = asText(data.originalAmount).trim();
-      const selectedAmount = selectedPackage?.price.trim() || asText(data.amount);
+      const selectedAmount = selectedPackage ? getPackageDisplayPrice(selectedPackage, pricingSummary?.participantCount) : asText(data.amount);
       const selectedOriginalAmount = selectedPackage?.originalPrice.trim() || originalAmount;
       return (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-6 shadow-sm md:p-8">
@@ -1565,7 +1677,7 @@ export const LandingBlockRenderer: React.FC<{
             <div>
               {ctaBeforePrice && <p className="mb-3 text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{ctaBeforePrice}</p>}
               <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Informasi pembayaran')}</h2>
-              {hasPricingBlock && !selectedPackage ? <p className="mt-3 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-3 text-sm leading-relaxed text-[var(--muted)]">Pilih salah satu paket di atas untuk melihat total pembayaran dan melanjutkan konfirmasi.</p> : <>{selectedPackage && <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Paket dipilih</p><p className="mt-1 font-semibold">{selectedPackage.name || 'Paket pilihan'}</p>{selectedPackage.features.length > 0 && <ul className="mt-2 space-y-1 text-xs leading-relaxed text-[var(--muted)]">{selectedPackage.features.map((feature, index) => <li key={`${feature}-${index}`} className="flex items-start gap-2"><Check size={13} className="mt-0.5 shrink-0 text-[var(--success-text)]" /> <span>{feature}</span></li>)}</ul>}</div>}{(selectedOriginalAmount || selectedAmount) && <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">{selectedOriginalAmount && <span className="text-base font-semibold text-[var(--muted)] line-through">{selectedOriginalAmount}</span>}{selectedAmount && <p className="text-2xl font-bold text-[var(--accent-strong)]">{selectedAmount}</p>}</div>}</>}
+              {hasPricingBlock && !selectedPackage ? <p className="mt-3 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-3 text-sm leading-relaxed text-[var(--muted)]">Pilih salah satu paket di atas untuk melihat total pembayaran dan melanjutkan konfirmasi.</p> : <>{selectedPackage && <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Paket dipilih</p><p className="mt-1 font-semibold">{selectedPackage.name || 'Paket pilihan'}</p>{selectedPackage.audience === 'team' && pricingSummary && <div className="mt-2 rounded-lg bg-[var(--surface-soft)] p-2 text-xs leading-relaxed text-[var(--muted)]"><p>Jumlah peserta: <span className="font-semibold text-[var(--text)]">{pricingSummary.participantCount} orang</span></p>{pricingSummary.additionalParticipants > 0 && <p>Tambahan {pricingSummary.additionalParticipants} orang: <span className="font-semibold text-[var(--text)]">{formatRupiah(pricingSummary.additionalAmount)}</span></p>}</div>}{selectedPackage.features.length > 0 && <ul className="mt-2 space-y-1 text-xs leading-relaxed text-[var(--muted)]">{selectedPackage.features.map((feature, index) => <li key={`${feature}-${index}`} className="flex items-start gap-2"><Check size={13} className="mt-0.5 shrink-0 text-[var(--success-text)]" /> <span>{feature}</span></li>)}</ul>}</div>}{(selectedOriginalAmount || selectedAmount) && <div className="mt-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">{selectedOriginalAmount && !pricingSummary?.additionalParticipants && <span className="text-base font-semibold text-[var(--muted)] line-through">{selectedOriginalAmount}</span>}{selectedAmount && <p className="text-2xl font-bold text-[var(--accent-strong)]">{selectedAmount}</p>}</div>}</>}
               <p className="mt-3 whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{asText(data.instructions, 'Tambahkan instruksi pembayaran.')}</p>
               {asText(data.accountNumber) && <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--muted)]">Nomor rekening</p><p className="mt-1 break-words text-sm font-semibold">{asText(data.accountNumber)}</p></div>}
               {confirmationHref ? <a href={confirmationHref} onClick={() => onCtaClick?.('payment')} className="mt-5 inline-flex items-center justify-center gap-2 rounded-xl bg-[#128c7e] px-5 py-3 text-sm font-semibold text-white hover:brightness-95">{asText(data.buttonLabel, 'Konfirmasi melalui WhatsApp')} <ExternalLink size={15} /></a> : selectedPackage && <p className="mt-4 text-xs leading-relaxed text-[var(--muted)]">Nomor WhatsApp konfirmasi belum diatur oleh penyelenggara.</p>}
@@ -1636,12 +1748,38 @@ const LandingPageShell: React.FC<{ page: LandingPage; children: React.ReactNode;
 
 const LandingPagePreview: React.FC<{ page: LandingPage; editable?: boolean; selectedBlockId?: string; onSelect?: (id: string) => void; onDrop?: (event: React.DragEvent, index: number) => void; onDragStart?: (event: React.DragEvent, blockId: string) => void; onMove?: (index: number, direction: -1 | 1) => void; onRemove?: (id: string) => void }> = ({ page, editable = false, selectedBlockId, onSelect, onDrop, onDragStart, onMove, onRemove }) => {
   const [selectedPackage, setSelectedPackage] = useState<LandingPricingPackage | null>(null);
+  const [selectedAudience, setSelectedAudience] = useState<LandingPricingAudience>('individual');
+  const [participantCount, setParticipantCount] = useState(1);
+  const selectedPackageIdRef = useRef<string | null>(null);
   const hasPricingBlock = page.blocks.some(block => block.type === 'pricing');
 
   useEffect(() => {
     const packages = getPricingPackagesForPage(page);
-    setSelectedPackage(current => current ? packages.find(item => item.id === current.id) || packages[0] || null : packages[0] || null);
+    const nextPackage = packages.find(item => item.id === selectedPackageIdRef.current) || packages[0] || null;
+    selectedPackageIdRef.current = nextPackage?.id || null;
+    setSelectedPackage(nextPackage);
+    setSelectedAudience(nextPackage?.audience || 'individual');
+    setParticipantCount(current => nextPackage ? clampParticipantCount(nextPackage, current) : 1);
   }, [page]);
+
+  const handleSelectPackage = useCallback((item: LandingPricingPackage) => {
+    const isSamePackage = selectedPackageIdRef.current === item.id;
+    selectedPackageIdRef.current = item.id;
+    setSelectedPackage(item);
+    setSelectedAudience(item.audience);
+    setParticipantCount(current => isSamePackage ? clampParticipantCount(item, current) : getMinimumParticipants(item));
+  }, []);
+
+  const handleSelectAudience = useCallback((audience: LandingPricingAudience) => {
+    const nextPackage = getPricingPackagesForPage(page).find(item => item.audience === audience);
+    setSelectedAudience(audience);
+    if (nextPackage) handleSelectPackage(nextPackage);
+  }, [handleSelectPackage, page]);
+
+  const handleParticipantCountChange = useCallback((nextCount: number) => {
+    if (!selectedPackage) return;
+    setParticipantCount(clampParticipantCount(selectedPackage, nextCount));
+  }, [selectedPackage]);
 
   return (
     <LandingPageShell page={page} preview={editable}>
@@ -1653,7 +1791,7 @@ const LandingPagePreview: React.FC<{ page: LandingPage; editable?: boolean; sele
             <button type="button" aria-label={`Turunkan ${LANDING_BLOCK_LABELS[block.type]}`} disabled={index === page.blocks.length - 1} onClick={event => { event.stopPropagation(); onMove?.(index, 1); }} className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--surface-soft)] disabled:opacity-30"><MoveDown size={14} /></button>
             <button type="button" aria-label={`Hapus ${LANDING_BLOCK_LABELS[block.type]}`} onClick={event => { event.stopPropagation(); onRemove?.(block.id); }} className="rounded-lg p-1.5 text-[var(--danger-text)] hover:bg-[var(--danger-soft)]"><Trash2 size={14} /></button>
           </div>}
-          <LandingBlockRenderer block={block} pageTitle={page.title} selectedPackage={selectedPackage} onSelectPackage={setSelectedPackage} hasPricingBlock={hasPricingBlock} />
+          <LandingBlockRenderer block={block} pageTitle={page.title} selectedPackage={selectedPackage} onSelectPackage={handleSelectPackage} selectedAudience={selectedAudience} onSelectAudience={handleSelectAudience} participantCount={participantCount} onParticipantCountChange={handleParticipantCountChange} hasPricingBlock={hasPricingBlock} />
         </div>
       ))}
       {editable && page.blocks.length > 0 && <div onDragOver={event => event.preventDefault()} onDrop={event => onDrop?.(event, page.blocks.length)} className="h-8 rounded-xl border border-dashed border-transparent transition-colors hover:border-[var(--border-strong)]" aria-label="Taruh elemen di bagian paling bawah" />}
@@ -2268,9 +2406,19 @@ const LandingBonusEditor: React.FC<{ items: LandingBonusItem[]; onChange: (items
 const LandingPricingEditor: React.FC<{ items: LandingPricingPackage[]; onChange: (items: LandingPricingPackage[]) => void }> = ({ items, onChange }) => {
   const maxPackages = 12;
   const updateItem = (index: number, patch: Partial<LandingPricingPackage>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
-  const addItem = () => {
+  const addItem = (audience: LandingPricingAudience) => {
     if (items.length >= maxPackages) return;
-    onChange([...items, createPricingPackage(items.length)]);
+    onChange([...items, createPricingPackage(items.length, audience)]);
+  };
+  const updateAudience = (index: number, audience: LandingPricingAudience) => {
+    const item = items[index];
+    const includedParticipants = audience === 'team' ? Math.max(2, item.includedParticipants) : 1;
+    updateItem(index, {
+      audience,
+      includedParticipants,
+      maxParticipants: audience === 'team' ? Math.max(5, item.maxParticipants, includedParticipants) : 1,
+      additionalParticipantPrice: audience === 'team' ? item.additionalParticipantPrice : 0
+    });
   };
 
   return (
@@ -2278,7 +2426,7 @@ const LandingPricingEditor: React.FC<{ items: LandingPricingPackage[]; onChange:
       <div className="flex items-center justify-between gap-3">
         <div>
           <p className="text-xs font-semibold text-[var(--muted)]">Daftar paket</p>
-          <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Pengunjung memilih salah satu paket sebelum melihat total pembayaran dan QR Code.</p>
+          <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Tambahkan paket personal dan/atau tim. Paket tim memiliki jumlah peserta serta harga tambahan per orang yang dihitung otomatis.</p>
         </div>
         <span className="shrink-0 text-[11px] text-[var(--muted)]">{items.length}/{maxPackages}</span>
       </div>
@@ -2288,16 +2436,18 @@ const LandingPricingEditor: React.FC<{ items: LandingPricingPackage[]; onChange:
             <p className="text-sm font-semibold">Paket {index + 1}</p>
             <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus paket ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
           </div>
+          <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Jenis konsultasi</span><select value={item.audience} onChange={event => updateAudience(index, event.target.value === 'team' ? 'team' : 'individual')} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"><option value="individual">Personal (1 orang)</option><option value="team">Tim (lebih dari 1 orang)</option></select></label>
           <Input label="Nama paket" value={item.name} onChange={event => updateItem(index, { name: event.target.value })} placeholder="Contoh: Paket Pro" />
           <div className="grid gap-3 sm:grid-cols-2">
-            <Input label="Harga paket" value={item.price} onChange={event => updateItem(index, { price: event.target.value })} placeholder="Contoh: Rp 250.000" />
+            <Input label="Harga dasar paket (Rp)" type="number" min="0" step="1000" value={item.basePrice || ''} onChange={event => { const basePrice = normalizeMoneyAmount(event.target.value); updateItem(index, { basePrice, price: basePrice > 0 ? formatRupiah(basePrice) : '' }); }} placeholder="Contoh: 250000" />
             <Input label="Harga coret (opsional)" value={item.originalPrice} onChange={event => updateItem(index, { originalPrice: event.target.value })} placeholder="Contoh: Rp 350.000" />
           </div>
+          {item.audience === 'team' && <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3"><div><p className="text-xs font-semibold text-[var(--text)]">Aturan harga paket tim</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Harga dasar mencakup peserta awal. Saat calon pelanggan menambah orang, sistem menambahkan biaya per orang ke total pembayaran.</p></div><div className="grid gap-3 sm:grid-cols-3"><Input label="Peserta termasuk" type="number" min="2" max="50" value={item.includedParticipants} onChange={event => { const includedParticipants = normalizePositiveInteger(event.target.value, 2, 2); updateItem(index, { includedParticipants, maxParticipants: Math.max(item.maxParticipants, includedParticipants) }); }} /><Input label="Maks. peserta" type="number" min={item.includedParticipants} max="50" value={item.maxParticipants} onChange={event => updateItem(index, { maxParticipants: normalizePositiveInteger(event.target.value, item.includedParticipants, item.includedParticipants) })} /><Input label="Tambah / orang (Rp)" type="number" min="0" step="1000" value={item.additionalParticipantPrice || ''} onChange={event => updateItem(index, { additionalParticipantPrice: normalizeMoneyAmount(event.target.value) })} placeholder="Contoh: 75000" /></div>{item.additionalParticipantPrice === 0 && <p className="text-[11px] leading-relaxed text-[var(--danger-text)]">Harga peserta tambahan masih Rp 0; total belum akan bertambah ketika jumlah peserta dinaikkan.</p>}</div>}
           <Textarea label="Deskripsi paket (opsional)" value={item.description} onChange={event => updateItem(index, { description: event.target.value })} placeholder="Jelaskan paket ini cocok untuk siapa." className="min-h-[90px]" />
           <Textarea label="Benefit paket (satu per baris)" value={item.features.join('\n')} onChange={event => updateItem(index, { features: event.target.value.split('\n').map(value => value.trim()).filter(Boolean) })} placeholder={'Akses kelas selamanya\nTemplate siap pakai\nSupport grup'} className="min-h-[110px]" />
         </div>
       )) : <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 py-6 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada paket. Tambahkan paket pertama agar pengunjung dapat memilih produk.</div>}
-      <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxPackages}>Tambah paket</Button>
+      <div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" icon={Plus} onClick={() => addItem('individual')} disabled={items.length >= maxPackages}>Tambah paket personal</Button><Button type="button" variant="secondary" icon={Users} onClick={() => addItem('team')} disabled={items.length >= maxPackages}>Tambah paket tim</Button></div>
     </div>
   );
 };
@@ -2901,6 +3051,8 @@ export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: strin
   const slug = slugOverride || routeSlug;
   const [page, setPage] = useState<LandingPage | null>(null);
   const [selectedPackage, setSelectedPackage] = useState<LandingPricingPackage | null>(null);
+  const [selectedAudience, setSelectedAudience] = useState<LandingPricingAudience>('individual');
+  const [participantCount, setParticipantCount] = useState(1);
   const [isLoading, setIsLoading] = useState(true);
   const [loadError, setLoadError] = useState<string | null>(null);
   const trackedViewRef = useRef<string | null>(null);
@@ -2916,8 +3068,11 @@ export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: strin
     if (error || !data) setLoadError(errorMessage(error || 'Landing page tidak ditemukan.'));
     else {
       const mappedPage = mapLandingRow(data);
+      const firstPackage = getFirstPricingPackage(mappedPage);
       setPage(mappedPage);
-      setSelectedPackage(getFirstPricingPackage(mappedPage));
+      setSelectedPackage(firstPackage);
+      setSelectedAudience(firstPackage?.audience || 'individual');
+      setParticipantCount(firstPackage ? getMinimumParticipants(firstPackage) : 1);
       setLoadError(null);
     }
     setIsLoading(false);
@@ -2945,10 +3100,31 @@ export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: strin
     void trackPublicLandingEvent(client, page.slug, 'cta_click', label);
   }, [client, page]);
 
+  const handleSelectPackage = useCallback((item: LandingPricingPackage) => {
+    setSelectedPackage(item);
+    setSelectedAudience(item.audience);
+    setParticipantCount(current => selectedPackage?.id === item.id ? clampParticipantCount(item, current) : getMinimumParticipants(item));
+  }, [selectedPackage?.id]);
+
+  const handleSelectAudience = useCallback((audience: LandingPricingAudience) => {
+    if (!page) return;
+    const nextPackage = getPricingPackagesForPage(page).find(item => item.audience === audience);
+    setSelectedAudience(audience);
+    if (nextPackage) {
+      setSelectedPackage(nextPackage);
+      setParticipantCount(getMinimumParticipants(nextPackage));
+    }
+  }, [page]);
+
+  const handleParticipantCountChange = useCallback((nextCount: number) => {
+    if (!selectedPackage) return;
+    setParticipantCount(clampParticipantCount(selectedPackage, nextCount));
+  }, [selectedPackage]);
+
   if (isLoading) return <div className="flex min-h-screen items-center justify-center gap-3 bg-[var(--app-bg)] text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat landing page...</div>;
   if (loadError || !page) return <div className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md space-y-5 py-10 text-center"><XCircle size={34} className="mx-auto text-[var(--danger-text)]" /><div><h1 className="text-xl font-bold">Landing page tidak dapat dibuka</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{loadError}</p></div><Button icon={Loader2} onClick={() => void fetchPage()} className="mx-auto w-full">Coba Lagi</Button></Card></div>;
   const hasPricingBlock = page.blocks.some(block => block.type === 'pricing');
-  return <LandingPageShell page={page}><>{page.blocks.map(block => <LandingBlockRenderer key={block.id} block={block} pageTitle={page.title} onCtaClick={handleCtaClick} selectedPackage={selectedPackage} onSelectPackage={setSelectedPackage} hasPricingBlock={hasPricingBlock} />)}</></LandingPageShell>;
+  return <LandingPageShell page={page}><>{page.blocks.map(block => <LandingBlockRenderer key={block.id} block={block} pageTitle={page.title} onCtaClick={handleCtaClick} selectedPackage={selectedPackage} onSelectPackage={handleSelectPackage} selectedAudience={selectedAudience} onSelectAudience={handleSelectAudience} participantCount={participantCount} onParticipantCountChange={handleParticipantCountChange} hasPricingBlock={hasPricingBlock} />)}</></LandingPageShell>;
 };
 
 export { createLandingShareLink };
