@@ -83,6 +83,55 @@ const normalizePositiveInteger = (value: unknown, fallback = 1, minimum = 1, max
 
 const formatRupiah = (amount: number) => `Rp ${RUPIAH_FORMATTER.format(Math.max(0, Math.round(amount || 0)))}`;
 
+type LandingEditorPanelSide = 'left' | 'right';
+type LandingEditorPanelWidths = { left: number; right: number };
+type LandingEditorResizeStart = LandingEditorPanelWidths & { side: LandingEditorPanelSide; startX: number };
+
+const LANDING_EDITOR_PANEL_WIDTHS_STORAGE_KEY = 'arunika_landing_editor_panel_widths_v1';
+const LANDING_EDITOR_DEFAULT_PANEL_WIDTHS: LandingEditorPanelWidths = { left: 230, right: 300 };
+const LANDING_EDITOR_MIN_LEFT_PANEL_WIDTH = 200;
+const LANDING_EDITOR_MAX_LEFT_PANEL_WIDTH = 440;
+const LANDING_EDITOR_MIN_RIGHT_PANEL_WIDTH = 260;
+const LANDING_EDITOR_MAX_RIGHT_PANEL_WIDTH = 520;
+const LANDING_EDITOR_MIN_CANVAS_WIDTH = 360;
+const LANDING_EDITOR_RESIZER_TOTAL_WIDTH = 40;
+
+const clampLandingEditorPanelWidth = (value: unknown, minimum: number, maximum: number, fallback: number) => {
+  const numericValue = Number(value);
+  const safeValue = Number.isFinite(numericValue) ? Math.round(numericValue) : fallback;
+  return Math.min(maximum, Math.max(minimum, safeValue));
+};
+
+const readLandingEditorPanelWidths = (): LandingEditorPanelWidths => {
+  if (typeof window === 'undefined') return LANDING_EDITOR_DEFAULT_PANEL_WIDTHS;
+  try {
+    const saved = JSON.parse(window.localStorage.getItem(LANDING_EDITOR_PANEL_WIDTHS_STORAGE_KEY) || '');
+    return {
+      left: clampLandingEditorPanelWidth(saved?.left, LANDING_EDITOR_MIN_LEFT_PANEL_WIDTH, LANDING_EDITOR_MAX_LEFT_PANEL_WIDTH, LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.left),
+      right: clampLandingEditorPanelWidth(saved?.right, LANDING_EDITOR_MIN_RIGHT_PANEL_WIDTH, LANDING_EDITOR_MAX_RIGHT_PANEL_WIDTH, LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.right)
+    };
+  } catch {
+    return LANDING_EDITOR_DEFAULT_PANEL_WIDTHS;
+  }
+};
+
+const getLandingEditorPanelResizeLimit = (side: LandingEditorPanelSide, widths: LandingEditorPanelWidths, containerWidth: number) => {
+  const minimum = side === 'left' ? LANDING_EDITOR_MIN_LEFT_PANEL_WIDTH : LANDING_EDITOR_MIN_RIGHT_PANEL_WIDTH;
+  const maximum = side === 'left' ? LANDING_EDITOR_MAX_LEFT_PANEL_WIDTH : LANDING_EDITOR_MAX_RIGHT_PANEL_WIDTH;
+  const otherWidth = side === 'left' ? widths.right : widths.left;
+  const maximumForAvailableCanvas = containerWidth - otherWidth - LANDING_EDITOR_MIN_CANVAS_WIDTH - LANDING_EDITOR_RESIZER_TOTAL_WIDTH;
+  return { minimum, maximum: Math.max(minimum, Math.min(maximum, maximumForAvailableCanvas)) };
+};
+
+const clampLandingEditorPanelWidthsToContainer = (widths: LandingEditorPanelWidths, containerWidth: number): LandingEditorPanelWidths => {
+  let left = clampLandingEditorPanelWidth(widths.left, LANDING_EDITOR_MIN_LEFT_PANEL_WIDTH, LANDING_EDITOR_MAX_LEFT_PANEL_WIDTH, LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.left);
+  let right = clampLandingEditorPanelWidth(widths.right, LANDING_EDITOR_MIN_RIGHT_PANEL_WIDTH, LANDING_EDITOR_MAX_RIGHT_PANEL_WIDTH, LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.right);
+  if (!containerWidth) return { left, right };
+  left = Math.min(left, getLandingEditorPanelResizeLimit('left', { left, right }, containerWidth).maximum);
+  right = Math.min(right, getLandingEditorPanelResizeLimit('right', { left, right }, containerWidth).maximum);
+  return { left, right };
+};
+
 type LandingInsightSummary = {
   landing_page_id: string;
   total_views: number;
@@ -2966,6 +3015,93 @@ export const LandingPageEditor: React.FC<{ client: any }> = ({ client }) => {
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
+  const [panelWidths, setPanelWidths] = useState<LandingEditorPanelWidths>(readLandingEditorPanelWidths);
+  const [resizingPanel, setResizingPanel] = useState<LandingEditorPanelSide | null>(null);
+  const editorLayoutRef = useRef<HTMLDivElement>(null);
+  const resizeStartRef = useRef<LandingEditorResizeStart | null>(null);
+
+  const updatePanelWidth = useCallback((side: LandingEditorPanelSide, requestedWidth: number) => {
+    const containerWidth = editorLayoutRef.current?.clientWidth || 0;
+    setPanelWidths(current => {
+      const limit = getLandingEditorPanelResizeLimit(side, current, containerWidth);
+      const nextWidth = clampLandingEditorPanelWidth(requestedWidth, limit.minimum, limit.maximum, side === 'left' ? current.left : current.right);
+      const next = side === 'left' ? { ...current, left: nextWidth } : { ...current, right: nextWidth };
+      return next.left === current.left && next.right === current.right ? current : next;
+    });
+  }, []);
+
+  const handlePanelResizeStart = useCallback((side: LandingEditorPanelSide, event: React.PointerEvent<HTMLDivElement>) => {
+    if (typeof window === 'undefined' || !window.matchMedia('(min-width: 1280px)').matches) return;
+    event.preventDefault();
+    event.currentTarget.setPointerCapture?.(event.pointerId);
+    resizeStartRef.current = { side, startX: event.clientX, ...panelWidths };
+    setResizingPanel(side);
+  }, [panelWidths]);
+
+  const handlePanelResizeKeyDown = useCallback((side: LandingEditorPanelSide, event: React.KeyboardEvent<HTMLDivElement>) => {
+    if (event.key !== 'ArrowLeft' && event.key !== 'ArrowRight') return;
+    event.preventDefault();
+    const step = event.shiftKey ? 40 : 16;
+    const direction = event.key === 'ArrowRight' ? 1 : -1;
+    const widthDelta = side === 'left' ? direction * step : -direction * step;
+    updatePanelWidth(side, (side === 'left' ? panelWidths.left : panelWidths.right) + widthDelta);
+  }, [panelWidths.left, panelWidths.right, updatePanelWidth]);
+
+  useEffect(() => {
+    try {
+      window.localStorage.setItem(LANDING_EDITOR_PANEL_WIDTHS_STORAGE_KEY, JSON.stringify(panelWidths));
+    } catch {
+      // The editor still works when browser storage is unavailable.
+    }
+  }, [panelWidths]);
+
+  useEffect(() => {
+    const layout = editorLayoutRef.current;
+    if (!layout) return undefined;
+    const keepCanvasVisible = () => {
+      if (!window.matchMedia('(min-width: 1280px)').matches) return;
+      setPanelWidths(current => {
+        const next = clampLandingEditorPanelWidthsToContainer(current, layout.clientWidth);
+        return next.left === current.left && next.right === current.right ? current : next;
+      });
+    };
+    keepCanvasVisible();
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(keepCanvasVisible);
+    observer?.observe(layout);
+    window.addEventListener('resize', keepCanvasVisible);
+    return () => {
+      observer?.disconnect();
+      window.removeEventListener('resize', keepCanvasVisible);
+    };
+  }, [page?.id]);
+
+  useEffect(() => {
+    if (!resizingPanel) return undefined;
+    const previousCursor = document.body.style.cursor;
+    const previousUserSelect = document.body.style.userSelect;
+    document.body.style.cursor = 'col-resize';
+    document.body.style.userSelect = 'none';
+    const handlePointerMove = (event: PointerEvent) => {
+      const start = resizeStartRef.current;
+      if (!start) return;
+      const delta = event.clientX - start.startX;
+      updatePanelWidth(start.side, start.side === 'left' ? start.left + delta : start.right - delta);
+    };
+    const stopResizing = () => {
+      resizeStartRef.current = null;
+      setResizingPanel(null);
+    };
+    window.addEventListener('pointermove', handlePointerMove);
+    window.addEventListener('pointerup', stopResizing);
+    window.addEventListener('pointercancel', stopResizing);
+    return () => {
+      document.body.style.cursor = previousCursor;
+      document.body.style.userSelect = previousUserSelect;
+      window.removeEventListener('pointermove', handlePointerMove);
+      window.removeEventListener('pointerup', stopResizing);
+      window.removeEventListener('pointercancel', stopResizing);
+    };
+  }, [resizingPanel, updatePanelWidth]);
 
   const fetchPage = useCallback(async () => {
     if (!id || !client) return;
@@ -3043,7 +3179,12 @@ export const LandingPageEditor: React.FC<{ client: any }> = ({ client }) => {
   if (isLoading) return <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat editor landing page...</div>;
   if (!page) return <div className="mx-auto max-w-xl p-8"><Card className="space-y-4 text-center"><XCircle className="mx-auto text-[var(--danger-text)]" /><p>Landing page tidak ditemukan.</p><Button variant="secondary" onClick={() => navigate('/admin/landing-pages')}>Kembali</Button></Card></div>;
 
-  return <div className="mx-auto flex max-w-[1600px] flex-col gap-6 p-4 pb-28 md:p-8 xl:h-[100dvh] xl:gap-5 xl:overflow-hidden xl:overscroll-none xl:pb-8"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/landing-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {LANDING_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">Editor Landing Page</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Tarik blok ke canvas, klik blok untuk mengedit, lalu simpan dan publikasikan.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Page</Button></div></div><NoticeBanner notice={notice} /><div className="grid gap-5 xl:min-h-0 xl:flex-1 xl:items-stretch xl:overflow-hidden xl:overscroll-none xl:grid-cols-[230px_minmax(0,1fr)_300px]"><Card className="space-y-4 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Elemen</p><h2 className="mt-2 text-lg font-bold">Tambah blok</h2><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tarik ke posisi yang diinginkan atau klik untuk menambah di bagian bawah.</p></div><div className="space-y-2">{LANDING_BLOCK_OPTIONS.map(option => { const Icon = option.icon; return <button key={option.value} type="button" draggable onDragStart={event => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-landing-block-type', option.value); }} onClick={() => addBlock(option.value)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-soft)]"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Icon size={16} /></span><span className="min-w-0"><span className="block text-sm font-semibold">{option.label}</span><span className="mt-0.5 block text-[10px] leading-snug text-[var(--muted)]">{option.description}</span></span><GripVertical size={14} className="ml-auto shrink-0 text-[var(--muted)]" /></button>; })}</div></Card><div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain"><LandingPagePreview page={page} editable selectedBlockId={selectedBlockId || undefined} onSelect={setSelectedBlockId} onDrop={handleDrop} onDragStart={(event, blockId) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-landing-block-id', blockId); }} onMove={moveBlock} onRemove={removeBlock} /></div><Card className="space-y-5 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-lg font-bold">{selectedBlock ? LANDING_BLOCK_LABELS[selectedBlock.type] : 'Landing page'}</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div>{selectedBlock ? <><button type="button" onClick={() => setSelectedBlockId(null)} className="text-xs font-semibold text-[var(--muted)] hover:text-[var(--text)]">← Kembali ke pengaturan page</button><BlockInspector block={selectedBlock} onChange={data => setPage(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selectedBlock.id ? { ...block, data } : block) } : current)} /></> : <PageSettingsPanel page={page} onChange={updatePage} />}</Card></div></div>;
+  const editorLayoutStyle = {
+    '--landing-editor-left-panel-width': `${panelWidths.left}px`,
+    '--landing-editor-right-panel-width': `${panelWidths.right}px`
+  } as React.CSSProperties;
+
+  return <div className="mx-auto flex max-w-[1600px] flex-col gap-6 p-4 pb-28 md:p-8 xl:h-[100dvh] xl:gap-5 xl:overflow-hidden xl:overscroll-none xl:pb-8"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/landing-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {LANDING_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">Editor Landing Page</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Tarik blok ke canvas, klik blok untuk mengedit, lalu simpan dan publikasikan.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Page</Button></div></div><NoticeBanner notice={notice} /><div ref={editorLayoutRef} style={editorLayoutStyle} className="landing-editor-layout grid gap-5 xl:min-h-0 xl:flex-1 xl:items-stretch xl:overflow-hidden xl:overscroll-none"><Card className="space-y-4 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Elemen</p><h2 className="mt-2 text-lg font-bold">Tambah blok</h2><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tarik ke posisi yang diinginkan atau klik untuk menambah di bagian bawah.</p></div><div className="space-y-2">{LANDING_BLOCK_OPTIONS.map(option => { const Icon = option.icon; return <button key={option.value} type="button" draggable onDragStart={event => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-landing-block-type', option.value); }} onClick={() => addBlock(option.value)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-soft)]"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Icon size={16} /></span><span className="min-w-0"><span className="block text-sm font-semibold">{option.label}</span><span className="mt-0.5 block text-[10px] leading-snug text-[var(--muted)]">{option.description}</span></span><GripVertical size={14} className="ml-auto shrink-0 text-[var(--muted)]" /></button>; })}</div></Card><div role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel Elemen" aria-valuemin={LANDING_EDITOR_MIN_LEFT_PANEL_WIDTH} aria-valuemax={LANDING_EDITOR_MAX_LEFT_PANEL_WIDTH} aria-valuenow={panelWidths.left} tabIndex={0} title="Tarik untuk mengubah lebar panel Elemen. Klik dua kali untuk mengatur ulang." onPointerDown={event => handlePanelResizeStart('left', event)} onKeyDown={event => handlePanelResizeKeyDown('left', event)} onDoubleClick={() => setPanelWidths(current => ({ ...current, left: LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.left }))} className={`landing-editor-resizer group relative hidden touch-none select-none xl:flex xl:h-full xl:min-h-[160px] xl:cursor-col-resize xl:items-center xl:justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${resizingPanel === 'left' ? 'is-resizing' : ''}`}><span aria-hidden="true" className="h-full w-px rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)]" /></div><div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain"><LandingPagePreview page={page} editable selectedBlockId={selectedBlockId || undefined} onSelect={setSelectedBlockId} onDrop={handleDrop} onDragStart={(event, blockId) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-landing-block-id', blockId); }} onMove={moveBlock} onRemove={removeBlock} /></div><div role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel Pengaturan" aria-valuemin={LANDING_EDITOR_MIN_RIGHT_PANEL_WIDTH} aria-valuemax={LANDING_EDITOR_MAX_RIGHT_PANEL_WIDTH} aria-valuenow={panelWidths.right} tabIndex={0} title="Tarik untuk mengubah lebar panel Pengaturan. Klik dua kali untuk mengatur ulang." onPointerDown={event => handlePanelResizeStart('right', event)} onKeyDown={event => handlePanelResizeKeyDown('right', event)} onDoubleClick={() => setPanelWidths(current => ({ ...current, right: LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.right }))} className={`landing-editor-resizer group relative hidden touch-none select-none xl:flex xl:h-full xl:min-h-[160px] xl:cursor-col-resize xl:items-center xl:justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${resizingPanel === 'right' ? 'is-resizing' : ''}`}><span aria-hidden="true" className="h-full w-px rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)]" /></div><Card className="space-y-5 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-lg font-bold">{selectedBlock ? LANDING_BLOCK_LABELS[selectedBlock.type] : 'Landing page'}</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div>{selectedBlock ? <><button type="button" onClick={() => setSelectedBlockId(null)} className="text-xs font-semibold text-[var(--muted)] hover:text-[var(--text)]">← Kembali ke pengaturan page</button><BlockInspector block={selectedBlock} onChange={data => setPage(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selectedBlock.id ? { ...block, data } : block) } : current)} /></> : <PageSettingsPanel page={page} onChange={updatePage} />}</Card></div></div>;
 };
 
 export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: string }> = ({ client, slugOverride }) => {

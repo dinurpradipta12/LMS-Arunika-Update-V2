@@ -72,6 +72,31 @@
   display: none;
 }
 
+/* The Landing Page editor keeps the canvas fluid while either side panel can
+   be resized from its divider on desktop. On smaller screens the dividers are
+   removed and the editor returns to its single-column layout. */
+@media (min-width: 1280px) {
+  .landing-editor-layout {
+    grid-template-columns:
+      var(--landing-editor-left-panel-width, 230px)
+      20px
+      minmax(0, 1fr)
+      20px
+      var(--landing-editor-right-panel-width, 300px);
+    gap: 0;
+  }
+
+  .landing-editor-resizer {
+    touch-action: none;
+  }
+
+  .landing-editor-resizer:hover > span,
+  .landing-editor-resizer.is-resizing > span {
+    background-color: var(--accent);
+    width: 2px;
+  }
+}
+
 @media (prefers-reduced-motion: reduce) {
   .landing-gallery-marquee {
     animation-play-state: paused;
