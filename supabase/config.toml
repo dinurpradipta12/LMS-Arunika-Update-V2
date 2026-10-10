@@ -1,2 +1,7 @@
 [functions.admin-login]
 verify_jwt = false
+
+# Called server-to-server from Nayagement. The handler verifies a short-lived
+# HMAC signature itself, so Supabase's end-user JWT gate must stay off.
+[functions.nayagement-booking-sync]
+verify_jwt = false

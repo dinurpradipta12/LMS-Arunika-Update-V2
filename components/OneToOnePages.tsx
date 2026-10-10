@@ -50,7 +50,7 @@ export const ONE_TO_ONE_SPACE_LABEL = '1:1 Mentorship';
 
 type Notice = { tone: 'success' | 'error'; message: string } | null;
 type OneToOneTab = 'overview' | 'recordings' | 'schedule' | 'tasks' | 'notes';
-type OneToOneSpaceView = 'rooms' | 'booking' | 'reports';
+type OneToOneSpaceView = 'rooms' | 'booking' | 'reports' | 'integration';
 
 const themeOptions: Array<{ value: OneToOneTheme; label: string; color: string }> = [
   { value: 'navy', label: 'Navy', color: '#16436b' },
@@ -320,6 +320,124 @@ const OneToOneImageField: React.FC<{
   );
 };
 
+type NayagementSyncConnection = {
+  id: string;
+  sourceWorkspaceId: string;
+  mentorName: string;
+  mentorRole: string;
+  accentColor: string;
+  isActive: boolean;
+  updatedAt: string;
+};
+
+const mapNayagementSyncConnection = (row: any): NayagementSyncConnection => ({
+  id: String(row?.id || ''),
+  sourceWorkspaceId: String(row?.source_workspace_id || ''),
+  mentorName: String(row?.mentor_name || ''),
+  mentorRole: String(row?.mentor_role || ''),
+  accentColor: /^#[0-9a-f]{6}$/i.test(String(row?.accent_color || '')) ? String(row.accent_color) : '#16436b',
+  isActive: row?.is_active !== false,
+  updatedAt: String(row?.updated_at || '')
+});
+
+const isUuid = (value: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(value.trim());
+
+const NayagementSyncPanel: React.FC<{ client: any }> = ({ client }) => {
+  const [connections, setConnections] = useState<NayagementSyncConnection[]>([]);
+  const [workspaceId, setWorkspaceId] = useState('');
+  const [mentorName, setMentorName] = useState('');
+  const [mentorRole, setMentorRole] = useState('');
+  const [accentColor, setAccentColor] = useState('#16436b');
+  const [isLoading, setIsLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false);
+  const [notice, setNotice] = useState<Notice>(null);
+
+  const loadConnections = async () => {
+    setIsLoading(true);
+    const { data, error } = await client
+      .from('one_to_one_external_sync_connections')
+      .select('id, source_workspace_id, mentor_name, mentor_role, accent_color, is_active, updated_at')
+      .eq('provider', 'nayagement')
+      .order('updated_at', { ascending: false });
+    if (error) {
+      setNotice({ tone: 'error', message: databaseErrorMessage(error) });
+    } else {
+      setConnections((data || []).map(mapNayagementSyncConnection));
+    }
+    setIsLoading(false);
+  };
+
+  useEffect(() => { void loadConnections(); }, [client]);
+
+  const saveConnection = async (event: React.FormEvent) => {
+    event.preventDefault();
+    const normalizedWorkspaceId = workspaceId.trim();
+    if (!isUuid(normalizedWorkspaceId)) {
+      setNotice({ tone: 'error', message: 'Masukkan Workspace ID Nayagement yang valid (format UUID), bukan URL halaman.' });
+      return;
+    }
+    setIsSaving(true);
+    setNotice(null);
+    const { error } = await client.rpc('configure_nayagement_one_to_one_sync', {
+      p_workspace_id: normalizedWorkspaceId,
+      p_mentor_name: mentorName.trim(),
+      p_mentor_role: mentorRole.trim(),
+      p_accent_color: accentColor
+    });
+    setIsSaving(false);
+    if (error) {
+      setNotice({ tone: 'error', message: databaseErrorMessage(error) });
+      return;
+    }
+    setNotice({ tone: 'success', message: 'Koneksi Nayagement aktif. Booking yang disinkronkan akan membuat atau memperbarui ruang dan jadwal 1:1.' });
+    await loadConnections();
+  };
+
+  const editConnection = (connection: NayagementSyncConnection) => {
+    setWorkspaceId(connection.sourceWorkspaceId);
+    setMentorName(connection.mentorName);
+    setMentorRole(connection.mentorRole);
+    setAccentColor(connection.accentColor);
+    document.getElementById('nayagement-sync-form')?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+
+  return <div className="space-y-6">
+    <Card className="space-y-4">
+      <div className="flex flex-col gap-4 md:flex-row md:items-start md:justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Integrasi booking</p>
+          <h2 className="mt-2 text-xl font-bold">Nayagement → 1:1 Mentorship</h2>
+          <p className="mt-2 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">Booking di Nayagement tetap menjadi sumber jadwal. Saat disinkronkan, Arunika membuat atau memperbarui ruang mentee dan event kalender yang sama; dari sana raport dapat ditautkan tanpa input nama ulang.</p>
+        </div>
+        <div className="inline-flex shrink-0 items-center gap-2 rounded-xl bg-[var(--accent-soft)] px-3 py-2 text-xs font-semibold text-[var(--accent-strong)]"><LinkIcon size={15} />Server-to-server</div>
+      </div>
+      <div className="grid gap-3 rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)] md:grid-cols-3">
+        <p><strong className="block text-[var(--text)]">1. Hubungkan workspace</strong>Masukkan ID workspace Nayagement sekali saja.</p>
+        <p><strong className="block text-[var(--text)]">2. Sinkronkan booking</strong>Gunakan tombol sinkron di detail booking Nayagement.</p>
+        <p><strong className="block text-[var(--text)]">3. Buat raport</strong>Pilih event yang masuk dari tab Raport mentee.</p>
+      </div>
+      <p className="text-xs leading-relaxed text-[var(--muted)]">Koneksi hanya menerima request bertanda tangan dari server Nayagement. Data detail konsultasi tidak ditampilkan pada jadwal publik mentee.</p>
+    </Card>
+
+    <Card id="nayagement-sync-form" className="space-y-5">
+      <div><p className="text-sm font-bold">Hubungkan workspace Nayagement</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Simpan ulang Workspace ID yang sama untuk memperbarui identitas mentor atau warna aksen.</p></div>
+      <form className="grid gap-4 md:grid-cols-2" onSubmit={saveConnection}>
+        <Input label="Workspace ID Nayagement" required value={workspaceId} onChange={event => setWorkspaceId(event.target.value)} placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" />
+        <Input label="Nama mentor (opsional)" value={mentorName} onChange={event => setMentorName(event.target.value)} placeholder="Contoh: Dinur Pradipta" />
+        <Input label="Peran mentor (opsional)" value={mentorRole} onChange={event => setMentorRole(event.target.value)} placeholder="Contoh: Strategist" />
+        <div className="flex flex-col gap-2"><label className="text-xs font-semibold text-[var(--muted)]">Warna aksen ruang & raport</label><div className="flex min-h-[46px] items-center gap-3 rounded-xl border border-[var(--border)] px-3"><input aria-label="Warna aksen integrasi" type="color" value={accentColor} onChange={event => setAccentColor(event.target.value)} className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0" /><Input aria-label="Kode warna aksen integrasi" value={accentColor} onChange={event => setAccentColor(event.target.value)} className="min-h-0 border-0 py-0 focus:ring-0" /></div></div>
+        <div className="md:col-span-2 flex justify-end"><Button type="submit" icon={Save} isLoading={isSaving}>{isSaving ? 'Menyimpan…' : 'Simpan koneksi'}</Button></div>
+      </form>
+      <NoticeMessage notice={notice} />
+    </Card>
+
+    <Card className="space-y-4">
+      <div className="flex items-center justify-between gap-3"><div><p className="text-sm font-bold">Workspace terhubung</p><p className="mt-1 text-xs text-[var(--muted)]">Pilih untuk memperbarui konfigurasi yang sudah ada.</p></div><Button type="button" variant="secondary" onClick={() => void loadConnections()} isLoading={isLoading}>Muat ulang</Button></div>
+      {isLoading ? <div className="flex min-h-24 items-center justify-center text-sm text-[var(--muted)]"><Loader2 size={18} className="mr-2 animate-spin" />Memuat koneksi…</div> : connections.length ? <div className="space-y-3">{connections.map(connection => <button type="button" key={connection.id} onClick={() => editConnection(connection)} className="flex w-full flex-col gap-3 rounded-2xl border border-[var(--border)] p-4 text-left transition-colors hover:bg-[var(--surface-soft)] md:flex-row md:items-center md:justify-between"><div><p className="font-semibold text-[var(--text)]">{connection.sourceWorkspaceId}</p><p className="mt-1 text-sm text-[var(--muted)]">{connection.mentorName || 'Mentor belum dinamai'}{connection.mentorRole ? ` · ${connection.mentorRole}` : ''}</p></div><div className="flex items-center gap-3"><span className="h-5 w-5 rounded-full border border-black/10" style={{ backgroundColor: connection.accentColor }} /><Badge color={connection.isActive ? 'var(--success-soft)' : 'var(--surface-soft)'}>{connection.isActive ? 'Aktif' : 'Nonaktif'}</Badge></div></button>)}</div> : <div className="flex min-h-24 items-center gap-3 rounded-2xl bg-[var(--surface-soft)] p-4 text-sm text-[var(--muted)]"><LinkIcon size={18} />Belum ada workspace Nayagement yang dihubungkan.</div>}
+    </Card>
+  </div>;
+};
+
 export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
   const navigate = useNavigate();
   const [portals, setPortals] = useState<OneToOnePortal[]>([]);
@@ -444,6 +562,7 @@ export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
         <button type="button" onClick={() => setActiveView('rooms')} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeView === 'rooms' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'}`}><Users size={16} />Ruang mentee</button>
         <button type="button" onClick={() => setActiveView('booking')} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeView === 'booking' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'}`}><CalendarDays size={16} />Booking mentor</button>
         <button type="button" onClick={() => setActiveView('reports')} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeView === 'reports' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'}`}><FileText size={16} />Raport mentee</button>
+        <button type="button" onClick={() => setActiveView('integration')} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeView === 'integration' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'}`}><LinkIcon size={16} />Integrasi</button>
       </div>
 
       {activeView === 'rooms' && <><div id="one-to-one-create-form" className="scroll-mt-6"><Card className="space-y-5">
@@ -479,6 +598,7 @@ export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
 
       {activeView === 'booking' && <BookingBoard rows={bookingEvents} portals={portals} onCreate={createBooking} onSave={saveBooking} onDelete={deleteBooking} />}
       {activeView === 'reports' && <OneToOneReportsDashboard client={client} portals={portals} bookingEvents={bookingEvents} />}
+      {activeView === 'integration' && <NayagementSyncPanel client={client} />}
     </div>
   );
 };
