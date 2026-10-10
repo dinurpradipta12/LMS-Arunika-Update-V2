@@ -262,6 +262,60 @@ export interface OneToOneNote {
   sortOrder: number;
 }
 
+export type OneToOneReportRecipientType = 'individual' | 'team';
+export type OneToOneReportScope = 'single' | 'multiple';
+export type OneToOneReportStatus = 'draft' | 'shared' | 'archived';
+
+export interface OneToOneReportTemplateSettings {
+  headerLabel: string;
+  summaryLabel: string;
+  evaluationLabel: string;
+  actionItemsLabel: string;
+  showMentor: boolean;
+}
+
+export interface OneToOneReport {
+  id: string;
+  portalId: string | null;
+  bookingEventId: string | null;
+  title: string;
+  recipientType: OneToOneReportRecipientType;
+  menteeName: string;
+  menteeEmail: string;
+  teamName: string;
+  teamMembers: string[];
+  periodLabel: string;
+  reportScope: OneToOneReportScope;
+  status: OneToOneReportStatus;
+  mentorName: string;
+  mentorRole: string;
+  accentColor: string;
+  coverTitle: string;
+  coverSubtitle: string;
+  summary: string;
+  evaluation: string;
+  nextSteps: string;
+  footerNote: string;
+  templateSettings: OneToOneReportTemplateSettings;
+  isShared: boolean;
+  publicTokenHint?: string;
+  sharedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
+}
+
+export interface OneToOneReportSession {
+  id: string;
+  reportId: string;
+  bookingEventId: string | null;
+  sessionDate: string;
+  title: string;
+  notes: string;
+  evaluation: string;
+  actionItems: string;
+  sortOrder: number;
+}
+
 export interface SupabaseConfig {
   url: string;
   anonKey: string;

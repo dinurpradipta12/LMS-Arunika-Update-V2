@@ -43,13 +43,14 @@ import {
 } from '../types';
 import { Badge, Button, Card, Input, Textarea } from './UI';
 import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
+import { OneToOneReportsDashboard } from './OneToOneReportPages';
 import logoUtama from '../src/logo-utama.png';
 
 export const ONE_TO_ONE_SPACE_LABEL = '1:1 Mentorship';
 
 type Notice = { tone: 'success' | 'error'; message: string } | null;
 type OneToOneTab = 'overview' | 'recordings' | 'schedule' | 'tasks' | 'notes';
-type OneToOneSpaceView = 'rooms' | 'booking';
+type OneToOneSpaceView = 'rooms' | 'booking' | 'reports';
 
 const themeOptions: Array<{ value: OneToOneTheme; label: string; color: string }> = [
   { value: 'navy', label: 'Navy', color: '#16436b' },
@@ -442,6 +443,7 @@ export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
       <div className="flex gap-2 overflow-x-auto border-b border-[var(--border)] pb-2">
         <button type="button" onClick={() => setActiveView('rooms')} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeView === 'rooms' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'}`}><Users size={16} />Ruang mentee</button>
         <button type="button" onClick={() => setActiveView('booking')} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeView === 'booking' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'}`}><CalendarDays size={16} />Booking mentor</button>
+        <button type="button" onClick={() => setActiveView('reports')} className={`inline-flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeView === 'reports' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)] hover:text-[var(--text)]'}`}><FileText size={16} />Raport mentee</button>
       </div>
 
       {activeView === 'rooms' && <><div id="one-to-one-create-form" className="scroll-mt-6"><Card className="space-y-5">
@@ -476,6 +478,7 @@ export const OneToOneSpacePage: React.FC<{ client: any }> = ({ client }) => {
       )}</>}
 
       {activeView === 'booking' && <BookingBoard rows={bookingEvents} portals={portals} onCreate={createBooking} onSave={saveBooking} onDelete={deleteBooking} />}
+      {activeView === 'reports' && <OneToOneReportsDashboard client={client} portals={portals} bookingEvents={bookingEvents} />}
     </div>
   );
 };

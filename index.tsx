@@ -106,6 +106,7 @@ import { PublicQnaPage, QNA_SPACE_LABEL } from './components/QnaPages';
 import { QnaAdminCreatePage, QnaAdminDetailPage, QnaAdminListPage } from './components/QnaAdminPages';
 import { VideoClipperPage } from './components/VideoClipperPages';
 import { OneToOneEditorPage, OneToOneSpacePage, PublicOneToOnePage, ONE_TO_ONE_SPACE_LABEL } from './components/OneToOnePages';
+import { OneToOneReportEditorPage, PublicOneToOneReportPage } from './components/OneToOneReportPages';
 import { ChatCenterPage, ChatCenterRoomPage, PublicAdminChatRoomPage, PublicChatEntryPage, PublicChatRoomPage, CHAT_CENTER_SPACE_LABEL } from './components/ChatCenterPages';
 import logoUtama from './src/logo-utama.png';
 import faviconLogo from './src/favicon.png';
@@ -1859,7 +1860,7 @@ const App: React.FC = () => {
   const lastLocalUpdateRef = useRef<number>(0);
   const isAdmin = authStatus === 'admin';
   const isCustomCatalogHostRoute = isCustomCatalogHost() && (location.pathname === '/' || location.pathname === '');
-  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing|catalog|one-to-one|chat)(?:\/|$)/.test(location.pathname) || isCustomCatalogHostRoute;
+  const isPublicCourseRoute = /^\/(?:c|course|class|form|qna|landing|catalog|one-to-one|one-to-one-report|chat)(?:\/|$)/.test(location.pathname) || isCustomCatalogHostRoute;
 
   useEffect(() => {
     // Hapus otorisasi dan cache data lama yang sebelumnya dipercaya dari localStorage.
@@ -2274,6 +2275,7 @@ const App: React.FC = () => {
         <Route path="/admin/catalog-pages" element={renderAdminPage(<CatalogPagesPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/catalog-pages/:id" element={renderAdminPage(<CatalogPageEditor client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/video-clipper" element={renderAdminPage(<VideoClipperPage />)} />
+        <Route path="/admin/one-to-one/reports/:reportId" element={renderAdminPage(<OneToOneReportEditorPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/one-to-one/:id" element={renderAdminPage(<OneToOneEditorPage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/one-to-one" element={renderAdminPage(<OneToOneSpacePage client={getAdminSupabaseClient()} />)} />
         <Route path="/admin/chat-center/:id/chat" element={renderAdminStandalonePage(<ChatCenterRoomPage client={getAdminSupabaseClient()} standalone />)} />
@@ -2300,6 +2302,8 @@ const App: React.FC = () => {
         <Route path="/qna/present" element={<PublicNotFoundPage />} />
         <Route path="/qna/:slug/present" element={<PublicQnaPage client={getPublicSupabaseClient()} presenterMode />} />
         <Route path="/qna/:slug" element={<PublicQnaPage client={getPublicSupabaseClient()} />} />
+        <Route path="/one-to-one-report/:token" element={<PublicOneToOneReportPage client={getPublicSupabaseClient()} />} />
+        <Route path="/one-to-one-report" element={<PublicNotFoundPage />} />
         <Route path="/one-to-one/:token" element={<PublicOneToOnePage client={getPublicSupabaseClient()} />} />
         <Route path="/one-to-one" element={<PublicNotFoundPage />} />
         <Route path="/chat-admin/:token" element={<PublicAdminChatRoomPage client={getPublicSupabaseClient()} />} />
@@ -2328,7 +2332,7 @@ const registerArunikaServiceWorker = () => {
 registerArunikaServiceWorker();
 const directPublicNotFoundPathMatch = window.location.hash
   ? null
-  : window.location.pathname.match(/^\/(?:c|course|class|form|landing|catalog|qna|one-to-one)(?:\/present)?\/?$/);
+  : window.location.pathname.match(/^\/(?:c|course|class|form|landing|catalog|qna|one-to-one|one-to-one-report)(?:\/present)?\/?$/);
 const directFormPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/form\/([^/]+)\/?$/);
 const directFormSlug = directFormPathMatch ? decodeURIComponent(directFormPathMatch[1]) : null;
 const directLandingPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/landing\/([^/]+)\/?$/);
@@ -2343,6 +2347,8 @@ const directQnaEntry = directQnaSlug
   : null;
 const directOneToOnePathMatch = window.location.hash ? null : window.location.pathname.match(/^\/one-to-one\/([^/]+)\/?$/);
 const directOneToOneToken = directOneToOnePathMatch ? decodeURIComponent(directOneToOnePathMatch[1]) : null;
+const directOneToOneReportPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/one-to-one-report\/([^/]+)\/?$/);
+const directOneToOneReportToken = directOneToOneReportPathMatch ? decodeURIComponent(directOneToOneReportPathMatch[1]) : null;
 const directChatPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/chat\/([^/]+)\/?$/);
 const directChatToken = directChatPathMatch ? decodeURIComponent(directChatPathMatch[1]) : null;
 const directAdminChatPathMatch = window.location.hash ? null : window.location.pathname.match(/^\/chat-admin\/([^/]+)\/?$/);
@@ -2359,6 +2365,8 @@ root.render(directPublicNotFoundPathMatch
     ? <MemoryRouter initialEntries={[`/catalog/${directCatalogSlug}${window.location.search}`]}><PublicCatalogPageView client={getPublicSupabaseClient()} slugOverride={directCatalogSlug} /></MemoryRouter>
   : directQnaSlug
     ? <MemoryRouter initialEntries={[directQnaEntry || `/qna/${directQnaSlug}`]}><PublicQnaPage client={getPublicSupabaseClient()} presenterMode={directQnaPresenter} slugOverride={directQnaSlug} /></MemoryRouter>
+  : directOneToOneReportToken
+    ? <MemoryRouter initialEntries={[`/one-to-one-report/${encodeURIComponent(directOneToOneReportToken)}`]}><PublicOneToOneReportPage client={getPublicSupabaseClient()} tokenOverride={directOneToOneReportToken} /></MemoryRouter>
   : directOneToOneToken
     ? <MemoryRouter initialEntries={[`/one-to-one/${encodeURIComponent(directOneToOneToken)}`]}><PublicOneToOnePage client={getPublicSupabaseClient()} tokenOverride={directOneToOneToken} /></MemoryRouter>
   : directChatToken
