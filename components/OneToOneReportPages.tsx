@@ -403,6 +403,11 @@ export const OneToOneReportsDashboard: React.FC<{
   const [bookingEventId, setBookingEventId] = useState('');
   const [portalId, setPortalId] = useState('');
   const [teamName, setTeamName] = useState('');
+  const [manualMenteeName, setManualMenteeName] = useState('');
+  const [manualMenteeEmail, setManualMenteeEmail] = useState('');
+  const [manualMentorName, setManualMentorName] = useState('');
+  const [manualMentorRole, setManualMentorRole] = useState('');
+  const [manualPeriodLabel, setManualPeriodLabel] = useState('');
 
   const loadReports = useCallback(async () => {
     setIsLoading(true);
@@ -428,11 +433,45 @@ export const OneToOneReportsDashboard: React.FC<{
       p_recipient_type: recipientType,
       p_team_name: recipientType === 'team' ? teamName.trim() : ''
     });
-    setIsCreating(false);
     if (error || !data?.reportId) {
+      setIsCreating(false);
       setNotice({ tone: 'error', message: reportErrorMessage(error || 'Raport belum dapat dibuat.') });
       return;
     }
+
+    // The booking remains the source when it has data, while any value entered
+    // here deliberately fills or overrides a missing identity snapshot.
+    const menteeName = manualMenteeName.trim();
+    const menteeEmail = manualMenteeEmail.trim();
+    const mentorName = manualMentorName.trim();
+    const mentorRole = manualMentorRole.trim();
+    const periodLabel = manualPeriodLabel.trim();
+    const manualPayload: Record<string, string> = {
+      ...(menteeName ? { mentee_name: menteeName } : {}),
+      ...(menteeEmail ? { mentee_email: menteeEmail } : {}),
+      ...(mentorName ? { mentor_name: mentorName } : {}),
+      ...(mentorRole ? { mentor_role: mentorRole } : {}),
+      ...(periodLabel ? { period_label: periodLabel } : {})
+    };
+
+    if (recipientType === 'individual' && menteeName) {
+      manualPayload.title = `Laporan mentoring - ${menteeName}`;
+    }
+
+    if (Object.keys(manualPayload).length) {
+      const { error: manualError } = await client
+        .from('one_to_one_reports')
+        .update(manualPayload)
+        .eq('id', data.reportId);
+      if (manualError) {
+        setIsCreating(false);
+        setNotice({ tone: 'error', message: `Raport sudah dibuat, tetapi data manual belum tersimpan. ${reportErrorMessage(manualError)}` });
+        await loadReports();
+        return;
+      }
+    }
+
+    setIsCreating(false);
     navigate(`/admin/one-to-one/reports/${data.reportId}`);
   };
 
@@ -462,6 +501,16 @@ export const OneToOneReportsDashboard: React.FC<{
           <div><p className="text-sm font-bold text-[var(--text)]">2. Hubungkan ke booking</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Opsional, tetapi disarankan agar nama mentee, mentor, dan sesi pertama terisi otomatis.</p></div>
           <div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">Booking 1:1</label><select className={selectClassName} value={bookingEventId} onChange={event => { setBookingEventId(event.target.value); if (event.target.value) setPortalId(''); }}><option value="">Belum dihubungkan ke booking</option>{sortedBookings.map(booking => <option key={booking.id} value={booking.id}><BookingLabel booking={booking} portals={portals} /></option>)}</select></div>
           {!bookingEventId && <div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">Atau pilih ruang 1:1</label><select className={selectClassName} value={portalId} onChange={event => setPortalId(event.target.value)}><option value="">Pilih nanti di editor</option>{portals.map(portal => <option key={portal.id} value={portal.id}>{portal.menteeName || 'Mentee belum dinamai'} · {portal.title}</option>)}</select></div>}
+          <div className="space-y-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-soft)] p-4">
+            <div><p className="text-sm font-bold text-[var(--text)]">3. Lengkapi data manual</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Isi jika data dari booking belum terbaca atau Anda membuat raport tanpa booking. Kolom yang diisi akan dipakai sebagai data raport.</p></div>
+            <div className="grid gap-3 sm:grid-cols-2">
+              <Input label={recipientType === 'team' ? 'Nama PIC' : 'Nama mentee'} value={manualMenteeName} onChange={event => setManualMenteeName(event.target.value)} placeholder={recipientType === 'team' ? 'Contoh: Alya Pratama' : 'Contoh: Rizqullah'} />
+              <Input label={recipientType === 'team' ? 'Email PIC' : 'Email mentee'} type="email" value={manualMenteeEmail} onChange={event => setManualMenteeEmail(event.target.value)} placeholder="nama@email.com" />
+              <Input label="Nama mentor" value={manualMentorName} onChange={event => setManualMentorName(event.target.value)} placeholder="Contoh: Dinur Pradipta" />
+              <Input label="Peran mentor" value={manualMentorRole} onChange={event => setManualMentorRole(event.target.value)} placeholder="Contoh: Strategist" />
+            </div>
+            <Input label="Periode laporan" value={manualPeriodLabel} onChange={event => setManualPeriodLabel(event.target.value)} placeholder="Contoh: Oktober 2026" />
+          </div>
           <Button type="button" icon={Plus} className="w-full" onClick={() => void createReport()} isLoading={isCreating}>Buat dan buka editor raport</Button>
         </div>
       </div>
