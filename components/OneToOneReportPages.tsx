@@ -18,6 +18,7 @@ import {
   Trash2,
   UserRound,
   Users,
+  X,
   XCircle
 } from 'lucide-react';
 
@@ -31,7 +32,7 @@ import {
   OneToOneReportTemplateSettings,
   OneToOneScheduleEvent
 } from '../types';
-import { Badge, Button, Card, Input, Textarea } from './UI';
+import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
 import logoUtama from '../src/logo-utama.png';
 
@@ -388,6 +389,12 @@ const BookingLabel: React.FC<{ booking: OneToOneScheduleEvent; portals: OneToOne
   return <>{formatDate(booking.startsAt, true)} · {portal?.menteeName || 'Mentee belum dinamai'} · {booking.title || 'Sesi mentoring'}</>;
 };
 
+const reportPreviewExcerpt = (value: unknown, fallback = 'Belum ada ringkasan yang ditulis.') => {
+  const source = asText(value).replace(/\s+/g, ' ').trim();
+  if (!source) return fallback;
+  return source.length > 180 ? `${source.slice(0, 177).trimEnd()}…` : source;
+};
+
 export const OneToOneReportsDashboard: React.FC<{
   client: any;
   portals: OneToOnePortal[];
@@ -397,6 +404,9 @@ export const OneToOneReportsDashboard: React.FC<{
   const [reports, setReports] = useState<OneToOneReport[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [deleteTarget, setDeleteTarget] = useState<OneToOneReport | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
   const [filter, setFilter] = useState<'all' | OneToOneReportRecipientType>('all');
   const [recipientType, setRecipientType] = useState<OneToOneReportRecipientType>('individual');
@@ -465,6 +475,7 @@ export const OneToOneReportsDashboard: React.FC<{
         .eq('id', data.reportId);
       if (manualError) {
         setIsCreating(false);
+        setIsCreateModalOpen(false);
         setNotice({ tone: 'error', message: `Raport sudah dibuat, tetapi data manual belum tersimpan. ${reportErrorMessage(manualError)}` });
         await loadReports();
         return;
@@ -472,52 +483,68 @@ export const OneToOneReportsDashboard: React.FC<{
     }
 
     setIsCreating(false);
+    setIsCreateModalOpen(false);
     navigate(`/admin/one-to-one/reports/${data.reportId}`);
+  };
+
+  const openCreateModal = () => {
+    setNotice(null);
+    setIsCreateModalOpen(true);
+  };
+
+  const closeCreateModal = () => {
+    if (!isCreating) setIsCreateModalOpen(false);
+  };
+
+  const deleteReport = async () => {
+    if (!deleteTarget) return;
+    setIsDeleting(true);
+    const { error } = await client.from('one_to_one_reports').delete().eq('id', deleteTarget.id);
+    setIsDeleting(false);
+    if (error) {
+      setDeleteTarget(null);
+      setNotice({ tone: 'error', message: reportErrorMessage(error) });
+      return;
+    }
+    setReports(current => current.filter(report => report.id !== deleteTarget.id));
+    setDeleteTarget(null);
+    setNotice({ tone: 'success', message: 'Raport dan seluruh detail pertemuannya telah dihapus.' });
   };
 
   return <div className="space-y-6">
     {notice && <NoticeMessage notice={notice} />}
+
     <Card className="overflow-hidden p-0">
-      <div className="border-b border-[var(--border)] bg-[var(--surface-soft)] px-5 py-5 md:px-6">
-        <div className="flex flex-wrap items-start justify-between gap-4">
-          <div>
-            <div className="flex items-center gap-2 text-[var(--accent-strong)]"><ClipboardList size={18} /><p className="text-xs font-bold uppercase tracking-[0.15em]">Workspace raport</p></div>
-            <h2 className="mt-2 text-xl font-bold text-[var(--text)]">Buat laporan perkembangan mentee</h2>
-            <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">Pilih booking untuk mengisi data mentee dan mentor otomatis, lalu tulis evaluasi per satu atau beberapa pertemuan.</p>
-          </div>
-          <Badge color="var(--accent-soft)">{reports.length} raport</Badge>
+      <div className="flex flex-col gap-5 bg-[var(--surface-soft)] px-5 py-5 md:flex-row md:items-center md:justify-between md:px-6">
+        <div>
+          <div className="flex items-center gap-2 text-[var(--accent-strong)]"><ClipboardList size={18} /><p className="text-xs font-bold uppercase tracking-[0.15em]">Workspace raport</p></div>
+          <h2 className="mt-2 text-xl font-bold text-[var(--text)]">Laporan perkembangan mentee</h2>
+          <p className="mt-1 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">Kelola semua draft dan link share dalam satu daftar. Setiap raport memiliki ringkasan kecil agar mudah dikenali.</p>
         </div>
-      </div>
-      <div className="grid gap-5 p-5 md:grid-cols-2 md:p-6 xl:grid-cols-[0.9fr_1.1fr]">
-        <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          <div><p className="text-sm font-bold text-[var(--text)]">1. Tentukan penerima</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Laporan dapat dibuat untuk seorang mentee atau sebuah tim.</p></div>
-          <div className="grid gap-3 sm:grid-cols-2">
-            <button type="button" onClick={() => setRecipientType('individual')} className={`rounded-xl border p-4 text-left transition-colors ${recipientType === 'individual' ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:bg-[var(--surface-soft)]'}`}><UserRound size={18} className="text-[var(--accent-strong)]" /><p className="mt-3 font-bold text-sm text-[var(--text)]">Perorangan</p><p className="mt-1 text-xs text-[var(--muted)]">Satu mentee dari booking 1:1.</p></button>
-            <button type="button" onClick={() => setRecipientType('team')} className={`rounded-xl border p-4 text-left transition-colors ${recipientType === 'team' ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:bg-[var(--surface-soft)]'}`}><Users size={18} className="text-[var(--accent-strong)]" /><p className="mt-3 font-bold text-sm text-[var(--text)]">Tim</p><p className="mt-1 text-xs text-[var(--muted)]">Atur nama dan anggota tim sendiri.</p></button>
-          </div>
-          {recipientType === 'team' && <Input label="Nama tim" value={teamName} onChange={event => setTeamName(event.target.value)} placeholder="Contoh: Tim Growth Arunika" />}
-        </div>
-        <div className="space-y-4 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4">
-          <div><p className="text-sm font-bold text-[var(--text)]">2. Hubungkan ke booking</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Opsional, tetapi disarankan agar nama mentee, mentor, dan sesi pertama terisi otomatis.</p></div>
-          <div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">Booking 1:1</label><select className={selectClassName} value={bookingEventId} onChange={event => { setBookingEventId(event.target.value); if (event.target.value) setPortalId(''); }}><option value="">Belum dihubungkan ke booking</option>{sortedBookings.map(booking => <option key={booking.id} value={booking.id}><BookingLabel booking={booking} portals={portals} /></option>)}</select></div>
-          {!bookingEventId && <div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">Atau pilih ruang 1:1</label><select className={selectClassName} value={portalId} onChange={event => setPortalId(event.target.value)}><option value="">Pilih nanti di editor</option>{portals.map(portal => <option key={portal.id} value={portal.id}>{portal.menteeName || 'Mentee belum dinamai'} · {portal.title}</option>)}</select></div>}
-          <div className="space-y-4 rounded-xl border border-dashed border-[var(--border)] bg-[var(--surface-soft)] p-4">
-            <div><p className="text-sm font-bold text-[var(--text)]">3. Lengkapi data manual</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Isi jika data dari booking belum terbaca atau Anda membuat raport tanpa booking. Kolom yang diisi akan dipakai sebagai data raport.</p></div>
-            <div className="grid gap-3 sm:grid-cols-2">
-              <Input label={recipientType === 'team' ? 'Nama PIC' : 'Nama mentee'} value={manualMenteeName} onChange={event => setManualMenteeName(event.target.value)} placeholder={recipientType === 'team' ? 'Contoh: Alya Pratama' : 'Contoh: Rizqullah'} />
-              <Input label={recipientType === 'team' ? 'Email PIC' : 'Email mentee'} type="email" value={manualMenteeEmail} onChange={event => setManualMenteeEmail(event.target.value)} placeholder="nama@email.com" />
-              <Input label="Nama mentor" value={manualMentorName} onChange={event => setManualMentorName(event.target.value)} placeholder="Contoh: Dinur Pradipta" />
-              <Input label="Peran mentor" value={manualMentorRole} onChange={event => setManualMentorRole(event.target.value)} placeholder="Contoh: Strategist" />
-            </div>
-            <Input label="Periode laporan" value={manualPeriodLabel} onChange={event => setManualPeriodLabel(event.target.value)} placeholder="Contoh: Oktober 2026" />
-          </div>
-          <Button type="button" icon={Plus} className="w-full" onClick={() => void createReport()} isLoading={isCreating}>Buat dan buka editor raport</Button>
-        </div>
+        <div className="flex flex-wrap items-center gap-3"><Badge color="var(--accent-soft)">{reports.length} raport</Badge><Button type="button" icon={Plus} onClick={openCreateModal}>Buat raport baru</Button></div>
       </div>
     </Card>
 
     <div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-bold text-[var(--text)]">Raport tersimpan</h2><p className="mt-1 text-sm text-[var(--muted)]">Draft tetap privat sampai Anda membuat link share.</p></div><div className="flex overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1">{([['all', 'Semua'], ['individual', 'Perorangan'], ['team', 'Tim']] as const).map(([value, label]) => <button key={value} type="button" onClick={() => setFilter(value)} className={`rounded-lg px-3 py-2 text-xs font-semibold transition-colors ${filter === value ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}>{label}</button>)}</div></div>
-    {isLoading ? <div className="flex min-h-40 items-center justify-center text-sm text-[var(--muted)]"><Loader2 className="mr-2 animate-spin" size={18} />Memuat raport…</div> : filteredReports.length ? <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">{filteredReports.map(report => <Card key={report.id} className="flex min-h-56 flex-col p-5"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><Badge color={report.recipientType === 'team' ? 'var(--accent-soft)' : 'var(--success-soft)'}>{report.recipientType === 'team' ? 'Tim' : 'Perorangan'}</Badge><h3 className="mt-3 truncate text-base font-bold text-[var(--text)]">{report.title}</h3><p className="mt-1 text-sm text-[var(--muted)]">{reportRecipientLabel(report)}</p></div><span className={`mt-0.5 h-3 w-3 shrink-0 rounded-full ${report.isShared ? 'bg-emerald-500' : 'bg-slate-300'}`} title={report.isShared ? 'Sudah dibagikan' : 'Masih draft'} /></div><div className="mt-auto pt-6"><div className="flex items-center justify-between text-xs text-[var(--muted)]"><span>{report.reportScope === 'multiple' ? 'Beberapa pertemuan' : '1 pertemuan'}</span><span>{report.updatedAt ? `Diubah ${formatDate(report.updatedAt)}` : 'Baru dibuat'}</span></div><Button type="button" variant="secondary" className="mt-4 w-full" icon={ArrowLeft} onClick={() => navigate(`/admin/one-to-one/reports/${report.id}`)}>Buka editor</Button></div></Card>)}</div> : <Card className="py-12 text-center"><ClipboardList size={30} className="mx-auto text-[var(--muted)]" /><h3 className="mt-3 font-bold text-[var(--text)]">Belum ada raport</h3><p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">Buat raport pertama dari booking di atas. Data mentee dan mentor akan menjadi snapshot laporan.</p></Card>}
+
+    {isLoading ? <div className="flex min-h-40 items-center justify-center text-sm text-[var(--muted)]"><Loader2 className="mr-2 animate-spin" size={18} />Memuat raport…</div> : filteredReports.length ? <div className="space-y-4">{filteredReports.map(report => {
+      const accent = reportAccent(report.accentColor);
+      return <Card key={report.id} className="overflow-hidden p-0">
+        <div className="grid lg:grid-cols-[minmax(0,1fr)_minmax(280px,0.5fr)]">
+          <div className="relative p-5 pl-6 sm:p-6 sm:pl-7"><span aria-hidden="true" className="absolute bottom-0 left-0 top-0 w-1.5" style={{ backgroundColor: accent }} />
+            <div className="flex flex-wrap items-start justify-between gap-3"><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><Badge color={report.recipientType === 'team' ? 'var(--accent-soft)' : 'var(--success-soft)'}>{report.recipientType === 'team' ? 'Tim' : 'Perorangan'}</Badge><Badge color={report.isShared ? 'var(--success-soft)' : 'var(--surface-soft)'}>{report.isShared ? 'Link aktif' : 'Draft privat'}</Badge></div><h3 className="mt-3 text-lg font-bold text-[var(--text)]">{report.title}</h3><p className="mt-1 text-sm font-semibold text-[var(--accent-strong)]">{reportRecipientLabel(report)}</p>{report.menteeEmail && <p className="mt-1 text-xs text-[var(--muted)]">{report.menteeEmail}</p>}</div><span className="mt-1 h-3 w-3 shrink-0 rounded-full" style={{ backgroundColor: accent }} title="Warna aksen raport" /></div>
+            <div className="mt-5 grid gap-3 text-sm sm:grid-cols-3"><div className="rounded-xl bg-[var(--surface-soft)] p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--muted)]">Mentor</p><p className="mt-1 font-semibold text-[var(--text)]">{report.mentorName || 'Belum diatur'}</p>{report.mentorRole && <p className="mt-1 text-xs text-[var(--muted)]">{report.mentorRole}</p>}</div><div className="rounded-xl bg-[var(--surface-soft)] p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--muted)]">Periode</p><p className="mt-1 font-semibold text-[var(--text)]">{report.periodLabel || 'Belum ditentukan'}</p></div><div className="rounded-xl bg-[var(--surface-soft)] p-3"><p className="text-[10px] font-bold uppercase tracking-wide text-[var(--muted)]">Cakupan</p><p className="mt-1 font-semibold text-[var(--text)]">{report.reportScope === 'multiple' ? 'Beberapa pertemuan' : '1 pertemuan'}</p></div></div>
+            <p className="mt-4 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">{reportPreviewExcerpt(report.summary)}</p>
+            <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4"><span className="text-xs text-[var(--muted)]">{report.updatedAt ? `Diubah ${formatDate(report.updatedAt)}` : 'Baru dibuat'}</span><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" icon={ExternalLink} onClick={() => navigate(`/admin/one-to-one/reports/${report.id}`)}>Buka editor</Button><Button type="button" variant="danger" icon={Trash2} onClick={() => setDeleteTarget(report)}>Hapus</Button></div></div>
+          </div>
+          <div className="border-t border-[var(--border)] bg-[var(--surface-soft)] p-5 lg:border-l lg:border-t-0"><p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Preview raport</p><article className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800 shadow-sm" style={{ borderTopWidth: '5px', borderTopColor: accent }}><div className="p-4"><p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ color: accent }}>{report.templateSettings.headerLabel}</p><h4 className="mt-3 line-clamp-2 text-base font-bold">{report.coverTitle || report.title}</h4><p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{report.coverSubtitle || reportPreviewExcerpt(report.summary)}</p><div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 text-xs"><div><p className="font-semibold text-slate-500">{report.recipientType === 'team' ? 'TIM / ORGANISASI' : 'MENTEE'}</p><p className="mt-1 font-bold">{reportRecipientLabel(report)}</p></div>{report.templateSettings.showMentor && <div><p className="font-semibold text-slate-500">MENTOR</p><p className="mt-1 font-bold">{report.mentorName || 'Belum diatur'}</p></div>}</div></div></article></div>
+        </div>
+      </Card>;
+    })}</div> : <Card className="py-12 text-center"><ClipboardList size={30} className="mx-auto text-[var(--muted)]" /><h3 className="mt-3 font-bold text-[var(--text)]">Belum ada raport</h3><p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">Buat raport pertama, hubungkan booking bila ada, atau isi data mentee secara manual.</p><Button type="button" icon={Plus} className="mx-auto mt-5" onClick={openCreateModal}>Buat raport baru</Button></Card>}
+
+    {isCreateModalOpen && <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) closeCreateModal(); }}><div role="dialog" aria-modal="true" aria-labelledby="one-to-one-report-create-title" className="max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl" onMouseDown={event => event.stopPropagation()}><div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-5 py-5 md:px-6"><div><p className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--accent-strong)]">Raport baru</p><h2 id="one-to-one-report-create-title" className="mt-2 text-xl font-bold text-[var(--text)]">Siapkan data raport mentee</h2><p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Booking bersifat opsional. Isi data manual jika detail penerima belum tersedia.</p></div><button type="button" aria-label="Tutup modal buat raport" onClick={closeCreateModal} disabled={isCreating} className="rounded-lg p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"><X size={19} /></button></div><form className="space-y-5 p-5 md:p-6" onSubmit={event => { event.preventDefault(); void createReport(); }}>{notice && <NoticeMessage notice={notice} />}<section className="space-y-4 rounded-2xl border border-[var(--border)] p-4"><div><p className="text-sm font-bold text-[var(--text)]">1. Tentukan penerima</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Laporan dapat dibuat untuk seorang mentee atau sebuah tim.</p></div><div className="grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setRecipientType('individual')} className={`rounded-xl border p-4 text-left transition-colors ${recipientType === 'individual' ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:bg-[var(--surface-soft)]'}`}><UserRound size={18} className="text-[var(--accent-strong)]" /><p className="mt-3 text-sm font-bold text-[var(--text)]">Perorangan</p><p className="mt-1 text-xs text-[var(--muted)]">Satu mentee dari booking 1:1.</p></button><button type="button" onClick={() => setRecipientType('team')} className={`rounded-xl border p-4 text-left transition-colors ${recipientType === 'team' ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:bg-[var(--surface-soft)]'}`}><Users size={18} className="text-[var(--accent-strong)]" /><p className="mt-3 text-sm font-bold text-[var(--text)]">Tim</p><p className="mt-1 text-xs text-[var(--muted)]">Atur nama dan anggota tim sendiri.</p></button></div>{recipientType === 'team' && <Input label="Nama tim" value={teamName} onChange={event => setTeamName(event.target.value)} placeholder="Contoh: Tim Growth Arunika" />}</section><section className="space-y-4 rounded-2xl border border-[var(--border)] p-4"><div><p className="text-sm font-bold text-[var(--text)]">2. Hubungkan ke booking</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Opsional, tetapi disarankan agar nama mentee, mentor, dan sesi pertama terisi otomatis.</p></div><div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">Booking 1:1</label><select className={selectClassName} value={bookingEventId} onChange={event => { setBookingEventId(event.target.value); if (event.target.value) setPortalId(''); }}><option value="">Belum dihubungkan ke booking</option>{sortedBookings.map(booking => <option key={booking.id} value={booking.id}><BookingLabel booking={booking} portals={portals} /></option>)}</select></div>{!bookingEventId && <div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">Atau pilih ruang 1:1</label><select className={selectClassName} value={portalId} onChange={event => setPortalId(event.target.value)}><option value="">Pilih nanti di editor</option>{portals.map(portal => <option key={portal.id} value={portal.id}>{portal.menteeName || 'Mentee belum dinamai'} · {portal.title}</option>)}</select></div>}</section><section className="space-y-4 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-soft)] p-4"><div><p className="text-sm font-bold text-[var(--text)]">3. Lengkapi data manual</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Kolom yang diisi dipakai sebagai data raport, termasuk ketika data dari booking belum terbaca.</p></div><div className="grid gap-3 sm:grid-cols-2"><Input label={recipientType === 'team' ? 'Nama PIC' : 'Nama mentee'} value={manualMenteeName} onChange={event => setManualMenteeName(event.target.value)} placeholder={recipientType === 'team' ? 'Contoh: Alya Pratama' : 'Contoh: Rizqullah'} /><Input label={recipientType === 'team' ? 'Email PIC' : 'Email mentee'} type="email" value={manualMenteeEmail} onChange={event => setManualMenteeEmail(event.target.value)} placeholder="nama@email.com" /><Input label="Nama mentor" value={manualMentorName} onChange={event => setManualMentorName(event.target.value)} placeholder="Contoh: Dinur Pradipta" /><Input label="Peran mentor" value={manualMentorRole} onChange={event => setManualMentorRole(event.target.value)} placeholder="Contoh: Strategist" /></div><Input label="Periode laporan" value={manualPeriodLabel} onChange={event => setManualPeriodLabel(event.target.value)} placeholder="Contoh: Oktober 2026" /></section><div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4"><Button type="button" variant="secondary" onClick={closeCreateModal} disabled={isCreating}>Batal</Button><Button type="submit" icon={Plus} isLoading={isCreating}>Buat dan buka editor</Button></div></form></div></div>}
+
+    <ConfirmModal open={Boolean(deleteTarget)} title="Hapus raport ini?" description={deleteTarget ? <>Raport <strong className="text-[var(--text)]">{deleteTarget.title}</strong> untuk {reportRecipientLabel(deleteTarget)} beserta seluruh detail pertemuannya akan dihapus permanen.</> : null} confirmLabel="Hapus raport" isLoading={isDeleting} onCancel={() => { if (!isDeleting) setDeleteTarget(null); }} onConfirm={() => void deleteReport()} />
   </div>;
 };
 
