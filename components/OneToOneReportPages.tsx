@@ -255,7 +255,48 @@ const wrapPdfText = (value: unknown, maxLength = 76) => {
   return lines.length ? lines : ['-'];
 };
 
-const createReportPdf = (report: OneToOneReport, sessions: OneToOneReportSession[]) => {
+type PdfLogo = { width: number; height: number; jpegHex: string };
+
+const loadReportLogoForPdf = (report: OneToOneReport): Promise<PdfLogo | null> => new Promise(resolve => {
+  const image = new Image();
+  let settled = false;
+  const finish = (value: PdfLogo | null) => {
+    if (settled) return;
+    settled = true;
+    window.clearTimeout(timeout);
+    resolve(value);
+  };
+  const timeout = window.setTimeout(() => finish(null), 4500);
+  image.crossOrigin = 'anonymous';
+  image.onload = () => {
+    try {
+      const naturalWidth = image.naturalWidth || image.width;
+      const naturalHeight = image.naturalHeight || image.height;
+      if (!naturalWidth || !naturalHeight) return finish(null);
+      const scale = Math.min(360 / naturalWidth, 120 / naturalHeight, 1);
+      const canvas = document.createElement('canvas');
+      canvas.width = Math.max(1, Math.round(naturalWidth * scale));
+      canvas.height = Math.max(1, Math.round(naturalHeight * scale));
+      const context = canvas.getContext('2d', { alpha: false });
+      if (!context) return finish(null);
+      context.fillStyle = '#ffffff';
+      context.fillRect(0, 0, canvas.width, canvas.height);
+      context.drawImage(image, 0, 0, canvas.width, canvas.height);
+      const base64 = canvas.toDataURL('image/jpeg', 0.9).split(',')[1];
+      if (!base64) return finish(null);
+      const binary = window.atob(base64);
+      let jpegHex = '';
+      for (let index = 0; index < binary.length; index += 1) jpegHex += binary.charCodeAt(index).toString(16).padStart(2, '0');
+      finish({ width: canvas.width, height: canvas.height, jpegHex });
+    } catch {
+      finish(null);
+    }
+  };
+  image.onerror = () => finish(null);
+  image.src = reportLogoSrc(report);
+});
+
+const createReportPdf = (report: OneToOneReport, sessions: OneToOneReportSession[], pdfLogo: PdfLogo | null = null) => {
   const pageWidth = 595;
   const pageHeight = 842;
   const accent = reportAccent(report.accentColor);
@@ -272,11 +313,20 @@ const createReportPdf = (report: OneToOneReport, sessions: OneToOneReportSession
   const drawText = (value: unknown, x: number, baseline: number, size: number, color = ink) => commands.push(`${rgb(color)} rg BT /F1 ${size} Tf 1 0 0 1 ${x.toFixed(2)} ${baseline.toFixed(2)} Tm (${pdfEscape(value)}) Tj ET`);
   const fillRect = (x: number, bottom: number, width: number, height: number, color: string) => commands.push(`${rgb(color)} rg ${x} ${bottom} ${width} ${height} re f`);
   const line = (x1: number, y1: number, x2: number, y2: number, color: string) => commands.push(`${rgb(color)} RG 0.7 w ${x1} ${y1} m ${x2} ${y2} l S`);
+  const drawLogo = () => {
+    if (!pdfLogo) return;
+    const scale = Math.min(96 / pdfLogo.width, 24 / pdfLogo.height);
+    const width = pdfLogo.width * scale;
+    const height = pdfLogo.height * scale;
+    fillRect(pageWidth - 150, 806, 108, 30, '#ffffff');
+    commands.push(`q ${width.toFixed(2)} 0 0 ${height.toFixed(2)} ${(pageWidth - 42 - width).toFixed(2)} ${(809 + (24 - height) / 2).toFixed(2)} cm /BrandLogo Do Q`);
+  };
   const beginPage = (continuation = false) => {
     commands = [];
     fillRect(0, 0, pageWidth, pageHeight, '#ffffff');
     fillRect(0, 802, pageWidth, 40, accent);
     drawText(`${reportBrandName(report)} · ${report.templateSettings.headerLabel}`.slice(0, 78).toUpperCase(), 42, 815, 8, '#ffffff');
+    drawLogo();
     drawText(continuation ? `${report.title} - lanjutan` : report.title, 42, 780, 18, accent);
     line(42, 768, pageWidth - 42, 768, '#d6e1e8');
     y = 744;
@@ -339,16 +389,18 @@ const createReportPdf = (report: OneToOneReport, sessions: OneToOneReportSession
   finishPage();
 
   const streams = pages.map(page => page.join('\n'));
-  const pageObjectNumbers = streams.map((_, index) => 4 + index * 2);
+  const firstPageObject = pdfLogo ? 5 : 4;
+  const pageObjectNumbers = streams.map((_, index) => firstPageObject + index * 2);
   const objects: string[] = [
     '<< /Type /Catalog /Pages 2 0 R >>',
     `<< /Type /Pages /Kids [${pageObjectNumbers.map(number => `${number} 0 R`).join(' ')}] /Count ${streams.length} >>`,
     '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>'
   ];
+  if (pdfLogo) objects.push(`<< /Type /XObject /Subtype /Image /Width ${pdfLogo.width} /Height ${pdfLogo.height} /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter [/ASCIIHexDecode /DCTDecode] /Length ${pdfLogo.jpegHex.length + 2} >>\nstream\n${pdfLogo.jpegHex}>\nendstream`);
   streams.forEach((stream, index) => {
-    const pageObject = 4 + index * 2;
+    const pageObject = firstPageObject + index * 2;
     const contentObject = pageObject + 1;
-    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 3 0 R >> >> /Contents ${contentObject} 0 R >>`);
+    objects.push(`<< /Type /Page /Parent 2 0 R /MediaBox [0 0 ${pageWidth} ${pageHeight}] /Resources << /Font << /F1 3 0 R >> ${pdfLogo ? '/XObject << /BrandLogo 4 0 R >>' : ''} >> /Contents ${contentObject} 0 R >>`);
     objects.push(`<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`);
   });
   let pdf = '%PDF-1.4\n%Arunika\n';
@@ -364,8 +416,9 @@ const createReportPdf = (report: OneToOneReport, sessions: OneToOneReportSession
   return new Blob([pdf], { type: 'application/pdf' });
 };
 
-const downloadReportPdf = (report: OneToOneReport, sessions: OneToOneReportSession[]) => {
-  const url = URL.createObjectURL(createReportPdf(report, sessions));
+const downloadReportPdf = async (report: OneToOneReport, sessions: OneToOneReportSession[]) => {
+  const pdfLogo = await loadReportLogoForPdf(report);
+  const url = URL.createObjectURL(createReportPdf(report, sessions, pdfLogo));
   const anchor = document.createElement('a');
   anchor.href = url;
   anchor.download = `raport-${reportRecipientLabel(report).toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'mentee'}.pdf`;
