@@ -45,6 +45,10 @@ const isHexColor = (value: unknown) => /^#[0-9a-f]{6}$/i.test(asText(value).trim
 const reportAccent = (value: unknown) => isHexColor(value) ? asText(value).trim() : '#16436b';
 const todayDate = () => new Date().toISOString().slice(0, 10);
 const DEFAULT_REPORT_BRAND_NAME = 'Arunika Learning Hub';
+const REPORT_BRANDING_BUCKET = 'one-to-one-report-branding';
+const REPORT_LOGO_MAX_BYTES = 2 * 1024 * 1024;
+const REPORT_LOGO_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
+const REPORT_LOGO_ACCEPT = 'image/png,image/jpeg,image/webp,image/svg+xml';
 
 const safeReportLogoUrl = (value: unknown) => {
   const source = asText(value).trim();
@@ -59,6 +63,29 @@ const safeReportLogoUrl = (value: unknown) => {
 
 const reportBrandName = (report: Pick<OneToOneReport, 'brandName'>) => report.brandName.trim() || DEFAULT_REPORT_BRAND_NAME;
 const reportLogoSrc = (report: Pick<OneToOneReport, 'brandLogoUrl'>) => safeReportLogoUrl(report.brandLogoUrl) || logoUtama;
+
+const reportLogoObjectPath = (value: unknown) => {
+  const source = safeReportLogoUrl(value);
+  if (!source) return '';
+  try {
+    const pathname = new URL(source).pathname;
+    const marker = `/storage/v1/object/public/${REPORT_BRANDING_BUCKET}/`;
+    const markerIndex = pathname.indexOf(marker);
+    return markerIndex >= 0 ? decodeURIComponent(pathname.slice(markerIndex + marker.length)) : '';
+  } catch {
+    return '';
+  }
+};
+
+const reportLogoExtension = (file: File) => {
+  const extensionByType: Record<string, string> = {
+    'image/png': 'png',
+    'image/jpeg': 'jpg',
+    'image/webp': 'webp',
+    'image/svg+xml': 'svg'
+  };
+  return extensionByType[file.type] || 'png';
+};
 
 const DEFAULT_TEMPLATE_SETTINGS: OneToOneReportTemplateSettings = {
   headerLabel: 'Laporan perkembangan',
@@ -218,6 +245,13 @@ const reportErrorMessage = (error: any) => {
   if (message.includes('brand_name') || message.includes('brand_logo_url')) return 'Fitur branding raport belum tersedia di database. Jalankan migration 20261011000000_one_to_one_report_branding.sql.';
   if (message.includes('one_to_one_reports') || message.includes('one_to_one_report_sessions') || message.includes('one_to_one_report')) return 'Fitur raport 1:1 belum tersedia di database. Jalankan migration 20261010000000_one_to_one_reports.sql.';
   return message || 'Perubahan belum dapat disimpan.';
+};
+
+const reportLogoUploadErrorMessage = (error: any) => {
+  const message = asText(error?.message || error?.details || error).trim();
+  if (/bucket.*not found|not found.*bucket|storage.*not found/i.test(message)) return 'Penyimpanan upload logo belum tersedia. Jalankan migration 20261011010000_one_to_one_report_brand_logo_storage.sql.';
+  if (/row-level security|permission denied|not authorized|unauthorized/i.test(message)) return 'Anda tidak memiliki izin untuk mengunggah logo raport.';
+  return message ? `Logo belum dapat diunggah. ${message}` : 'Logo belum dapat diunggah.';
 };
 
 const pdfText = (value: unknown) => asText(value)
@@ -650,6 +684,7 @@ export const OneToOneReportEditorPage: React.FC<{ client: any }> = ({ client }) 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [isSharing, setIsSharing] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
 
   const loadReport = useCallback(async () => {
@@ -718,14 +753,82 @@ export const OneToOneReportEditorPage: React.FC<{ client: any }> = ({ client }) 
     });
   };
 
+  const uploadReportLogo = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.currentTarget.files?.[0];
+    event.currentTarget.value = '';
+    if (!report || !file) return;
+    if (!REPORT_LOGO_MIME_TYPES.has(file.type)) {
+      setNotice({ tone: 'error', message: 'Format logo harus PNG, JPG, WebP, atau SVG.' });
+      return;
+    }
+    if (file.size > REPORT_LOGO_MAX_BYTES) {
+      setNotice({ tone: 'error', message: 'Ukuran logo maksimal 2 MB.' });
+      return;
+    }
+
+    setIsUploadingLogo(true);
+    setNotice(null);
+    const uniqueId = globalThis.crypto?.randomUUID?.() || Math.random().toString(36).slice(2);
+    const objectPath = `${report.id}/${Date.now()}-${uniqueId}.${reportLogoExtension(file)}`;
+    const { error: uploadError } = await client.storage
+      .from(REPORT_BRANDING_BUCKET)
+      .upload(objectPath, file, { cacheControl: '31536000', contentType: file.type, upsert: false });
+    if (uploadError) {
+      setIsUploadingLogo(false);
+      setNotice({ tone: 'error', message: reportLogoUploadErrorMessage(uploadError) });
+      return;
+    }
+
+    const { data: publicUrlData } = client.storage.from(REPORT_BRANDING_BUCKET).getPublicUrl(objectPath);
+    const nextLogoUrl = safeReportLogoUrl(publicUrlData?.publicUrl);
+    if (!nextLogoUrl) {
+      await client.storage.from(REPORT_BRANDING_BUCKET).remove([objectPath]);
+      setIsUploadingLogo(false);
+      setNotice({ tone: 'error', message: 'URL logo tidak dapat dibuat. Coba unggah ulang.' });
+      return;
+    }
+
+    const previousLogoUrl = report.brandLogoUrl;
+    const { error: reportUpdateError } = await client
+      .from('one_to_one_reports')
+      .update({ brand_logo_url: nextLogoUrl })
+      .eq('id', report.id);
+    if (reportUpdateError) {
+      await client.storage.from(REPORT_BRANDING_BUCKET).remove([objectPath]);
+      setIsUploadingLogo(false);
+      setNotice({ tone: 'error', message: reportErrorMessage(reportUpdateError) });
+      return;
+    }
+
+    patchReport({ brandLogoUrl: nextLogoUrl });
+    const previousObjectPath = reportLogoObjectPath(previousLogoUrl);
+    if (previousObjectPath && previousObjectPath !== objectPath) await client.storage.from(REPORT_BRANDING_BUCKET).remove([previousObjectPath]);
+    setIsUploadingLogo(false);
+    setNotice({ tone: 'success', message: 'Logo berhasil diunggah dan langsung tersimpan pada raport.' });
+  };
+
+  const clearReportLogo = async () => {
+    if (!report?.brandLogoUrl) return;
+    setIsUploadingLogo(true);
+    setNotice(null);
+    const previousLogoUrl = report.brandLogoUrl;
+    const { error } = await client.from('one_to_one_reports').update({ brand_logo_url: '' }).eq('id', report.id);
+    if (error) {
+      setIsUploadingLogo(false);
+      setNotice({ tone: 'error', message: reportErrorMessage(error) });
+      return;
+    }
+    patchReport({ brandLogoUrl: '' });
+    const previousObjectPath = reportLogoObjectPath(previousLogoUrl);
+    if (previousObjectPath) await client.storage.from(REPORT_BRANDING_BUCKET).remove([previousObjectPath]);
+    setIsUploadingLogo(false);
+    setNotice({ tone: 'success', message: 'Logo kustom dihapus. Raport kembali memakai logo Arunika.' });
+  };
+
   const saveReport = async (showNotice = true) => {
     if (!report) return false;
     if (!report.title.trim()) {
       setNotice({ tone: 'error', message: 'Judul raport harus diisi.' });
-      return false;
-    }
-    if (report.brandLogoUrl.trim() && !safeReportLogoUrl(report.brandLogoUrl)) {
-      setNotice({ tone: 'error', message: 'URL logo harus diawali http:// atau https:// agar dapat dipakai pada raport publik.' });
       return false;
     }
     setIsSaving(true);
@@ -858,13 +961,13 @@ export const OneToOneReportEditorPage: React.FC<{ client: any }> = ({ client }) 
           </div>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Nama brand / organisasi" value={report.brandName} maxLength={160} onChange={event => patchReport({ brandName: event.target.value })} placeholder="Contoh: Arunika Learning Hub" />
-            <Input label="URL logo raport (opsional)" type="url" value={report.brandLogoUrl} maxLength={2000} onChange={event => patchReport({ brandLogoUrl: event.target.value })} placeholder="https://domain.com/logo.png" />
+            <Input label="Upload logo raport" type="file" accept={REPORT_LOGO_ACCEPT} onChange={event => void uploadReportLogo(event)} disabled={isUploadingLogo || isSaving} />
           </div>
           <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
-            <div className="flex min-w-0 items-center gap-3"><ReportBrandLogo report={report} className="h-10 w-20 rounded-lg bg-white object-contain p-1.5" /><div className="min-w-0"><p className="truncate text-sm font-bold text-[var(--text)]">{reportBrandName(report)}</p><p className="mt-0.5 text-xs text-[var(--muted)]">{report.brandLogoUrl.trim() ? 'Preview dari URL logo.' : 'Menggunakan logo Arunika bawaan.'}</p></div></div>
-            {report.brandLogoUrl.trim() && <button type="button" onClick={() => patchReport({ brandLogoUrl: '' })} className="text-xs font-semibold text-[var(--accent-strong)] hover:underline">Kembali ke logo bawaan</button>}
+            <div className="flex min-w-0 items-center gap-3"><ReportBrandLogo report={report} className="h-10 w-20 rounded-lg bg-white object-contain p-1.5" /><div className="min-w-0"><p className="truncate text-sm font-bold text-[var(--text)]">{reportBrandName(report)}</p><p className="mt-0.5 text-xs text-[var(--muted)]">{isUploadingLogo ? 'Mengunggah logo…' : report.brandLogoUrl.trim() ? 'Logo kustom sudah tersimpan.' : 'Menggunakan logo Arunika bawaan.'}</p></div></div>
+            {report.brandLogoUrl.trim() && <button type="button" onClick={() => void clearReportLogo()} disabled={isUploadingLogo || isSaving} className="text-xs font-semibold text-[var(--accent-strong)] hover:underline disabled:cursor-not-allowed disabled:opacity-50">Hapus logo kustom</button>}
           </div>
-          <p className="text-xs leading-relaxed text-[var(--muted)]">Gunakan URL gambar publik (PNG, JPG, WebP, atau SVG) agar logo tetap tampil saat raport dibagikan.</p>
+          <p className="text-xs leading-relaxed text-[var(--muted)]">Pilih file dari perangkat Anda. Mendukung PNG, JPG, WebP, atau SVG hingga 2 MB; logo langsung tersimpan dan dapat tampil di link share maupun PDF.</p>
           <div className="grid gap-3 sm:grid-cols-2">
             <Input label="Judul cover" value={report.coverTitle} onChange={event => patchReport({ coverTitle: event.target.value })} />
             <div className="flex flex-col gap-2"><label className="text-xs font-semibold text-[var(--muted)]">Warna aksen</label><div className="flex min-h-[46px] items-center gap-3 rounded-xl border border-[var(--border)] px-3"><input aria-label="Warna aksen" type="color" value={reportAccent(report.accentColor)} onChange={event => patchReport({ accentColor: event.target.value })} className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0" /><Input aria-label="Kode warna aksen" value={report.accentColor} onChange={event => patchReport({ accentColor: event.target.value })} className="min-h-0 border-0 py-0 focus:ring-0" /></div></div>
