@@ -44,6 +44,21 @@ const asText = (value: unknown, fallback = '') => typeof value === 'string' ? va
 const isHexColor = (value: unknown) => /^#[0-9a-f]{6}$/i.test(asText(value).trim());
 const reportAccent = (value: unknown) => isHexColor(value) ? asText(value).trim() : '#16436b';
 const todayDate = () => new Date().toISOString().slice(0, 10);
+const DEFAULT_REPORT_BRAND_NAME = 'Arunika Learning Hub';
+
+const safeReportLogoUrl = (value: unknown) => {
+  const source = asText(value).trim();
+  if (!source) return '';
+  try {
+    const url = new URL(source);
+    return url.protocol === 'https:' || url.protocol === 'http:' ? source : '';
+  } catch {
+    return '';
+  }
+};
+
+const reportBrandName = (report: Pick<OneToOneReport, 'brandName'>) => report.brandName.trim() || DEFAULT_REPORT_BRAND_NAME;
+const reportLogoSrc = (report: Pick<OneToOneReport, 'brandLogoUrl'>) => safeReportLogoUrl(report.brandLogoUrl) || logoUtama;
 
 const DEFAULT_TEMPLATE_SETTINGS: OneToOneReportTemplateSettings = {
   headerLabel: 'Laporan perkembangan',
@@ -118,6 +133,8 @@ const mapReport = (row: any): OneToOneReport => ({
   mentorName: asText(row?.mentor_name ?? row?.mentorName),
   mentorRole: asText(row?.mentor_role ?? row?.mentorRole),
   accentColor: reportAccent(row?.accent_color ?? row?.accentColor),
+  brandName: asText(row?.brand_name ?? row?.brandName, DEFAULT_REPORT_BRAND_NAME).trim() || DEFAULT_REPORT_BRAND_NAME,
+  brandLogoUrl: asText(row?.brand_logo_url ?? row?.brandLogoUrl).trim(),
   coverTitle: asText(row?.cover_title ?? row?.coverTitle, 'Laporan perkembangan'),
   coverSubtitle: asText(row?.cover_subtitle ?? row?.coverSubtitle),
   summary: asText(row?.summary),
@@ -198,6 +215,7 @@ const copyText = async (value: string) => {
 
 const reportErrorMessage = (error: any) => {
   const message = asText(error?.message || error?.details || error).trim();
+  if (message.includes('brand_name') || message.includes('brand_logo_url')) return 'Fitur branding raport belum tersedia di database. Jalankan migration 20261011000000_one_to_one_report_branding.sql.';
   if (message.includes('one_to_one_reports') || message.includes('one_to_one_report_sessions') || message.includes('one_to_one_report')) return 'Fitur raport 1:1 belum tersedia di database. Jalankan migration 20261010000000_one_to_one_reports.sql.';
   return message || 'Perubahan belum dapat disimpan.';
 };
@@ -258,14 +276,14 @@ const createReportPdf = (report: OneToOneReport, sessions: OneToOneReportSession
     commands = [];
     fillRect(0, 0, pageWidth, pageHeight, '#ffffff');
     fillRect(0, 802, pageWidth, 40, accent);
-    drawText(report.templateSettings.headerLabel.toUpperCase(), 42, 815, 8, '#ffffff');
+    drawText(`${reportBrandName(report)} · ${report.templateSettings.headerLabel}`.slice(0, 78).toUpperCase(), 42, 815, 8, '#ffffff');
     drawText(continuation ? `${report.title} - lanjutan` : report.title, 42, 780, 18, accent);
     line(42, 768, pageWidth - 42, 768, '#d6e1e8');
     y = 744;
   };
   const finishPage = () => {
     drawText(report.footerNote || 'Dokumen laporan mentoring', 42, 28, 7, muted);
-    drawText('Arunika Learning Hub', pageWidth - 142, 28, 7, muted);
+    drawText(reportBrandName(report).slice(0, 30), pageWidth - 142, 28, 7, muted);
     pages.push(commands);
   };
   const ensureSpace = (height: number) => {
@@ -359,12 +377,14 @@ const downloadReportPdf = (report: OneToOneReport, sessions: OneToOneReportSessi
 
 const NoticeMessage: React.FC<{ notice: Notice }> = ({ notice }) => notice ? <div className={`rounded-xl border px-4 py-3 text-sm ${notice.tone === 'error' ? 'border-[var(--danger-text)] bg-[var(--danger-soft)] text-[var(--danger-text)]' : 'border-[var(--border)] bg-[var(--success-soft)] text-[var(--success-text)]'}`}>{notice.message}</div> : null;
 
+const ReportBrandLogo: React.FC<{ report: Pick<OneToOneReport, 'brandName' | 'brandLogoUrl'>; className?: string }> = ({ report, className = 'h-8 w-auto object-contain' }) => <img src={reportLogoSrc(report)} alt={`Logo ${reportBrandName(report)}`} className={className} onError={event => { event.currentTarget.onerror = null; event.currentTarget.src = logoUtama; }} />;
+
 const ReportPreview: React.FC<{ report: OneToOneReport; sessions: OneToOneReportSession[]; publicView?: boolean }> = ({ report, sessions, publicView = false }) => {
   const accent = reportAccent(report.accentColor);
   const recipient = reportRecipientLabel(report);
   return <article className={`overflow-hidden rounded-2xl border border-[var(--border)] bg-white text-slate-800 shadow-sm ${publicView ? 'mx-auto max-w-4xl' : ''}`} style={{ borderTopWidth: '7px', borderTopColor: accent }}>
     <header className="border-b border-slate-100 px-5 py-6 md:px-8 md:py-8">
-      <div className="flex flex-wrap items-center gap-3"><img src={logoUtama} alt="Arunika" className="h-8 w-auto object-contain" /><span className="h-5 w-px bg-slate-200" /><p className="text-[10px] font-bold uppercase tracking-[0.17em]" style={{ color: accent }}>{report.templateSettings.headerLabel}</p></div>
+      <div className="flex flex-wrap items-center gap-3"><ReportBrandLogo report={report} /><p className="text-sm font-bold text-slate-800">{reportBrandName(report)}</p><span className="h-5 w-px bg-slate-200" /><p className="text-[10px] font-bold uppercase tracking-[0.17em]" style={{ color: accent }}>{report.templateSettings.headerLabel}</p></div>
       <div className="mt-7 grid gap-5 md:grid-cols-[minmax(0,1fr)_auto] md:items-end"><div><h1 className="text-2xl font-bold tracking-tight md:text-3xl">{report.coverTitle || report.title}</h1>{report.coverSubtitle && <p className="mt-2 max-w-2xl whitespace-pre-line text-sm leading-relaxed text-slate-500">{report.coverSubtitle}</p>}</div><div className="rounded-xl bg-slate-50 px-4 py-3 text-sm"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Periode</p><p className="mt-1 font-semibold text-slate-800">{report.periodLabel || 'Belum ditentukan'}</p></div></div>
       <div className="mt-6 grid gap-3 sm:grid-cols-2"><div className="rounded-xl border border-slate-100 p-4"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">{report.recipientType === 'team' ? 'Tim / organisasi' : 'Mentee'}</p><p className="mt-1 font-bold text-slate-800">{recipient}</p>{report.recipientType === 'individual' && report.menteeEmail && <p className="mt-1 text-xs text-slate-500">{report.menteeEmail}</p>}</div>{report.templateSettings.showMentor && <div className="rounded-xl border border-slate-100 p-4"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Mentor</p><p className="mt-1 font-bold text-slate-800">{report.mentorName || 'Belum diatur'}</p>{report.mentorRole && <p className="mt-1 text-xs text-slate-500">{report.mentorRole}</p>}</div>}</div>
       {report.recipientType === 'team' && report.teamMembers.length > 0 && <div className="mt-4 rounded-xl border border-slate-100 p-4"><p className="text-[10px] font-semibold uppercase tracking-wide text-slate-500">Anggota tim</p><div className="mt-2 flex flex-wrap gap-2">{report.teamMembers.map(member => <span key={member} className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold text-slate-600">{member}</span>)}</div></div>}
@@ -537,7 +557,7 @@ export const OneToOneReportsDashboard: React.FC<{
             <p className="mt-4 max-w-3xl text-sm leading-relaxed text-[var(--muted)]">{reportPreviewExcerpt(report.summary)}</p>
             <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-[var(--border)] pt-4"><span className="text-xs text-[var(--muted)]">{report.updatedAt ? `Diubah ${formatDate(report.updatedAt)}` : 'Baru dibuat'}</span><div className="flex flex-wrap gap-2"><Button type="button" variant="secondary" icon={ExternalLink} onClick={() => navigate(`/admin/one-to-one/reports/${report.id}`)}>Buka editor</Button><Button type="button" variant="danger" icon={Trash2} onClick={() => setDeleteTarget(report)}>Hapus</Button></div></div>
           </div>
-          <div className="border-t border-[var(--border)] bg-[var(--surface-soft)] p-5 lg:border-l lg:border-t-0"><p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Preview raport</p><article className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800 shadow-sm" style={{ borderTopWidth: '5px', borderTopColor: accent }}><div className="p-4"><p className="text-[9px] font-bold uppercase tracking-[0.15em]" style={{ color: accent }}>{report.templateSettings.headerLabel}</p><h4 className="mt-3 line-clamp-2 text-base font-bold">{report.coverTitle || report.title}</h4><p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{report.coverSubtitle || reportPreviewExcerpt(report.summary)}</p><div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 text-xs"><div><p className="font-semibold text-slate-500">{report.recipientType === 'team' ? 'TIM / ORGANISASI' : 'MENTEE'}</p><p className="mt-1 font-bold">{reportRecipientLabel(report)}</p></div>{report.templateSettings.showMentor && <div><p className="font-semibold text-slate-500">MENTOR</p><p className="mt-1 font-bold">{report.mentorName || 'Belum diatur'}</p></div>}</div></div></article></div>
+          <div className="border-t border-[var(--border)] bg-[var(--surface-soft)] p-5 lg:border-l lg:border-t-0"><p className="text-xs font-bold uppercase tracking-[0.14em] text-[var(--muted)]">Preview raport</p><article className="mt-3 overflow-hidden rounded-xl border border-slate-200 bg-white text-slate-800 shadow-sm" style={{ borderTopWidth: '5px', borderTopColor: accent }}><div className="p-4"><div className="flex items-center gap-2"><ReportBrandLogo report={report} className="h-5 w-10 object-contain" /><p className="truncate text-[10px] font-bold text-slate-700">{reportBrandName(report)}</p></div><p className="mt-3 text-[9px] font-bold uppercase tracking-[0.15em]" style={{ color: accent }}>{report.templateSettings.headerLabel}</p><h4 className="mt-3 line-clamp-2 text-base font-bold">{report.coverTitle || report.title}</h4><p className="mt-1 line-clamp-2 text-xs leading-relaxed text-slate-500">{report.coverSubtitle || reportPreviewExcerpt(report.summary)}</p><div className="mt-4 grid gap-2 border-t border-slate-100 pt-3 text-xs"><div><p className="font-semibold text-slate-500">{report.recipientType === 'team' ? 'TIM / ORGANISASI' : 'MENTEE'}</p><p className="mt-1 font-bold">{reportRecipientLabel(report)}</p></div>{report.templateSettings.showMentor && <div><p className="font-semibold text-slate-500">MENTOR</p><p className="mt-1 font-bold">{report.mentorName || 'Belum diatur'}</p></div>}</div></div></article></div>
         </div>
       </Card>;
     })}</div> : <Card className="py-12 text-center"><ClipboardList size={30} className="mx-auto text-[var(--muted)]" /><h3 className="mt-3 font-bold text-[var(--text)]">Belum ada raport</h3><p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">Buat raport pertama, hubungkan booking bila ada, atau isi data mentee secara manual.</p><Button type="button" icon={Plus} className="mx-auto mt-5" onClick={openCreateModal}>Buat raport baru</Button></Card>}
@@ -651,6 +671,10 @@ export const OneToOneReportEditorPage: React.FC<{ client: any }> = ({ client }) 
       setNotice({ tone: 'error', message: 'Judul raport harus diisi.' });
       return false;
     }
+    if (report.brandLogoUrl.trim() && !safeReportLogoUrl(report.brandLogoUrl)) {
+      setNotice({ tone: 'error', message: 'URL logo harus diawali http:// atau https:// agar dapat dipakai pada raport publik.' });
+      return false;
+    }
     setIsSaving(true);
     setNotice(null);
     const effectiveSessions = (report.reportScope === 'single' ? sessions.slice(0, 1) : sessions).map((session, index) => ({ ...session, sortOrder: index, title: session.title.trim() || `Pertemuan ${index + 1}` }));
@@ -669,6 +693,8 @@ export const OneToOneReportEditorPage: React.FC<{ client: any }> = ({ client }) 
       mentor_name: report.mentorName.trim(),
       mentor_role: report.mentorRole.trim(),
       accent_color: reportAccent(report.accentColor),
+      brand_name: reportBrandName(report),
+      brand_logo_url: safeReportLogoUrl(report.brandLogoUrl),
       cover_title: report.coverTitle.trim() || report.title.trim(),
       cover_subtitle: report.coverSubtitle,
       summary: report.summary,
@@ -772,7 +798,29 @@ export const OneToOneReportEditorPage: React.FC<{ client: any }> = ({ client }) 
 
         <Card className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><p className="text-sm font-bold text-[var(--text)]">Pertemuan</p><p className="mt-1 text-xs text-[var(--muted)]">Catatan rinci per sesi. Pilih cakupan beberapa pertemuan untuk menambah sesi.</p></div>{report.reportScope === 'multiple' && <Button type="button" variant="secondary" icon={Plus} onClick={() => setSessions(current => [...current, newSession(current.length, report.id)])}>Tambah sesi</Button>}</div><div className="space-y-4">{shownSessions.map((session, index) => <SessionEditor key={session.id || `new-${index}`} session={session} index={index} bookings={sortedBookings} portals={portals} evaluationLabel={report.templateSettings.evaluationLabel} actionItemsLabel={report.templateSettings.actionItemsLabel} canRemove={report.reportScope === 'multiple' && shownSessions.length > 1} onChange={patch => patchSession(index, patch)} onRemove={() => setSessions(current => current.filter((_, itemIndex) => itemIndex !== index))} />)}</div></Card>
 
-        <Card className="space-y-4"><div><p className="text-sm font-bold text-[var(--text)]">Kustomisasi tampilan</p><p className="mt-1 text-xs text-[var(--muted)]">Ubah istilah, judul cover, warna aksen, dan footer agar format raport sesuai gaya Anda.</p></div><div className="grid gap-3 sm:grid-cols-2"><Input label="Judul cover" value={report.coverTitle} onChange={event => patchReport({ coverTitle: event.target.value })} /><div className="flex flex-col gap-2"><label className="text-xs font-semibold text-[var(--muted)]">Warna aksen</label><div className="flex min-h-[46px] items-center gap-3 rounded-xl border border-[var(--border)] px-3"><input aria-label="Warna aksen" type="color" value={reportAccent(report.accentColor)} onChange={event => patchReport({ accentColor: event.target.value })} className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0" /><Input aria-label="Kode warna aksen" value={report.accentColor} onChange={event => patchReport({ accentColor: event.target.value })} className="min-h-0 border-0 py-0 focus:ring-0" /></div></div></div><Textarea label="Subjudul cover" value={report.coverSubtitle} onChange={event => patchReport({ coverSubtitle: event.target.value })} className="min-h-[86px]" placeholder="Contoh: Ringkasan perkembangan dan arah tindak lanjut." /><div className="grid gap-3 sm:grid-cols-2"><Input label="Label header" value={report.templateSettings.headerLabel} onChange={event => patchReport({ templateSettings: { ...report.templateSettings, headerLabel: event.target.value } })} /><Input label="Label ringkasan" value={report.templateSettings.summaryLabel} onChange={event => patchReport({ templateSettings: { ...report.templateSettings, summaryLabel: event.target.value } })} /><Input label="Label evaluasi" value={report.templateSettings.evaluationLabel} onChange={event => patchReport({ templateSettings: { ...report.templateSettings, evaluationLabel: event.target.value } })} /><Input label="Label tindak lanjut" value={report.templateSettings.actionItemsLabel} onChange={event => patchReport({ templateSettings: { ...report.templateSettings, actionItemsLabel: event.target.value } })} /></div><label className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] p-3 text-sm font-semibold text-[var(--text)]"><input type="checkbox" checked={report.templateSettings.showMentor} onChange={event => patchReport({ templateSettings: { ...report.templateSettings, showMentor: event.target.checked } })} className="h-4 w-4 accent-[var(--accent)]" />Tampilkan identitas mentor pada raport</label><Textarea label="Catatan footer" value={report.footerNote} onChange={event => patchReport({ footerNote: event.target.value })} className="min-h-[86px]" placeholder="Contoh: Dokumen ini dibuat sebagai ringkasan mentoring." /></Card>
+        <Card className="space-y-4">
+          <div>
+            <p className="text-sm font-bold text-[var(--text)]">Kustomisasi tampilan</p>
+            <p className="mt-1 text-xs text-[var(--muted)]">Atur identitas brand, istilah, judul cover, warna aksen, dan footer agar format raport sesuai gaya Anda.</p>
+          </div>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Nama brand / organisasi" value={report.brandName} maxLength={160} onChange={event => patchReport({ brandName: event.target.value })} placeholder="Contoh: Arunika Learning Hub" />
+            <Input label="URL logo raport (opsional)" type="url" value={report.brandLogoUrl} maxLength={2000} onChange={event => patchReport({ brandLogoUrl: event.target.value })} placeholder="https://domain.com/logo.png" />
+          </div>
+          <div className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+            <div className="flex min-w-0 items-center gap-3"><ReportBrandLogo report={report} className="h-10 w-20 rounded-lg bg-white object-contain p-1.5" /><div className="min-w-0"><p className="truncate text-sm font-bold text-[var(--text)]">{reportBrandName(report)}</p><p className="mt-0.5 text-xs text-[var(--muted)]">{report.brandLogoUrl.trim() ? 'Preview dari URL logo.' : 'Menggunakan logo Arunika bawaan.'}</p></div></div>
+            {report.brandLogoUrl.trim() && <button type="button" onClick={() => patchReport({ brandLogoUrl: '' })} className="text-xs font-semibold text-[var(--accent-strong)] hover:underline">Kembali ke logo bawaan</button>}
+          </div>
+          <p className="text-xs leading-relaxed text-[var(--muted)]">Gunakan URL gambar publik (PNG, JPG, WebP, atau SVG) agar logo tetap tampil saat raport dibagikan.</p>
+          <div className="grid gap-3 sm:grid-cols-2">
+            <Input label="Judul cover" value={report.coverTitle} onChange={event => patchReport({ coverTitle: event.target.value })} />
+            <div className="flex flex-col gap-2"><label className="text-xs font-semibold text-[var(--muted)]">Warna aksen</label><div className="flex min-h-[46px] items-center gap-3 rounded-xl border border-[var(--border)] px-3"><input aria-label="Warna aksen" type="color" value={reportAccent(report.accentColor)} onChange={event => patchReport({ accentColor: event.target.value })} className="h-7 w-9 cursor-pointer rounded border-0 bg-transparent p-0" /><Input aria-label="Kode warna aksen" value={report.accentColor} onChange={event => patchReport({ accentColor: event.target.value })} className="min-h-0 border-0 py-0 focus:ring-0" /></div></div>
+          </div>
+          <Textarea label="Subjudul cover" value={report.coverSubtitle} onChange={event => patchReport({ coverSubtitle: event.target.value })} className="min-h-[86px]" placeholder="Contoh: Ringkasan perkembangan dan arah tindak lanjut." />
+          <div className="grid gap-3 sm:grid-cols-2"><Input label="Label header" value={report.templateSettings.headerLabel} onChange={event => patchReport({ templateSettings: { ...report.templateSettings, headerLabel: event.target.value } })} /><Input label="Label ringkasan" value={report.templateSettings.summaryLabel} onChange={event => patchReport({ templateSettings: { ...report.templateSettings, summaryLabel: event.target.value } })} /><Input label="Label evaluasi" value={report.templateSettings.evaluationLabel} onChange={event => patchReport({ templateSettings: { ...report.templateSettings, evaluationLabel: event.target.value } })} /><Input label="Label tindak lanjut" value={report.templateSettings.actionItemsLabel} onChange={event => patchReport({ templateSettings: { ...report.templateSettings, actionItemsLabel: event.target.value } })} /></div>
+          <label className="flex cursor-pointer items-center gap-3 rounded-xl border border-[var(--border)] p-3 text-sm font-semibold text-[var(--text)]"><input type="checkbox" checked={report.templateSettings.showMentor} onChange={event => patchReport({ templateSettings: { ...report.templateSettings, showMentor: event.target.checked } })} className="h-4 w-4 accent-[var(--accent)]" />Tampilkan identitas mentor pada raport</label>
+          <Textarea label="Catatan footer" value={report.footerNote} onChange={event => patchReport({ footerNote: event.target.value })} className="min-h-[86px]" placeholder="Contoh: Dokumen ini dibuat sebagai ringkasan mentoring." />
+        </Card>
       </div>
       <aside className="xl:sticky xl:top-5"><div className="mb-3 flex items-center justify-between gap-3"><div className="flex items-center gap-2 text-sm font-bold text-[var(--text)]"><FileText size={17} />Preview langsung</div><span className="text-xs text-[var(--muted)]">Mode cetak</span></div><ReportPreview report={report} sessions={shownSessions} /></aside>
     </div>
@@ -807,7 +855,7 @@ export const PublicOneToOneReportPage: React.FC<{ client: any; tokenOverride?: s
       setReport(mappedReport);
       setSessions(Array.isArray(payload?.sessions) ? payload.sessions.map(mapSession) : []);
       setIsLoading(false);
-      setPublicMetadata({ title: `${mappedReport.coverTitle || mappedReport.title} | Arunika`, description: `Raport perkembangan ${reportRecipientLabel(mappedReport)}.` });
+      setPublicMetadata({ title: `${mappedReport.coverTitle || mappedReport.title} | ${reportBrandName(mappedReport)}`, description: `Raport perkembangan ${reportRecipientLabel(mappedReport)}.` });
     };
     void loadPublicReport();
     return () => { active = false; };
@@ -815,5 +863,5 @@ export const PublicOneToOneReportPage: React.FC<{ client: any; tokenOverride?: s
 
   if (isLoading) return <main className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><div className="flex items-center gap-3 text-sm text-[var(--muted)]"><Loader2 className="animate-spin" size={20} />Memuat raport…</div></main>;
   if (!report) return <main className="flex min-h-screen items-center justify-center bg-[var(--app-bg)] p-6"><Card className="w-full max-w-md py-12 text-center"><XCircle className="mx-auto text-[var(--danger-text)]" size={32} /><h1 className="mt-4 text-xl font-bold text-[var(--text)]">Raport tidak tersedia</h1><p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">Link ini mungkin sudah tidak aktif atau tidak lagi dibagikan.</p></Card></main>;
-  return <main className="min-h-screen bg-[var(--app-bg)] px-4 py-7 md:px-7 md:py-10"><div className="mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><img src={logoUtama} alt="Arunika" className="h-8 w-auto object-contain" /><span className="h-5 w-px bg-[var(--border)]" /><p className="text-sm font-semibold text-[var(--muted)]">Raport mentoring</p></div><Button type="button" variant="secondary" icon={Download} onClick={() => downloadReportPdf(report, sessions)}>Unduh PDF</Button></div><ReportPreview report={report} sessions={sessions} publicView /></main>;
+  return <main className="min-h-screen bg-[var(--app-bg)] px-4 py-7 md:px-7 md:py-10"><div className="mx-auto mb-5 flex max-w-4xl flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><ReportBrandLogo report={report} /><span className="h-5 w-px bg-[var(--border)]" /><p className="text-sm font-semibold text-[var(--muted)]">{reportBrandName(report)}</p><span className="h-5 w-px bg-[var(--border)]" /><p className="text-sm font-semibold text-[var(--muted)]">Raport mentoring</p></div><Button type="button" variant="secondary" icon={Download} onClick={() => downloadReportPdf(report, sessions)}>Unduh PDF</Button></div><ReportPreview report={report} sessions={sessions} publicView /></main>;
 };

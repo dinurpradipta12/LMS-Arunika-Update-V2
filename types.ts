@@ -290,6 +290,8 @@ export interface OneToOneReport {
   mentorName: string;
   mentorRole: string;
   accentColor: string;
+  brandName: string;
+  brandLogoUrl: string;
   coverTitle: string;
   coverSubtitle: string;
   summary: string;
