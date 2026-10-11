@@ -49,6 +49,8 @@ const REPORT_BRANDING_BUCKET = 'one-to-one-report-branding';
 const REPORT_LOGO_MAX_BYTES = 2 * 1024 * 1024;
 const REPORT_LOGO_MIME_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp', 'image/svg+xml']);
 const REPORT_LOGO_ACCEPT = 'image/png,image/jpeg,image/webp,image/svg+xml';
+const NAYAGEMENT_MANUAL_EXPORT_FORMAT = 'nayagement-consultation-bookings/v1';
+const NAYAGEMENT_MANUAL_EXPORT_MAX_BYTES = 3 * 1024 * 1024;
 
 const safeReportLogoUrl = (value: unknown) => {
   const source = asText(value).trim();
@@ -245,6 +247,18 @@ const reportErrorMessage = (error: any) => {
   if (message.includes('brand_name') || message.includes('brand_logo_url')) return 'Fitur branding raport belum tersedia di database. Jalankan migration 20261011000000_one_to_one_report_branding.sql.';
   if (message.includes('one_to_one_reports') || message.includes('one_to_one_report_sessions') || message.includes('one_to_one_report')) return 'Fitur raport 1:1 belum tersedia di database. Jalankan migration 20261010000000_one_to_one_reports.sql.';
   return message || 'Perubahan belum dapat disimpan.';
+};
+
+const nayagementImportErrorMessage = (error: any) => {
+  const message = asText(error?.message || error?.details || error).trim();
+  if (/import_nayagement_one_to_one_bookings|sync_nayagement_one_to_one_booking_core/i.test(message)) return 'Fitur impor booking Nayagement belum tersedia di database. Jalankan migration 20261011020000_nayagement_manual_booking_import.sql.';
+  if (message.includes('SYNC_CONNECTION_NOT_CONFIGURED')) return 'Workspace Nayagement ini belum terhubung atau belum aktif. Buka tab Integrasi, lalu simpan Workspace ID yang sama dengan file ekspor.';
+  if (message.includes('UNSUPPORTED_NAYAGEMENT_EXPORT')) return 'Format file belum didukung. Ekspor ulang melalui tombol “Ekspor untuk Arunika” di Nayagement.';
+  if (message.includes('NAYAGEMENT_EXPORT_EMPTY')) return 'File ekspor tidak memuat booking untuk diimpor.';
+  if (message.includes('NAYAGEMENT_EXPORT_TOO_LARGE')) return 'Satu kali impor mendukung maksimal 200 booking. Bagi file ekspor menjadi beberapa bagian.';
+  if (/INVALID_NAYAGEMENT_|INVALID_BOOKING_|INVALID_MENTEE_|INVALID_SOURCE_/i.test(message)) return 'Ada data booking yang tidak valid di file ekspor. Ekspor ulang dari Nayagement tanpa mengubah isi file.';
+  if (message.includes('ADMIN_REQUIRED')) return 'Hanya admin Arunika yang dapat mengimpor booking Nayagement.';
+  return message ? `Booking belum dapat diimpor. ${message}` : 'Booking belum dapat diimpor.';
 };
 
 const reportLogoUploadErrorMessage = (error: any) => {
@@ -512,6 +526,12 @@ export const OneToOneReportsDashboard: React.FC<{
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const [isNayagementImportOpen, setIsNayagementImportOpen] = useState(false);
+  const [isImportingNayagement, setIsImportingNayagement] = useState(false);
+  const [nayagementExportText, setNayagementExportText] = useState('');
+  const [nayagementExportFileName, setNayagementExportFileName] = useState('');
+  const [importedPortals, setImportedPortals] = useState<OneToOnePortal[] | null>(null);
+  const [importedBookingEvents, setImportedBookingEvents] = useState<OneToOneScheduleEvent[] | null>(null);
   const [deleteTarget, setDeleteTarget] = useState<OneToOneReport | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
   const [notice, setNotice] = useState<Notice>(null);
@@ -538,8 +558,82 @@ export const OneToOneReportsDashboard: React.FC<{
     void loadReports();
   }, [loadReports]);
 
-  const sortedBookings = useMemo(() => [...bookingEvents].sort((first, second) => (second.startsAt || '').localeCompare(first.startsAt || '')), [bookingEvents]);
+  const reportPortals = importedPortals ?? portals;
+  const reportBookingEvents = importedBookingEvents ?? bookingEvents;
+  const sortedBookings = useMemo(() => [...reportBookingEvents].sort((first, second) => (second.startsAt || '').localeCompare(first.startsAt || '')), [reportBookingEvents]);
   const filteredReports = useMemo(() => filter === 'all' ? reports : reports.filter(report => report.recipientType === filter), [filter, reports]);
+
+  const refreshBookingSources = async () => {
+    const [portalsResponse, bookingsResponse] = await Promise.all([
+      client.from('one_to_one_portals').select('*').order('mentee_name'),
+      client.from('one_to_one_schedule_events').select('*').order('starts_at', { ascending: false })
+    ]);
+    if (portalsResponse.error || bookingsResponse.error) throw portalsResponse.error || bookingsResponse.error;
+    const nextPortals = (portalsResponse.data || []).map(mapPortal);
+    const nextBookings = (bookingsResponse.data || []).map(mapBooking);
+    setImportedPortals(nextPortals);
+    setImportedBookingEvents(nextBookings);
+    return nextBookings;
+  };
+
+  const readNayagementExportFile = async (file: File | undefined) => {
+    if (!file) return;
+    if (file.size > NAYAGEMENT_MANUAL_EXPORT_MAX_BYTES) {
+      setNotice({ tone: 'error', message: 'File ekspor terlalu besar. Maksimal ukuran file adalah 3 MB.' });
+      return;
+    }
+    try {
+      const content = await file.text();
+      const parsed = JSON.parse(content);
+      if (parsed?.format !== NAYAGEMENT_MANUAL_EXPORT_FORMAT || !Array.isArray(parsed?.bookings)) throw new Error('UNSUPPORTED_NAYAGEMENT_EXPORT');
+      setNayagementExportText(JSON.stringify(parsed, null, 2));
+      setNayagementExportFileName(file.name);
+      setNotice(null);
+    } catch (error) {
+      setNayagementExportText('');
+      setNayagementExportFileName('');
+      setNotice({ tone: 'error', message: nayagementImportErrorMessage(error) });
+    }
+  };
+
+  const importNayagementBookings = async () => {
+    let payload: unknown;
+    try {
+      payload = JSON.parse(nayagementExportText);
+    } catch {
+      setNotice({ tone: 'error', message: 'Tempel atau pilih file JSON ekspor Nayagement yang valid.' });
+      return;
+    }
+    if (!payload || typeof payload !== 'object' || (payload as any).format !== NAYAGEMENT_MANUAL_EXPORT_FORMAT || !Array.isArray((payload as any).bookings)) {
+      setNotice({ tone: 'error', message: 'Format file belum didukung. Ekspor ulang melalui tombol “Ekspor untuk Arunika” di Nayagement.' });
+      return;
+    }
+    setIsImportingNayagement(true);
+    setNotice(null);
+    const { data, error } = await client.rpc('import_nayagement_one_to_one_bookings', { p_export: payload });
+    if (error) {
+      setIsImportingNayagement(false);
+      setNotice({ tone: 'error', message: nayagementImportErrorMessage(error) });
+      return;
+    }
+    try {
+      const nextBookings = await refreshBookingSources();
+      const importedEventId = Array.isArray(data?.results)
+        ? asText(data.results.find((result: any) => asText(result?.scheduleEventId))?.scheduleEventId)
+        : '';
+      if (importedEventId && nextBookings.some(booking => booking.id === importedEventId)) {
+        setBookingEventId(importedEventId);
+        setPortalId('');
+      }
+      setIsNayagementImportOpen(false);
+      setNayagementExportText('');
+      setNayagementExportFileName('');
+      setNotice({ tone: 'success', message: `${Number(data?.imported) || 0} booking Nayagement tersinkronkan. Booking tersebut sekarang tersedia untuk raport.` });
+    } catch (refreshError) {
+      setNotice({ tone: 'error', message: `Booking sudah diimpor, tetapi daftar belum dapat dimuat ulang. ${reportErrorMessage(refreshError)}` });
+    }
+    setIsImportingNayagement(false);
+  };
 
   const createReport = async () => {
     setIsCreating(true);
@@ -649,7 +743,9 @@ export const OneToOneReportsDashboard: React.FC<{
       </Card>;
     })}</div> : <Card className="py-12 text-center"><ClipboardList size={30} className="mx-auto text-[var(--muted)]" /><h3 className="mt-3 font-bold text-[var(--text)]">Belum ada raport</h3><p className="mx-auto mt-2 max-w-md text-sm text-[var(--muted)]">Buat raport pertama, hubungkan booking bila ada, atau isi data mentee secara manual.</p><Button type="button" icon={Plus} className="mx-auto mt-5" onClick={openCreateModal}>Buat raport baru</Button></Card>}
 
-    {isCreateModalOpen && <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) closeCreateModal(); }}><div role="dialog" aria-modal="true" aria-labelledby="one-to-one-report-create-title" className="max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl" onMouseDown={event => event.stopPropagation()}><div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-5 py-5 md:px-6"><div><p className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--accent-strong)]">Raport baru</p><h2 id="one-to-one-report-create-title" className="mt-2 text-xl font-bold text-[var(--text)]">Siapkan data raport mentee</h2><p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Booking bersifat opsional. Isi data manual jika detail penerima belum tersedia.</p></div><button type="button" aria-label="Tutup modal buat raport" onClick={closeCreateModal} disabled={isCreating} className="rounded-lg p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"><X size={19} /></button></div><form className="space-y-5 p-5 md:p-6" onSubmit={event => { event.preventDefault(); void createReport(); }}>{notice && <NoticeMessage notice={notice} />}<section className="space-y-4 rounded-2xl border border-[var(--border)] p-4"><div><p className="text-sm font-bold text-[var(--text)]">1. Tentukan penerima</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Laporan dapat dibuat untuk seorang mentee atau sebuah tim.</p></div><div className="grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setRecipientType('individual')} className={`rounded-xl border p-4 text-left transition-colors ${recipientType === 'individual' ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:bg-[var(--surface-soft)]'}`}><UserRound size={18} className="text-[var(--accent-strong)]" /><p className="mt-3 text-sm font-bold text-[var(--text)]">Perorangan</p><p className="mt-1 text-xs text-[var(--muted)]">Satu mentee dari booking 1:1.</p></button><button type="button" onClick={() => setRecipientType('team')} className={`rounded-xl border p-4 text-left transition-colors ${recipientType === 'team' ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:bg-[var(--surface-soft)]'}`}><Users size={18} className="text-[var(--accent-strong)]" /><p className="mt-3 text-sm font-bold text-[var(--text)]">Tim</p><p className="mt-1 text-xs text-[var(--muted)]">Atur nama dan anggota tim sendiri.</p></button></div>{recipientType === 'team' && <Input label="Nama tim" value={teamName} onChange={event => setTeamName(event.target.value)} placeholder="Contoh: Tim Growth Arunika" />}</section><section className="space-y-4 rounded-2xl border border-[var(--border)] p-4"><div><p className="text-sm font-bold text-[var(--text)]">2. Hubungkan ke booking</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Opsional, tetapi disarankan agar nama mentee, mentor, dan sesi pertama terisi otomatis.</p></div><div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">Booking 1:1</label><select className={selectClassName} value={bookingEventId} onChange={event => { setBookingEventId(event.target.value); if (event.target.value) setPortalId(''); }}><option value="">Belum dihubungkan ke booking</option>{sortedBookings.map(booking => <option key={booking.id} value={booking.id}><BookingLabel booking={booking} portals={portals} /></option>)}</select></div>{!bookingEventId && <div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">Atau pilih ruang 1:1</label><select className={selectClassName} value={portalId} onChange={event => setPortalId(event.target.value)}><option value="">Pilih nanti di editor</option>{portals.map(portal => <option key={portal.id} value={portal.id}>{portal.menteeName || 'Mentee belum dinamai'} · {portal.title}</option>)}</select></div>}</section><section className="space-y-4 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-soft)] p-4"><div><p className="text-sm font-bold text-[var(--text)]">3. Lengkapi data manual</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Kolom yang diisi dipakai sebagai data raport, termasuk ketika data dari booking belum terbaca.</p></div><div className="grid gap-3 sm:grid-cols-2"><Input label={recipientType === 'team' ? 'Nama PIC' : 'Nama mentee'} value={manualMenteeName} onChange={event => setManualMenteeName(event.target.value)} placeholder={recipientType === 'team' ? 'Contoh: Alya Pratama' : 'Contoh: Rizqullah'} /><Input label={recipientType === 'team' ? 'Email PIC' : 'Email mentee'} type="email" value={manualMenteeEmail} onChange={event => setManualMenteeEmail(event.target.value)} placeholder="nama@email.com" /><Input label="Nama mentor" value={manualMentorName} onChange={event => setManualMentorName(event.target.value)} placeholder="Contoh: Dinur Pradipta" /><Input label="Peran mentor" value={manualMentorRole} onChange={event => setManualMentorRole(event.target.value)} placeholder="Contoh: Strategist" /></div><Input label="Periode laporan" value={manualPeriodLabel} onChange={event => setManualPeriodLabel(event.target.value)} placeholder="Contoh: Oktober 2026" /></section><div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4"><Button type="button" variant="secondary" onClick={closeCreateModal} disabled={isCreating}>Batal</Button><Button type="submit" icon={Plus} isLoading={isCreating}>Buat dan buka editor</Button></div></form></div></div>}
+    {isCreateModalOpen && <div className="fixed inset-0 z-[1300] flex items-center justify-center bg-slate-950/55 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) closeCreateModal(); }}><div role="dialog" aria-modal="true" aria-labelledby="one-to-one-report-create-title" className="max-h-[calc(100dvh-2rem)] w-full max-w-3xl overflow-y-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl" onMouseDown={event => event.stopPropagation()}><div className="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-[var(--border)] bg-[var(--surface)] px-5 py-5 md:px-6"><div><p className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--accent-strong)]">Raport baru</p><h2 id="one-to-one-report-create-title" className="mt-2 text-xl font-bold text-[var(--text)]">Siapkan data raport mentee</h2><p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Booking bersifat opsional. Isi data manual jika detail penerima belum tersedia.</p></div><button type="button" aria-label="Tutup modal buat raport" onClick={closeCreateModal} disabled={isCreating} className="rounded-lg p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"><X size={19} /></button></div><form className="space-y-5 p-5 md:p-6" onSubmit={event => { event.preventDefault(); void createReport(); }}>{notice && <NoticeMessage notice={notice} />}<section className="space-y-4 rounded-2xl border border-[var(--border)] p-4"><div><p className="text-sm font-bold text-[var(--text)]">1. Tentukan penerima</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Laporan dapat dibuat untuk seorang mentee atau sebuah tim.</p></div><div className="grid gap-3 sm:grid-cols-2"><button type="button" onClick={() => setRecipientType('individual')} className={`rounded-xl border p-4 text-left transition-colors ${recipientType === 'individual' ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:bg-[var(--surface-soft)]'}`}><UserRound size={18} className="text-[var(--accent-strong)]" /><p className="mt-3 text-sm font-bold text-[var(--text)]">Perorangan</p><p className="mt-1 text-xs text-[var(--muted)]">Satu mentee dari booking 1:1.</p></button><button type="button" onClick={() => setRecipientType('team')} className={`rounded-xl border p-4 text-left transition-colors ${recipientType === 'team' ? 'border-[var(--accent)] bg-[var(--accent-soft)]' : 'border-[var(--border)] hover:bg-[var(--surface-soft)]'}`}><Users size={18} className="text-[var(--accent-strong)]" /><p className="mt-3 text-sm font-bold text-[var(--text)]">Tim</p><p className="mt-1 text-xs text-[var(--muted)]">Atur nama dan anggota tim sendiri.</p></button></div>{recipientType === 'team' && <Input label="Nama tim" value={teamName} onChange={event => setTeamName(event.target.value)} placeholder="Contoh: Tim Growth Arunika" />}</section><section className="space-y-4 rounded-2xl border border-[var(--border)] p-4"><div><p className="text-sm font-bold text-[var(--text)]">2. Hubungkan ke booking</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Pilih booking yang sudah masuk, atau impor file ekspor Nayagement agar nama mentee, mentor, dan sesi pertama terisi otomatis.</p></div><div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">Booking 1:1</label><select className={selectClassName} value={bookingEventId} onChange={event => { setBookingEventId(event.target.value); if (event.target.value) setPortalId(''); }}><option value="">Belum dihubungkan ke booking</option>{sortedBookings.map(booking => <option key={booking.id} value={booking.id}><BookingLabel booking={booking} portals={reportPortals} /></option>)}</select></div><div className="flex flex-col gap-3 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-3 sm:flex-row sm:items-center sm:justify-between"><p className="text-xs leading-relaxed text-[var(--muted)]">Booking belum muncul? Ekspor JSON dari Nayagement, lalu impor di sini. File tidak mengubah booking asli di Nayagement.</p><Button type="button" variant="secondary" icon={FileText} className="shrink-0" onClick={() => { setNotice(null); setIsNayagementImportOpen(true); }}>Impor Nayagement</Button></div>{!bookingEventId && <div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">Atau pilih ruang 1:1</label><select className={selectClassName} value={portalId} onChange={event => setPortalId(event.target.value)}><option value="">Pilih nanti di editor</option>{reportPortals.map(portal => <option key={portal.id} value={portal.id}>{portal.menteeName || 'Mentee belum dinamai'} · {portal.title}</option>)}</select></div>}</section><section className="space-y-4 rounded-2xl border border-dashed border-[var(--border)] bg-[var(--surface-soft)] p-4"><div><p className="text-sm font-bold text-[var(--text)]">3. Lengkapi data manual</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Kolom yang diisi dipakai sebagai data raport, termasuk ketika data dari booking belum terbaca.</p></div><div className="grid gap-3 sm:grid-cols-2"><Input label={recipientType === 'team' ? 'Nama PIC' : 'Nama mentee'} value={manualMenteeName} onChange={event => setManualMenteeName(event.target.value)} placeholder={recipientType === 'team' ? 'Contoh: Alya Pratama' : 'Contoh: Rizqullah'} /><Input label={recipientType === 'team' ? 'Email PIC' : 'Email mentee'} type="email" value={manualMenteeEmail} onChange={event => setManualMenteeEmail(event.target.value)} placeholder="nama@email.com" /><Input label="Nama mentor" value={manualMentorName} onChange={event => setManualMentorName(event.target.value)} placeholder="Contoh: Dinur Pradipta" /><Input label="Peran mentor" value={manualMentorRole} onChange={event => setManualMentorRole(event.target.value)} placeholder="Contoh: Strategist" /></div><Input label="Periode laporan" value={manualPeriodLabel} onChange={event => setManualPeriodLabel(event.target.value)} placeholder="Contoh: Oktober 2026" /></section><div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4"><Button type="button" variant="secondary" onClick={closeCreateModal} disabled={isCreating}>Batal</Button><Button type="submit" icon={Plus} isLoading={isCreating}>Buat dan buka editor</Button></div></form></div></div>}
+
+    {isNayagementImportOpen && <div className="fixed inset-0 z-[1400] flex items-center justify-center bg-slate-950/60 p-4 backdrop-blur-sm" role="presentation" onMouseDown={event => { if (event.target === event.currentTarget && !isImportingNayagement) setIsNayagementImportOpen(false); }}><div role="dialog" aria-modal="true" aria-labelledby="nayagement-import-title" className="w-full max-w-2xl rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-2xl" onMouseDown={event => event.stopPropagation()}><div className="flex items-start justify-between gap-4 border-b border-[var(--border)] px-5 py-5"><div><p className="text-xs font-bold uppercase tracking-[0.15em] text-[var(--accent-strong)]">Sinkronisasi manual</p><h2 id="nayagement-import-title" className="mt-2 text-xl font-bold text-[var(--text)]">Impor booking dari Nayagement</h2><p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Gunakan file JSON dari Nayagement. Data akan diproyeksikan ke ruang dan jadwal 1:1 yang sama, tanpa mengubah data sumber.</p></div><button type="button" aria-label="Tutup impor Nayagement" onClick={() => { if (!isImportingNayagement) setIsNayagementImportOpen(false); }} className="rounded-lg p-2 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)]"><X size={19} /></button></div><div className="space-y-4 p-5"><ol className="grid gap-2 rounded-xl bg-[var(--surface-soft)] p-4 text-xs leading-relaxed text-[var(--muted)]"><li><strong className="text-[var(--text)]">1.</strong> Buka Nayagement → Booking konsultasi → Booking masuk.</li><li><strong className="text-[var(--text)]">2.</strong> Tekan <strong className="text-[var(--text)]">Ekspor untuk Arunika</strong>.</li><li><strong className="text-[var(--text)]">3.</strong> Pilih file JSON yang terunduh, kemudian impor.</li></ol><div className="space-y-2"><label className="text-xs font-semibold text-[var(--muted)]">File ekspor Nayagement (.json)</label><input type="file" accept="application/json,.json" onChange={event => { void readNayagementExportFile(event.currentTarget.files?.[0]); event.currentTarget.value = ''; }} disabled={isImportingNayagement} className="block w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm text-[var(--text)] file:mr-3 file:rounded-lg file:border-0 file:bg-[var(--accent-soft)] file:px-3 file:py-2 file:text-xs file:font-semibold file:text-[var(--accent-strong)]" />{nayagementExportFileName && <p className="text-xs font-semibold text-[var(--success-text)]">Siap diimpor: {nayagementExportFileName}</p>}</div><Textarea label="Atau tempel JSON ekspor" value={nayagementExportText} onChange={event => { setNayagementExportText(event.target.value); setNayagementExportFileName(''); }} placeholder={'{\n  "format": "nayagement-consultation-bookings/v1",\n  "workspaceId": "…",\n  "bookings": []\n}'} rows={8} /><p className="text-xs leading-relaxed text-[var(--muted)]">Satu kali impor mendukung hingga 200 booking dan dapat diulang dengan aman. Booking yang sama akan diperbarui, bukan dibuat dua kali.</p><div className="flex flex-wrap justify-end gap-2 border-t border-[var(--border)] pt-4"><Button type="button" variant="secondary" onClick={() => setIsNayagementImportOpen(false)} disabled={isImportingNayagement}>Batal</Button><Button type="button" icon={RotateCcw} onClick={() => void importNayagementBookings()} isLoading={isImportingNayagement}>Impor & sinkronkan</Button></div></div></div></div>}
 
     <ConfirmModal open={Boolean(deleteTarget)} title="Hapus raport ini?" description={deleteTarget ? <>Raport <strong className="text-[var(--text)]">{deleteTarget.title}</strong> untuk {reportRecipientLabel(deleteTarget)} beserta seluruh detail pertemuannya akan dihapus permanen.</> : null} confirmLabel="Hapus raport" isLoading={isDeleting} onCancel={() => { if (!isDeleting) setDeleteTarget(null); }} onConfirm={() => void deleteReport()} />
   </div>;

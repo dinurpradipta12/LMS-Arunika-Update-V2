@@ -49,3 +49,23 @@ workspace owner/admin and is safer for contact data. Retrying a booking updates
 the existing Arunika event instead of duplicating it. Nayagement's free-form
 booking details are validated but intentionally never copied into the public
 mentee schedule.
+
+## Manual export/import fallback
+
+Use this path when the server-to-server sender has not been deployed yet, or a
+booking needs to be brought over in bulk.
+
+1. Apply Arunika migration `20261011020000_nayagement_manual_booking_import.sql`.
+2. In Nayagement, open **Booking konsultasi → Booking masuk** and choose
+   **Ekspor untuk Arunika**. This downloads a JSON file; it does not modify or
+   delete any booking in Nayagement.
+3. In Arunika, open **1:1 Mentorship → Raport mentee → Buat raport baru**.
+   Under **Hubungkan ke booking**, choose **Impor Nayagement**, select the JSON
+   file, and choose **Impor & sinkronkan**.
+4. The imported events immediately appear in the booking picker. Select one to
+   prefill the report's mentee, mentor, and first session.
+
+The file contains a workspace ID and booking IDs. Arunika accepts it only when
+that workspace is already active in **Integrasi**, and only an Arunika admin can
+import it. Re-importing the same file is safe: existing bookings are updated
+instead of duplicated. One import supports up to 200 bookings.
