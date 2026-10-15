@@ -29,13 +29,14 @@ import {
   X,
   XCircle
 } from 'lucide-react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom';
 
 import { CatalogBenefit, CatalogContent, CatalogImageFit, CatalogPage, CatalogPageItem, CatalogPageItemType, CatalogPageStatus, CatalogProductLayout, CatalogSection, CatalogSocialLink, FormThemeKey } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
 import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
 import { getVisitorId } from './PublicAnalytics';
+import { CatalogInsightsDashboard } from './CatalogInsightsDashboard';
 import logoUtama from '../src/logo-utama.png';
 import instagramLogo from '../src/Instagram-logo.png';
 import tiktokLogo from '../src/tiktok.png';
@@ -426,7 +427,7 @@ const CatalogPageCard: React.FC<{
       <span className="text-right">Tema {FORM_THEME_OPTIONS.find(option => option.value === page.theme)?.label || 'Navy'}</span>
     </div>
     <div className="mt-auto grid grid-cols-2 gap-2">
-      <Link to={`/admin/catalog-pages/${page.id}`} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:bg-[var(--surface-soft)]">Edit katalog</Link>
+      <Link to={`/admin/catalog-pages/${page.id}`} className="inline-flex min-h-11 items-center justify-center rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:bg-[var(--surface-soft)]">Lihat statistik</Link>
       <button type="button" onClick={() => void onCopy(page)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 text-sm font-semibold text-[var(--text)] transition-colors hover:bg-[var(--surface-soft)]">{copied ? <Check size={16} /> : <Copy size={16} />}{copied ? 'Tersalin' : 'Salin link'}</button>
       <a href={page.status === 'published' ? createCatalogShareLink(page.slug, page.updatedAt, page.customDomain) : undefined} target="_blank" rel="noreferrer" className={`inline-flex min-h-11 items-center justify-center gap-2 rounded-xl px-3 text-sm font-semibold transition-colors ${page.status === 'published' ? 'bg-[var(--accent)] text-white hover:bg-[var(--accent-hover)]' : 'cursor-not-allowed bg-[var(--surface-soft)] text-[var(--muted)]'}`} onClick={event => { if (page.status !== 'published') event.preventDefault(); }}>{page.status === 'published' ? 'Buka publik' : 'Belum publik'}{page.status === 'published' && <ExternalLink size={15} />}</a>
       <button type="button" onClick={() => onDelete(page)} className="inline-flex min-h-11 items-center justify-center gap-2 rounded-xl bg-[var(--danger-text)] px-3 text-sm font-semibold text-white transition-opacity hover:opacity-90"><Trash2 size={15} />Hapus</button>
@@ -436,6 +437,7 @@ const CatalogPageCard: React.FC<{
 
 export const CatalogPagesPage: React.FC<{ client: any }> = ({ client }) => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const [pages, setPages] = useState<CatalogPage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
@@ -464,6 +466,12 @@ export const CatalogPagesPage: React.FC<{ client: any }> = ({ client }) => {
   }, [client]);
 
   useEffect(() => { void fetchPages(); }, [fetchPages]);
+  useEffect(() => {
+    if (!isLoading && !loadError && pages.length && searchParams.get('list') !== '1') {
+      const primary = pages.find(page => page.status === 'published') || pages[0];
+      navigate(`/admin/catalog-pages/${primary.id}`, { replace: true });
+    }
+  }, [isLoading, loadError, navigate, pages, searchParams]);
 
   const handleCreate = async () => {
     if (!client) return;
@@ -471,7 +479,7 @@ export const CatalogPagesPage: React.FC<{ client: any }> = ({ client }) => {
     const draft = createDefaultCatalogPage();
     const { data, error } = await client.from('catalog_pages').insert(catalogWriteRow(draft)).select('*').single();
     if (error) setNotice({ tone: 'error', message: errorMessage(error) });
-    else if (data) navigate(`/admin/catalog-pages/${data.id}`);
+    else if (data) navigate(`/admin/catalog-pages/${data.id}?tab=editor`);
     setIsCreating(false);
   };
 
@@ -978,6 +986,8 @@ function CatalogMobilePreview({ page }: { page: CatalogPage }) {
 export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const activeTab = searchParams.get('tab') === 'editor' ? 'editor' : 'statistics';
   const [page, setPage] = useState<CatalogPage | null>(null);
   const [landingOptions, setLandingOptions] = useState<LandingOption[]>([]);
   const [selectedLandingId, setSelectedLandingId] = useState('');
@@ -987,7 +997,6 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
   const [notice, setNotice] = useState<Notice | null>(null);
   const [clickCounts, setClickCounts] = useState<Record<string, number> | null>(null);
   const [insightError, setInsightError] = useState('');
-  const [isLoadingInsights, setIsLoadingInsights] = useState(false);
 
   const fetchData = useCallback(async () => {
     if (!client || !id) return;
@@ -1007,7 +1016,6 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
 
   const fetchInsights = useCallback(async () => {
     if (!client || !id) return;
-    setIsLoadingInsights(true);
     const { data, error } = await client.rpc('get_catalog_click_insights', { p_catalog_id: id, p_days: 30 });
     if (error) {
       setInsightError('Statistik belum tersedia. Jalankan migration statistik klik katalog, lalu refresh.');
@@ -1016,7 +1024,6 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
       setInsightError('');
       setClickCounts(Object.fromEntries((Array.isArray(data) ? data : []).map((row: any) => [asText(row.item_id), Number(row.click_count) || 0])));
     }
-    setIsLoadingInsights(false);
   }, [client, id]);
 
   useEffect(() => { void fetchInsights(); }, [fetchInsights]);
@@ -1162,35 +1169,32 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
   const dnsDomain = normalizeCustomDomain(page.customDomain) || 'promo.domainanda.com';
   const dnsLabels = dnsDomain.split('.');
   const dnsRecordName = page.customDomain && dnsLabels.length > 2 ? dnsLabels.slice(0, -2).join('.') : 'subdomain';
-  const rankedItems = [...page.items].sort((left, right) => (clickCounts?.[right.id] || 0) - (clickCounts?.[left.id] || 0));
-  const totalClicks = Object.values(clickCounts || {}).reduce((sum, count) => sum + count, 0);
-
   return <main className="mx-auto w-full max-w-[1440px] space-y-6 p-4 pb-28 md:p-8">
-    <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/catalog-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {CATALOG_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">Editor Katalog</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(page.status)}</Badge></div><p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">Bangun etalase produk digital dengan hero, kategori, harga promo, benefit, dan CTA yang bisa Anda atur sendiri.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createCatalogShareLink(page.slug, undefined, page.customDomain), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan katalog</Button></div></div>
+    <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/catalog-pages?list=1" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> Daftar katalog</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">{activeTab === 'editor' ? 'Editor Katalog' : 'Statistik Katalog'}</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(page.status)}</Badge></div><p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">{activeTab === 'editor' ? 'Atur profil, link, produk, bagian, dan tampilan publik katalog.' : 'Pantau kunjungan, klik, dan kartu yang paling diminati tanpa mencampurnya dengan halaman editor.'}</p></div>{activeTab === 'editor' && <div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createCatalogShareLink(page.slug, undefined, page.customDomain), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan katalog</Button></div>}</div>
     <NoticeBanner notice={notice} />
+    <nav aria-label="Menu katalog" className="flex w-fit max-w-full gap-1 overflow-x-auto rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-1.5 shadow-sm"><button type="button" onClick={() => setSearchParams({ tab: 'statistics' })} aria-current={activeTab === 'statistics' ? 'page' : undefined} className={`flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeTab === 'statistics' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}><BarChart3 size={16} />Statistik</button><button type="button" onClick={() => setSearchParams({ tab: 'editor' })} aria-current={activeTab === 'editor' ? 'page' : undefined} className={`flex min-h-10 shrink-0 items-center gap-2 rounded-xl px-4 text-sm font-semibold transition-colors ${activeTab === 'editor' ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:bg-[var(--surface-soft)]'}`}><Palette size={16} />Editor</button></nav>
+    {activeTab === 'statistics' ? <CatalogInsightsDashboard client={client} page={page} publicUrl={createCatalogShareLink(page.slug, undefined, page.customDomain)} onEdit={() => setSearchParams({ tab: 'editor' })} /> : <>
     <Card className="flex flex-col justify-between gap-4 border-[var(--accent)]/30 bg-[var(--accent-soft)]/35 p-4 sm:flex-row sm:items-center">
       <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">Kartu link ringkas</p><h2 className="mt-1 text-base font-bold">Tambahkan link tanpa landing page</h2><p className="mt-1 max-w-2xl text-xs leading-relaxed text-[var(--muted)]">Seperti tautan mandiri pada profil Lynk: kartu pendek berisi ikon/foto custom, judul, dan satu URL tujuan.</p></div>
       <Button type="button" variant="secondary" icon={LinkIcon} onClick={addLinkItem} className="shrink-0">Tambah kartu link</Button>
     </Card>
     <CatalogMobilePreview page={page} />
-    <Card className="space-y-4">
-      <div className="flex flex-wrap items-start justify-between gap-3"><div className="flex items-start gap-3"><span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]"><BarChart3 size={20} /></span><div><h2 className="text-base font-bold">Klik kartu katalog</h2><p className="mt-1 text-xs text-[var(--muted)]">Total klik produk dan link dalam 30 hari terakhir. Preview editor tidak dihitung.</p></div></div><Button type="button" variant="secondary" onClick={() => void fetchInsights()} isLoading={isLoadingInsights}>Refresh statistik</Button></div>
-      {insightError ? <p className="rounded-xl bg-[var(--surface-soft)] p-3 text-xs text-[var(--muted)]">{insightError}</p> : clickCounts !== null && <><p className="text-2xl font-bold text-[var(--text)]">{totalClicks.toLocaleString('id-ID')} <span className="text-sm font-medium text-[var(--muted)]">klik</span></p><div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">{rankedItems.slice(0, 6).map(item => <div key={item.id} className="flex min-w-0 items-center justify-between gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><span className="min-w-0 truncate text-xs font-semibold">{item.title || (item.itemType === 'link' ? 'Link tanpa judul' : 'Produk tanpa judul')}</span><span className="shrink-0 text-sm font-bold text-[var(--accent-strong)]">{(clickCounts[item.id] || 0).toLocaleString('id-ID')}</span></div>)}{!rankedItems.length && <p className="text-xs text-[var(--muted)]">Tambahkan kartu untuk mulai melihat statistik.</p>}</div></>}
-    </Card>
+    {insightError && <p className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-xs text-[var(--muted)]">{insightError}</p>}
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
       <section className="space-y-5"><CatalogSectionsEditor sections={page.content.sections} onAdd={addSection} onChange={updateSection} onMove={moveSection} onRemove={removeSection} /><Card className="space-y-5"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Produk digital</p><h2 className="mt-2 text-xl font-bold">Pilih landing page</h2><p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Setiap produk diarahkan ke landing page publik yang Anda pilih. Lengkapi kategori, harga, badge, dan visual agar terasa seperti katalog marketplace.</p></div><div className="flex flex-col gap-3 sm:flex-row"><select value={selectedLandingId} onChange={event => setSelectedLandingId(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page untuk ditambahkan</option>{landingOptions.filter(option => !selectedIds.has(option.id)).map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select><Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={!selectedLandingId}>Tambah produk</Button></div>{!landingOptions.length && <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]">Belum ada landing page Publik. Publikasikan minimal satu landing page terlebih dahulu dari menu Landing Page.</div>}{page.items.length ? <div className="space-y-3">{page.items.map((item, index) => <CatalogItemEditor key={item.id} item={item} index={index} itemCount={page.items.length} options={landingOptions} sections={page.content.sections} clickCount={clickCounts === null ? null : (clickCounts[item.id] || 0)} onChange={patch => updateItem(item.id, patch)} onMove={direction => moveItem(index, direction)} onRemove={() => removeItem(item.id)} />)}</div> : <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk di katalog. Pilih landing page di atas untuk mulai menambahkan.</div>}</Card></section>
       <aside className="space-y-5"><Card className="space-y-5"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-xl font-bold">Profil katalog</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div><Input label="Judul katalog" value={page.title} onChange={event => updatePage({ title: event.target.value })} /><Input label="Slug link publik" value={page.slug} onChange={event => updatePage({ slug: event.target.value })} onBlur={() => updatePage({ slug: slugify(page.slug || page.title) })} /><Textarea label="Bio / deskripsi singkat" value={page.description} onChange={event => updatePage({ description: event.target.value })} placeholder="Ceritakan produk atau layanan Anda secara singkat." /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status katalog</span><select value={page.status} onChange={event => updatePage({ status: event.target.value as CatalogPageStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]">{CATALOG_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="space-y-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Nuansa warna</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Aksen lembut untuk tombol dan highlight katalog.</p></div><div className="grid grid-cols-2 gap-2">{FORM_THEME_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={page.theme === option.value} onClick={() => updatePage({ theme: option.value })} className={`rounded-xl border p-2 text-left transition-colors ${page.theme === option.value ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><span className="mb-2 block h-6 rounded-lg" style={{ backgroundColor: option.swatch }} /><span className="block text-xs font-semibold">{option.label}</span></button>)}</div></div><CatalogAvatarField value={page.avatarUrl} onChange={avatarUrl => updatePage({ avatarUrl })} /><CatalogContentEditor content={page.content} onChange={content => updatePage({ content })} /><div className="space-y-3"><Input label="Domain custom (opsional)" value={page.customDomain} onChange={event => updatePage({ customDomain: event.target.value })} onBlur={() => updatePage({ customDomain: normalizeCustomDomain(page.customDomain) })} placeholder="promo.domainanda.com" /><p className="text-xs leading-relaxed text-[var(--muted)]">Arahkan DNS domain ke deployment Arunika terlebih dahulu. Katalog akan dibuka dari alamat utama domain ini.</p>{page.customDomain && !isValidCustomDomain(page.customDomain) && <p className="text-xs text-[var(--danger-text)]">Format domain belum valid. Gunakan subdomain atau domain dengan ekstensi, misalnya promo.domainanda.com.</p>}<button type="button" onClick={() => setShowDnsGuide(current => !current)} aria-expanded={showDnsGuide} className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)] hover:underline">{showDnsGuide ? <ChevronUp size={14} /> : <ChevronDown size={14} />} {showDnsGuide ? 'Sembunyikan panduan DNS' : 'Lihat panduan DNS'}</button>{showDnsGuide && <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 text-xs leading-relaxed text-[var(--muted)]"><p className="font-semibold text-[var(--text)]">Cara menghubungkan {dnsDomain}</p><ol className="list-decimal space-y-2 pl-4"><li>Simpan domain di atas, lalu publikasikan katalog.</li><li>Di pengelola DNS domain, tambahkan record <strong className="text-[var(--text)]">CNAME</strong>. Untuk contoh <strong className="text-[var(--text)]">{dnsDomain}</strong>, isi nama/host <strong className="text-[var(--text)]">{dnsRecordName}</strong>.</li><li>Isi target CNAME dengan hostname deployment Arunika yang diberikan platform hosting, misalnya <code className="rounded bg-[var(--surface)] px-1 py-0.5 text-[11px] text-[var(--text)]">project.pages.dev</code>. Jangan gunakan slug katalog sebagai target.</li><li>Tambahkan domain yang sama pada menu Custom Domains di platform hosting, aktifkan HTTPS, lalu tunggu propagasi DNS.</li><li>Buka <strong className="text-[var(--text)]">https://{dnsDomain}</strong> untuk memverifikasi katalog.</li></ol><p className="border-t border-[var(--border)] pt-3">Untuk domain utama tanpa subdomain, gunakan fitur CNAME flattening/ALIAS dari penyedia DNS atau arahkan <strong className="text-[var(--text)]">www</strong> sebagai CNAME sesuai dukungan provider.</p></div>}</div><CatalogSocialLinksEditor links={page.socialLinks} onChange={socialLinks => updatePage({ socialLinks })} /></Card><div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]"><p className="font-semibold text-[var(--text)]">Link publik katalog</p><p className="mt-2 break-all">{createCatalogShareLink(page.slug, page.updatedAt, page.customDomain)}</p><p className="mt-2">Publikasikan katalog setelah semua produk siap ditampilkan.</p></div></aside>
     </div>
+    </>}
   </main>;
 };
 
 const safeCatalogCtaHref = safeCatalogLinkHref;
 
-const trackCatalogItemClick = (client: any, catalogId: string, itemId: string) => {
-  if (!client || !catalogId || !itemId || typeof window === 'undefined') return;
-  const payload = JSON.stringify({ p_catalog_id: catalogId, p_item_id: itemId, p_visitor_id: getVisitorId() });
+const sendCatalogAnalytics = (client: any, functionName: string, parameters: Record<string, string>) => {
+  if (!client || typeof window === 'undefined') return;
+  const payload = JSON.stringify(parameters);
   if (client.supabaseUrl && client.supabaseKey) {
-    void fetch(`${client.supabaseUrl}/rest/v1/rpc/track_public_catalog_click`, {
+    void fetch(`${client.supabaseUrl}/rest/v1/rpc/${functionName}`, {
       method: 'POST',
       keepalive: true,
       headers: { apikey: client.supabaseKey, authorization: `Bearer ${client.supabaseKey}`, 'content-type': 'application/json' },
@@ -1198,7 +1202,17 @@ const trackCatalogItemClick = (client: any, catalogId: string, itemId: string) =
     }).catch(() => { /* Opening the destination must remain possible if analytics is unavailable. */ });
     return;
   }
-  void client.rpc('track_public_catalog_click', JSON.parse(payload));
+  void client.rpc(functionName, parameters);
+};
+
+const trackCatalogPageView = (client: any, catalogId: string) => {
+  if (!catalogId) return;
+  sendCatalogAnalytics(client, 'track_public_catalog_view', { p_catalog_id: catalogId, p_visitor_id: getVisitorId() });
+};
+
+const trackCatalogItemClick = (client: any, catalogId: string, itemId: string) => {
+  if (!catalogId || !itemId) return;
+  sendCatalogAnalytics(client, 'track_public_catalog_click', { p_catalog_id: catalogId, p_item_id: itemId, p_visitor_id: getVisitorId() });
 };
 
 const CatalogPublicLinkCard: React.FC<{ item: CatalogPageItem; layout: CatalogProductLayout; onOpen?: (item: CatalogPageItem) => void }> = ({ item, layout, onOpen }) => {
@@ -1278,6 +1292,7 @@ export const PublicCatalogPageView: React.FC<PublicCatalogPageViewProps> = ({ cl
   const [loadError, setLoadError] = useState<string | null>(null);
   const [activeCategory, setActiveCategory] = useState('all');
   const [searchQuery, setSearchQuery] = useState('');
+  const trackedCatalogId = useRef<string | null>(null);
 
   const fetchPage = useCallback(async () => {
     if (!client || (!slug && !domain)) {
@@ -1316,6 +1331,11 @@ export const PublicCatalogPageView: React.FC<PublicCatalogPageViewProps> = ({ cl
       imageAlt: page.content.heroImageAlt || page.title
     });
   }, [embedded, page]);
+  useEffect(() => {
+    if (!client || !page?.id || embedded || pageOverride || trackedCatalogId.current === page.id) return;
+    trackedCatalogId.current = page.id;
+    trackCatalogPageView(client, page.id);
+  }, [client, embedded, page?.id, pageOverride]);
 
   const publicItems = useMemo(() => page ? page.items.filter(item => item.isVisible !== false) : [], [page]);
   const categoryOptions = useMemo(() => {
