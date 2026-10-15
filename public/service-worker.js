@@ -1,4 +1,4 @@
-const CACHE_NAME = 'arunika-shell-v1';
+const CACHE_NAME = 'arunika-shell-v2';
 const APP_SHELL = ['/', '/index.html', '/manifest.json', '/icon-192.png', '/icon-512.png'];
 
 self.addEventListener('install', event => {
@@ -36,10 +36,27 @@ self.addEventListener('fetch', event => {
     return;
   }
 
+  const isAppAsset = requestUrl.pathname.startsWith('/assets/')
+    || /\.(?:js|mjs|css|ts|tsx)$/.test(requestUrl.pathname);
+  if (isAppAsset) {
+    event.respondWith(
+      fetch(event.request).then(response => {
+        if (response.ok) {
+          const copy = response.clone();
+          void caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+        }
+        return response;
+      }).catch(() => caches.match(event.request))
+    );
+    return;
+  }
+
   event.respondWith(
     caches.match(event.request).then(cached => cached || fetch(event.request).then(response => {
-      const copy = response.clone();
-      void caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+      if (response.ok) {
+        const copy = response.clone();
+        void caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
+      }
       return response;
     }))
   );

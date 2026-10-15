@@ -421,6 +421,10 @@ export interface CatalogPageItem {
   imageUrl: string;
   imageAlt?: string;
   imageFit?: CatalogImageFit;
+  imagePositionX?: number;
+  imagePositionY?: number;
+  sectionId?: string;
+  isVisible?: boolean;
   buttonLabel: string;
   category?: string;
   format?: string;
@@ -442,10 +446,17 @@ export interface CatalogBenefit {
   description: string;
 }
 
+export interface CatalogSection {
+  id: string;
+  title: string;
+  description: string;
+}
+
 export type CatalogProductLayout = 'default' | 'grid' | 'large-image' | 'compact';
 
 export interface CatalogContent {
   productLayout: CatalogProductLayout;
+  sections: CatalogSection[];
   announcement: string;
   heroEyebrow: string;
   heroTitle: string;
