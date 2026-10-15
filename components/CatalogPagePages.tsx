@@ -891,7 +891,7 @@ function CatalogMobilePreview({ page }: { page: CatalogPage }) {
           <div className="relative overflow-hidden rounded-[2.15rem] border border-slate-800 bg-[var(--app-bg)]">
             <div className="pointer-events-none absolute left-1/2 top-2 z-20 h-5 w-24 -translate-x-1/2 rounded-full bg-slate-950" aria-hidden="true" />
             <div className="flex h-[650px] flex-col items-center overflow-x-hidden overflow-y-auto overscroll-contain pt-8" onClick={event => { if ((event.target as HTMLElement).closest('a')) event.preventDefault(); }}>
-              <div className="min-h-full shrink-0" style={{ width: '100%', zoom: screenZoom } as React.CSSProperties}>
+              <div className="min-h-full shrink-0" style={{ width: `${100 / screenZoom}%`, zoom: screenZoom } as React.CSSProperties}>
                 <PublicCatalogPageView client={null} pageOverride={page} embedded />
               </div>
             </div>
@@ -1055,7 +1055,7 @@ const safeCatalogCtaHref = safeCatalogLinkHref;
 const CatalogPublicLinkCard: React.FC<{ item: CatalogPageItem; layout: CatalogProductLayout }> = ({ item, layout }) => {
   const href = safeCatalogLinkHref(item.url);
   const opensNewTab = /^https?:/i.test(href);
-  const cardClassName = `group flex min-h-[72px] w-full max-w-xl items-center gap-3 self-center justify-self-center rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--accent)] hover:shadow-md ${layout === 'grid' ? 'sm:col-span-2' : ''}`;
+  const cardClassName = `group flex min-h-[72px] w-full max-w-xl items-center gap-3 self-center justify-self-center rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--accent)] hover:shadow-md ${layout === 'grid' ? 'col-span-full' : ''}`;
   const content = <>
     <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--accent-soft)] text-[var(--accent-strong)]">{item.iconUrl ? <img src={item.iconUrl} alt="" aria-hidden="true" className="h-full w-full object-cover" /> : <LinkIcon size={19} strokeWidth={2} />}</span>
     <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold text-[var(--text)]">{item.title || 'Buka link'}</span><span className="mt-0.5 block truncate text-[11px] text-[var(--muted)]">{href || 'Link belum tersedia'}</span></span>
@@ -1070,21 +1070,30 @@ const CatalogPublicCard: React.FC<{ item: CatalogPageItem; index: number; layout
   if (item.itemType === 'link') return <CatalogPublicLinkCard item={item} layout={layout} />;
   const href = item.slug ? landingHref(item.slug) : '#catalog-products';
   const isCompact = layout === 'compact';
+  const isGrid = layout === 'grid';
   const selectedImageFit = isCatalogImageFit(item.imageFit) ? item.imageFit : 'auto';
-  const imageFit = selectedImageFit === 'auto' ? (isCompact ? 'contain' : 'cover') : selectedImageFit;
-  const imageFitClass = imageFit === 'auto' ? 'object-cover' : CATALOG_IMAGE_FIT_CLASSES[imageFit];
+  const imageFit = selectedImageFit === 'auto' ? (isCompact || isGrid ? 'contain' : 'cover') : selectedImageFit;
+  const imageFitClass = CATALOG_IMAGE_FIT_CLASSES[imageFit];
   const imagePaddingClass = imageFit === 'contain' || imageFit === 'scale-down' ? 'p-2' : '';
   const imageClass = isCompact
     ? 'h-24 w-24 shrink-0 sm:h-28 sm:w-28'
     : layout === 'large-image'
       ? 'aspect-[16/8] w-full'
-      : layout === 'grid'
+      : isGrid
         ? 'aspect-square w-full'
         : 'aspect-[16/10] w-full';
-  const cardClassName = `group ${isCompact ? 'flex min-h-32 flex-col' : 'flex h-full flex-col'} overflow-hidden rounded-2xl border bg-[var(--surface)] text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ${item.featured ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--accent)]'}`;
-  const metadata = <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{item.category && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2 py-1 text-[var(--accent-strong)]"><Tag size={12} />{item.category}</span>}{item.format && <span className="inline-flex items-center gap-1"><Package size={12} />{item.format}</span>}</div>;
-  const price = (item.price || item.compareAtPrice) && <div>{item.price && <p className="text-base font-bold text-[var(--text)]">{item.price}</p>}{item.compareAtPrice && <p className="mt-0.5 text-xs text-[var(--muted)] line-through">{item.compareAtPrice}</p>}</div>;
-  const image = <div className={`relative overflow-hidden bg-[var(--surface-soft)] ${imageClass}`}>{item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || item.title || `Produk ${index + 1}`} className={`h-full w-full transition-transform duration-300 group-hover:scale-[1.03] ${imageFitClass} ${imagePaddingClass}`} /> : <div className="flex h-full items-center justify-center text-[var(--accent-strong)]"><Package size={isCompact ? 30 : 42} strokeWidth={1.5} /></div>}{item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--surface)]/95 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)] shadow-sm"><BadgeCheck size={13} />{item.badge}</span>}{item.featured && !item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)]"><Star size={13} fill="currentColor" /> Unggulan</span>}</div>;
+  const cardClassName = `group min-w-0 ${isCompact ? 'flex min-h-32 flex-col' : 'flex h-full flex-col'} overflow-hidden rounded-2xl border bg-[var(--surface)] text-left shadow-sm transition-all hover:-translate-y-0.5 hover:shadow-lg ${item.featured && !isGrid ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--accent)]'}`;
+  const metadata = !isGrid && <div className="flex flex-wrap items-center gap-2 text-[10px] font-semibold uppercase tracking-wide text-[var(--muted)]">{item.category && <span className="inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2 py-1 text-[var(--accent-strong)]"><Tag size={12} />{item.category}</span>}{item.format && <span className="inline-flex items-center gap-1"><Package size={12} />{item.format}</span>}</div>;
+  const price = (item.price || item.compareAtPrice) && <div>{item.price && <p className="truncate text-base font-bold text-[var(--text)]">{item.price}</p>}{item.compareAtPrice && <p className="mt-0.5 truncate text-xs text-[var(--muted)] line-through">{item.compareAtPrice}</p>}</div>;
+  const gridPrice = (item.price || item.compareAtPrice) && <div className="min-h-[35px]">{item.price && <p className="truncate text-sm font-bold text-[var(--text)] sm:text-base">{item.price}</p>}{item.compareAtPrice && <p className="truncate text-[10px] text-[var(--muted)] line-through sm:text-xs">{item.compareAtPrice}</p>}</div>;
+  const image = <div className={`relative min-w-0 overflow-hidden bg-[var(--surface-soft)] ${imageClass}`}>{item.imageUrl ? <img src={item.imageUrl} alt={item.imageAlt || item.title || `Produk ${index + 1}`} className={`h-full w-full transition-transform duration-300 group-hover:scale-[1.03] ${imageFitClass} ${imagePaddingClass}`} /> : <div className="flex h-full items-center justify-center text-[var(--accent-strong)]"><Package size={isCompact ? 30 : isGrid ? 30 : 42} strokeWidth={1.5} /></div>}{!isGrid && item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--surface)]/95 px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)] shadow-sm"><BadgeCheck size={13} />{item.badge}</span>}{!isGrid && item.featured && !item.badge && <span className="absolute left-3 top-3 inline-flex items-center gap-1 rounded-full bg-[var(--accent-soft)] px-2.5 py-1.5 text-[10px] font-bold uppercase tracking-wide text-[var(--accent-strong)]"><Star size={13} fill="currentColor" /> Unggulan</span>}</div>;
+  if (isGrid) return <a href={href} onClick={event => { if (!item.slug) event.preventDefault(); }} className={cardClassName}>
+    {image}
+    <div className="flex min-w-0 flex-1 flex-col p-3 sm:p-4">
+      <h2 className="line-clamp-2 min-h-[2.5rem] text-[13px] font-bold leading-snug text-[var(--text)] sm:text-base">{item.title || 'Lihat produk'}</h2>
+      <div className="mt-auto pt-3">{gridPrice || <div className="min-h-[35px]" aria-hidden="true" />}<span className="flex min-h-9 w-full items-center justify-center truncate rounded-lg bg-[var(--accent)] px-2 py-2 text-[11px] font-semibold text-white transition-colors group-hover:bg-[var(--accent-hover)] sm:min-h-10 sm:px-3 sm:text-xs">{item.buttonLabel || 'Lihat produk'}</span></div>
+    </div>
+  </a>;
   return <a href={href} onClick={event => { if (!item.slug) event.preventDefault(); }} className={cardClassName}>
     <div className={isCompact ? 'flex min-w-0 flex-1' : 'contents'}>
       {image}
@@ -1166,7 +1175,7 @@ export const PublicCatalogPageView: React.FC<PublicCatalogPageViewProps> = ({ cl
   const content = page.content;
   const productLayout = isCatalogProductLayout(content.productLayout) ? content.productLayout : 'default';
   const visibleProductCount = visibleItems.filter(item => item.itemType !== 'link').length;
-  const productGridClass = productLayout === 'grid' && visibleProductCount > 1 ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-4';
+  const productGridClass = productLayout === 'grid' && visibleProductCount > 1 ? 'grid grid-cols-2 gap-3 sm:gap-4' : 'grid gap-4';
   const heroCtaHref = safeCatalogCtaHref(content.heroCtaUrl);
   const hasHero = Boolean(content.heroEyebrow || content.heroTitle || content.heroDescription || content.heroImageUrl || content.heroCtaLabel);
 
