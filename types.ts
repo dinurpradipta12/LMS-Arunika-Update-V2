@@ -406,9 +406,15 @@ export type CatalogPageStatus = 'draft' | 'published' | 'archived';
 
 export type CatalogImageFit = 'auto' | 'cover' | 'contain' | 'fill' | 'scale-down';
 
+export type CatalogPageItemType = 'product' | 'link';
+
 export interface CatalogPageItem {
   id: string;
   landingPageId: string;
+  /** Product cards resolve to a landing page; link cards point straight to a URL. */
+  itemType?: CatalogPageItemType;
+  url?: string;
+  iconUrl?: string;
   slug?: string;
   title: string;
   description: string;

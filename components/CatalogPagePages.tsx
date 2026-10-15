@@ -29,7 +29,7 @@ import {
 } from 'lucide-react';
 import { Link, useNavigate, useParams } from 'react-router-dom';
 
-import { CatalogBenefit, CatalogContent, CatalogImageFit, CatalogPage, CatalogPageItem, CatalogPageStatus, CatalogProductLayout, CatalogSocialLink, FormThemeKey } from '../types';
+import { CatalogBenefit, CatalogContent, CatalogImageFit, CatalogPage, CatalogPageItem, CatalogPageItemType, CatalogPageStatus, CatalogProductLayout, CatalogSocialLink, FormThemeKey } from '../types';
 import { Badge, Button, Card, ConfirmModal, Input, Textarea } from './UI';
 import { FORM_THEME_OPTIONS, formThemeStyle } from './FormMakerPages';
 import { getPublicBaseUrl, setPublicMetadata } from './PublicMetadata';
@@ -56,6 +56,7 @@ const slugify = (value: string) => value
 const isTheme = (value: unknown): value is FormThemeKey => FORM_THEME_OPTIONS.some(option => option.value === value);
 const isCatalogProductLayout = (value: unknown): value is CatalogProductLayout => value === 'default' || value === 'grid' || value === 'large-image' || value === 'compact';
 const isCatalogImageFit = (value: unknown): value is CatalogImageFit => value === 'auto' || value === 'cover' || value === 'contain' || value === 'fill' || value === 'scale-down';
+const isCatalogPageItemType = (value: unknown): value is CatalogPageItemType => value === 'product' || value === 'link';
 
 const normalizeCustomDomain = (value: unknown) => {
   let raw = asText(value).trim().toLowerCase();
@@ -156,6 +157,12 @@ const safeExternalHref = (value: unknown) => {
   }
 };
 
+const safeCatalogLinkHref = (value: unknown) => {
+  const raw = asText(value).trim();
+  if (/^#/.test(raw) || /^\/(?!\/)/.test(raw)) return raw;
+  return safeExternalHref(raw);
+};
+
 const getSocialBrandLogo = (link: CatalogSocialLink) => {
   const value = `${link.label} ${link.url}`.toLowerCase();
   if (value.includes('instagram')) return instagramLogo;
@@ -219,6 +226,9 @@ const getLandingPreviewImage = (landing: LandingOption | any) => {
 const normalizeItem = (value: any, index: number): CatalogPageItem => ({
   id: asText(value?.id, `catalog-item-${Date.now()}-${index}`),
   landingPageId: asText(value?.landingPageId || value?.landing_page_id),
+  itemType: isCatalogPageItemType(value?.itemType || value?.item_type || value?.type) ? value.itemType || value.item_type || value.type : 'product',
+  url: asText(value?.url || value?.linkUrl || value?.link_url),
+  iconUrl: asText(value?.iconUrl || value?.icon_url),
   slug: asText(value?.slug),
   title: asText(value?.title),
   description: asText(value?.description),
@@ -245,7 +255,7 @@ const mapCatalogRow = (row: any): CatalogPage => ({
   customDomain: normalizeCustomDomain(row?.custom_domain || row?.customDomain),
   socialLinks: normalizeSocialLinks(row?.social_links || row?.socialLinks),
   content: normalizeCatalogContent(row?.content || row?.catalog_content),
-  items: Array.isArray(row?.items) ? row.items.map(normalizeItem).filter((item: CatalogPageItem) => item.landingPageId) : [],
+  items: Array.isArray(row?.items) ? row.items.map(normalizeItem) : [],
   createdAt: row?.created_at ?? row?.createdAt,
   updatedAt: row?.updated_at ?? row?.updatedAt
 });
@@ -289,7 +299,10 @@ const catalogWriteRow = (page: CatalogPage) => ({
   },
   items: page.items.map((item, index) => ({
     id: item.id,
+    itemType: item.itemType === 'link' ? 'link' : 'product',
     landingPageId: item.landingPageId,
+    url: item.url || '',
+    iconUrl: item.iconUrl || '',
     title: item.title || '',
     description: item.description || '',
     imageUrl: item.imageUrl || '',
@@ -576,6 +589,48 @@ const CatalogImageField: React.FC<{
   </div>;
 };
 
+const CatalogIconField: React.FC<{
+  value: string;
+  onChange: (value: string) => void;
+}> = ({ value, onChange }) => {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const handleFile = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    event.target.value = '';
+    if (!file) return;
+    if (!file.type.startsWith('image/')) {
+      setError('Pilih file gambar untuk ikon.');
+      return;
+    }
+    setIsProcessing(true);
+    setError(null);
+    try {
+      const dataUrl = await readCatalogImage(file, 640);
+      if (dataUrl.length > 700_000) throw new Error('Ukuran ikon terlalu besar. Gunakan gambar yang lebih kecil.');
+      onChange(dataUrl);
+    } catch (uploadError) {
+      setError(asText((uploadError as Error)?.message, 'Ikon gagal diproses.'));
+    }
+    setIsProcessing(false);
+  };
+
+  return <div className="space-y-3 rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3">
+    <div className="flex items-start justify-between gap-3">
+      <div><p className="text-xs font-semibold text-[var(--muted)]">Ikon / foto kartu</p><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Ikon kecil di sisi kiri kartu link. Gunakan logo atau foto persegi.</p></div>
+      {value && <button type="button" onClick={() => onChange('')} className="shrink-0 text-xs font-semibold text-[var(--danger-text)] hover:underline">Hapus</button>}
+    </div>
+    <div className="flex items-center gap-3">
+      <div className="flex h-16 w-16 shrink-0 items-center justify-center overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--accent-soft)] text-[var(--accent-strong)]">{value ? <img src={value} alt="Preview ikon kartu" className="h-full w-full object-cover" /> : <LinkIcon size={24} />}</div>
+      <div className="min-w-0 flex-1"><input ref={inputRef} type="file" accept="image/*" className="hidden" onChange={handleFile} /><Button type="button" variant="secondary" icon={Upload} onClick={() => inputRef.current?.click()} isLoading={isProcessing}>Upload ikon</Button><p className="mt-2 text-[11px] leading-relaxed text-[var(--muted)]">Maksimal sekitar 700 KB setelah diproses.</p></div>
+    </div>
+    {error && <p className="text-xs text-[var(--danger-text)]">{error}</p>}
+    <Input label="atau URL ikon" icon={LinkIcon} value={value.startsWith('data:') ? '' : value} onChange={event => onChange(event.target.value)} placeholder="https://.../icon.png" />
+  </div>;
+};
+
 const CatalogSocialLinksEditor: React.FC<{
   links: CatalogSocialLink[];
   onChange: (links: CatalogSocialLink[]) => void;
@@ -662,23 +717,30 @@ const CatalogItemEditor: React.FC<{
   onRemove: () => void;
 }> = ({ item, index, itemCount, options, onChange, onMove, onRemove }) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  const isLinkCard = item.itemType === 'link';
   const selectedLanding = options.find(option => option.id === item.landingPageId);
-  const summary = item.title || selectedLanding?.title || 'Pilih landing page';
+  const summary = item.title || (isLinkCard ? item.url : selectedLanding?.title) || (isLinkCard ? 'Link baru' : 'Pilih landing page');
+  const itemLabel = isLinkCard ? 'Kartu link' : 'Produk';
 
   return <div className="rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-4">
     <div className="flex items-start gap-3">
-      <span className="mt-2 text-[var(--muted)]" title="Urutan produk"><GripVertical size={18} /></span>
+      <span className="mt-2 text-[var(--muted)]" title="Urutan kartu"><GripVertical size={18} /></span>
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-start justify-between gap-3">
-          <div className="min-w-0"><p className="text-sm font-bold">Produk {index + 1}</p>{!isExpanded && <p className="mt-1 truncate text-xs text-[var(--muted)]">{summary}</p>}</div>
+          <div className="min-w-0"><p className="text-sm font-bold">{itemLabel} {index + 1}</p>{!isExpanded && <p className="mt-1 truncate text-xs text-[var(--muted)]">{summary}</p>}</div>
           <div className="flex items-center gap-1">
-            <button type="button" onClick={() => setIsExpanded(current => !current)} aria-expanded={isExpanded} aria-label={isExpanded ? 'Lipat detail produk' : 'Buka detail produk'} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--surface)]">{isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}{isExpanded ? 'Lipat' : 'Edit'}</button>
-            <button type="button" onClick={() => onMove(-1)} disabled={index === 0} aria-label="Naikkan produk" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowUp size={15} /></button>
-            <button type="button" onClick={() => onMove(1)} disabled={index === itemCount - 1} aria-label="Turunkan produk" className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowDown size={15} /></button>
-            <button type="button" onClick={onRemove} aria-label="Hapus produk dari katalog" className="rounded-lg p-2 text-[var(--danger-text)] hover:bg-[var(--surface)]"><Trash2 size={15} /></button>
+            <button type="button" onClick={() => setIsExpanded(current => !current)} aria-expanded={isExpanded} aria-label={isExpanded ? `Lipat detail ${itemLabel.toLowerCase()}` : `Buka detail ${itemLabel.toLowerCase()}`} className="inline-flex items-center gap-1 rounded-lg px-2.5 py-2 text-xs font-semibold text-[var(--accent-strong)] hover:bg-[var(--surface)]">{isExpanded ? <ChevronUp size={15} /> : <ChevronDown size={15} />}{isExpanded ? 'Lipat' : 'Edit'}</button>
+            <button type="button" onClick={() => onMove(-1)} disabled={index === 0} aria-label={`Naikkan ${itemLabel.toLowerCase()}`} className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowUp size={15} /></button>
+            <button type="button" onClick={() => onMove(1)} disabled={index === itemCount - 1} aria-label={`Turunkan ${itemLabel.toLowerCase()}`} className="rounded-lg p-2 text-[var(--muted)] hover:bg-[var(--surface)] disabled:opacity-30"><ArrowDown size={15} /></button>
+            <button type="button" onClick={onRemove} aria-label={`Hapus ${itemLabel.toLowerCase()} dari katalog`} className="rounded-lg p-2 text-[var(--danger-text)] hover:bg-[var(--surface)]"><Trash2 size={15} /></button>
           </div>
         </div>
-        {isExpanded && <div className="mt-3 space-y-4">
+        {isExpanded && isLinkCard ? <div className="mt-3 space-y-4">
+          <div className="rounded-xl border border-[var(--accent)] bg-[var(--accent-soft)]/50 p-3 text-xs leading-relaxed text-[var(--accent-strong)]">Kartu ini tidak membutuhkan landing page atau harga. Di halaman publik, hanya ikon, judul, dan panah menuju link yang akan tampil.</div>
+          <Input label="Judul link" value={item.title} onChange={event => onChange({ title: event.target.value })} placeholder="Gabung Komunitas" />
+          <Input label="URL tujuan" icon={LinkIcon} value={item.url || ''} onChange={event => onChange({ url: event.target.value })} placeholder="https://contoh.com atau https://wa.me/..." />
+          <CatalogIconField value={item.iconUrl || ''} onChange={iconUrl => onChange({ iconUrl })} />
+        </div> : isExpanded && <div className="mt-3 space-y-4">
           <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Landing page tujuan</span><select value={item.landingPageId} onChange={event => onChange({ landingPageId: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-3 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page</option>{options.map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select></label>
           <div className="grid gap-3 sm:grid-cols-2"><Input label="Judul produk" value={item.title} onChange={event => onChange({ title: event.target.value })} placeholder="Mengikuti judul landing page" /><Input label="Label tombol" value={item.buttonLabel} onChange={event => onChange({ buttonLabel: event.target.value })} placeholder="Lihat produk" /></div>
           <Textarea label="Deskripsi singkat" value={item.description} onChange={event => onChange({ description: event.target.value })} placeholder="Mengikuti deskripsi landing page" className="min-h-[88px]" />
@@ -868,7 +930,7 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
 
   useEffect(() => { void fetchData(); }, [fetchData]);
 
-  const selectedIds = useMemo(() => new Set((page?.items || []).map(item => item.landingPageId)), [page?.items]);
+  const selectedIds = useMemo(() => new Set((page?.items || []).filter(item => item.itemType !== 'link').map(item => item.landingPageId).filter(Boolean)), [page?.items]);
   const addItem = () => {
     if (!page || !selectedLandingId) return;
     if (selectedIds.has(selectedLandingId)) {
@@ -881,6 +943,7 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
     const item: CatalogPageItem = {
       id: `catalog-item-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
       landingPageId: landing.id,
+      itemType: 'product',
       title: '',
       description: '',
       imageUrl: previewImage.length <= 700000 ? previewImage : '',
@@ -896,6 +959,28 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
     };
     setPage(current => current ? { ...current, items: [...current.items, item] } : current);
     setSelectedLandingId('');
+  };
+
+  const addLinkItem = () => {
+    if (!page) return;
+    const item: CatalogPageItem = {
+      id: `catalog-link-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+      landingPageId: '',
+      itemType: 'link',
+      url: '',
+      iconUrl: '',
+      title: '',
+      description: '',
+      imageUrl: '',
+      buttonLabel: '',
+      category: '',
+      format: '',
+      badge: '',
+      price: '',
+      compareAtPrice: '',
+      featured: false
+    };
+    setPage(current => current ? { ...current, items: [...current.items, item] } : current);
   };
 
   const updateItem = (itemId: string, patch: Partial<CatalogPageItem>) => setPage(current => current ? { ...current, items: current.items.map(item => item.id === itemId ? { ...item, ...patch } : item) } : current);
@@ -920,13 +1005,18 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
       setNotice({ tone: 'error', message: 'Format domain custom belum valid. Gunakan contoh promo.domainanda.com.' });
       return;
     }
+    const invalidLink = page.items.find(item => item.itemType === 'link' && (!item.title.trim() || !safeCatalogLinkHref(item.url)));
+    if (invalidLink) {
+      setNotice({ tone: 'error', message: 'Lengkapi judul dan URL yang valid pada setiap kartu link sebelum menyimpan.' });
+      return;
+    }
     const normalized = {
       ...page,
       slug: slugify(page.slug || page.title),
       customDomain: normalizeCustomDomain(page.customDomain),
       socialLinks: normalizeSocialLinks(page.socialLinks),
       content: { ...page.content, benefits: normalizeCatalogBenefits(page.content.benefits) },
-      items: page.items.filter(item => item.landingPageId)
+      items: page.items.filter(item => item.itemType === 'link' || item.landingPageId)
     };
     setIsSaving(true);
     const { data, error } = await client.from('catalog_pages').update(catalogWriteRow(normalized)).eq('id', page.id).select('*').single();
@@ -948,6 +1038,10 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
   return <main className="mx-auto w-full max-w-[1440px] space-y-6 p-4 pb-28 md:p-8">
     <div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/catalog-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {CATALOG_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold tracking-tight">Editor Katalog</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{statusLabel(page.status)}</Badge></div><p className="mt-2 max-w-2xl text-sm leading-relaxed text-[var(--muted)]">Bangun etalase produk digital dengan hero, kategori, harga promo, benefit, dan CTA yang bisa Anda atur sendiri.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createCatalogShareLink(page.slug, undefined, page.customDomain), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan katalog</Button></div></div>
     <NoticeBanner notice={notice} />
+    <Card className="flex flex-col justify-between gap-4 border-[var(--accent)]/30 bg-[var(--accent-soft)]/35 p-4 sm:flex-row sm:items-center">
+      <div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">Kartu link ringkas</p><h2 className="mt-1 text-base font-bold">Tambahkan link tanpa landing page</h2><p className="mt-1 max-w-2xl text-xs leading-relaxed text-[var(--muted)]">Seperti tautan mandiri pada profil Lynk: kartu pendek berisi ikon/foto custom, judul, dan satu URL tujuan.</p></div>
+      <Button type="button" variant="secondary" icon={LinkIcon} onClick={addLinkItem} className="shrink-0">Tambah kartu link</Button>
+    </Card>
     <CatalogMobilePreview page={page} />
     <div className="grid gap-5 xl:grid-cols-[minmax(0,1fr)_390px]">
       <section className="space-y-5"><Card className="space-y-5"><div><p className="text-xs font-semibold uppercase tracking-[0.16em] text-[var(--muted)]">Produk digital</p><h2 className="mt-2 text-xl font-bold">Pilih landing page</h2><p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">Setiap produk diarahkan ke landing page publik yang Anda pilih. Lengkapi kategori, harga, badge, dan visual agar terasa seperti katalog marketplace.</p></div><div className="flex flex-col gap-3 sm:flex-row"><select value={selectedLandingId} onChange={event => setSelectedLandingId(event.target.value)} className="min-h-11 min-w-0 flex-1 rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]"><option value="">Pilih landing page untuk ditambahkan</option>{landingOptions.filter(option => !selectedIds.has(option.id)).map(option => <option key={option.id} value={option.id}>{option.title} · /landing/{option.slug}</option>)}</select><Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={!selectedLandingId}>Tambah produk</Button></div>{!landingOptions.length && <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] p-4 text-sm leading-relaxed text-[var(--muted)]">Belum ada landing page Publik. Publikasikan minimal satu landing page terlebih dahulu dari menu Landing Page.</div>}{page.items.length ? <div className="space-y-3">{page.items.map((item, index) => <CatalogItemEditor key={item.id} item={item} index={index} itemCount={page.items.length} options={landingOptions} onChange={patch => updateItem(item.id, patch)} onMove={direction => moveItem(index, direction)} onRemove={() => removeItem(item.id)} />)}</div> : <div className="rounded-xl border border-dashed border-[var(--border-strong)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk di katalog. Pilih landing page di atas untuk mulai menambahkan.</div>}</Card></section>
@@ -956,13 +1050,24 @@ export const CatalogPageEditor: React.FC<{ client: any }> = ({ client }) => {
   </main>;
 };
 
-const safeCatalogCtaHref = (value: unknown) => {
-  const raw = asText(value).trim();
-  if (/^#/.test(raw) || /^\/(?!\/)/.test(raw)) return raw;
-  return safeExternalHref(raw);
+const safeCatalogCtaHref = safeCatalogLinkHref;
+
+const CatalogPublicLinkCard: React.FC<{ item: CatalogPageItem; layout: CatalogProductLayout }> = ({ item, layout }) => {
+  const href = safeCatalogLinkHref(item.url);
+  const opensNewTab = /^https?:/i.test(href);
+  const cardClassName = `group flex min-h-[72px] w-full max-w-xl items-center gap-3 self-center justify-self-center rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left shadow-sm transition-all hover:-translate-y-0.5 hover:border-[var(--accent)] hover:shadow-md ${layout === 'grid' ? 'sm:col-span-2' : ''}`;
+  const content = <>
+    <span className="flex h-11 w-11 shrink-0 items-center justify-center overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--accent-soft)] text-[var(--accent-strong)]">{item.iconUrl ? <img src={item.iconUrl} alt="" aria-hidden="true" className="h-full w-full object-cover" /> : <LinkIcon size={19} strokeWidth={2} />}</span>
+    <span className="min-w-0 flex-1"><span className="block truncate text-sm font-bold text-[var(--text)]">{item.title || 'Buka link'}</span><span className="mt-0.5 block truncate text-[11px] text-[var(--muted)]">{href || 'Link belum tersedia'}</span></span>
+    <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-[var(--surface-soft)] text-[var(--accent-strong)] transition-colors group-hover:bg-[var(--accent)] group-hover:text-white"><ArrowRight size={17} /></span>
+  </>;
+
+  if (!href) return <div aria-disabled="true" className={`${cardClassName} cursor-not-allowed opacity-60`}>{content}</div>;
+  return <a href={href} target={opensNewTab ? '_blank' : undefined} rel={opensNewTab ? 'noreferrer' : undefined} className={cardClassName} aria-label={`Buka ${item.title || 'link'}`}>{content}</a>;
 };
 
 const CatalogPublicCard: React.FC<{ item: CatalogPageItem; index: number; layout: CatalogProductLayout }> = ({ item, index, layout }) => {
+  if (item.itemType === 'link') return <CatalogPublicLinkCard item={item} layout={layout} />;
   const href = item.slug ? landingHref(item.slug) : '#catalog-products';
   const isCompact = layout === 'compact';
   const selectedImageFit = isCatalogImageFit(item.imageFit) ? item.imageFit : 'auto';
@@ -1049,8 +1154,8 @@ export const PublicCatalogPageView: React.FC<PublicCatalogPageViewProps> = ({ cl
     });
   }, [embedded, page]);
 
-  const categories = useMemo(() => page ? Array.from(new Set(page.items.map(item => asText(item.category).trim()).filter(Boolean))) : [], [page]);
-  const visibleItems = useMemo(() => page ? page.items.filter(item => activeCategory === 'all' || asText(item.category).trim() === activeCategory) : [], [activeCategory, page]);
+  const categories = useMemo(() => page ? Array.from(new Set(page.items.filter(item => item.itemType !== 'link').map(item => asText(item.category).trim()).filter(Boolean))) : [], [page]);
+  const visibleItems = useMemo(() => page ? page.items.filter(item => item.itemType === 'link' || activeCategory === 'all' || asText(item.category).trim() === activeCategory) : [], [activeCategory, page]);
   useEffect(() => {
     if (activeCategory !== 'all' && !categories.includes(activeCategory)) setActiveCategory('all');
   }, [activeCategory, categories]);
@@ -1060,7 +1165,8 @@ export const PublicCatalogPageView: React.FC<PublicCatalogPageViewProps> = ({ cl
 
   const content = page.content;
   const productLayout = isCatalogProductLayout(content.productLayout) ? content.productLayout : 'default';
-  const productGridClass = productLayout === 'grid' && visibleItems.length > 1 ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-4';
+  const visibleProductCount = visibleItems.filter(item => item.itemType !== 'link').length;
+  const productGridClass = productLayout === 'grid' && visibleProductCount > 1 ? 'grid gap-4 sm:grid-cols-2' : 'grid gap-4';
   const heroCtaHref = safeCatalogCtaHref(content.heroCtaUrl);
   const hasHero = Boolean(content.heroEyebrow || content.heroTitle || content.heroDescription || content.heroImageUrl || content.heroCtaLabel);
 
