@@ -20,7 +20,6 @@ import {
   Package,
   Plus,
   Save,
-  Search,
   Sparkles,
   Star,
   Tag,
@@ -1290,8 +1289,6 @@ export const PublicCatalogPageView: React.FC<PublicCatalogPageViewProps> = ({ cl
   const [loadedPage, setLoadedPage] = useState<CatalogPage | null>(null);
   const [isLoading, setIsLoading] = useState(!pageOverride);
   const [loadError, setLoadError] = useState<string | null>(null);
-  const [activeCategory, setActiveCategory] = useState('all');
-  const [searchQuery, setSearchQuery] = useState('');
   const trackedCatalogId = useRef<string | null>(null);
 
   const fetchPage = useCallback(async () => {
@@ -1338,30 +1335,13 @@ export const PublicCatalogPageView: React.FC<PublicCatalogPageViewProps> = ({ cl
   }, [client, embedded, page?.id, pageOverride]);
 
   const publicItems = useMemo(() => page ? page.items.filter(item => item.isVisible !== false) : [], [page]);
-  const categoryOptions = useMemo(() => {
-    if (!page?.content.sections.length) return [];
-    const options = page.content.sections.filter(section => publicItems.some(item => item.sectionId === section.id)).map(section => ({ id: section.id, title: section.title }));
-    if (publicItems.some(item => !item.sectionId || !page.content.sections.some(section => section.id === item.sectionId))) options.push({ id: 'unassigned', title: 'Lainnya' });
-    return options;
-  }, [page, publicItems]);
-  const visibleItems = useMemo(() => {
-    const query = searchQuery.trim().toLocaleLowerCase();
-    return publicItems.filter(item => {
-      const sectionId = page?.content.sections.some(section => section.id === item.sectionId) ? item.sectionId : 'unassigned';
-      if (activeCategory !== 'all' && sectionId !== activeCategory) return false;
-      return !query || [item.title, item.description, item.category, item.format].some(value => asText(value).toLocaleLowerCase().includes(query));
-    });
-  }, [activeCategory, page, publicItems, searchQuery]);
   const sectionGroups = useMemo(() => {
-    if (!page?.content.sections.length) return [{ id: 'all', title: '', description: '', items: visibleItems }].filter(group => group.items.length);
-    const groups = page.content.sections.map(section => ({ ...section, items: visibleItems.filter(item => item.sectionId === section.id) })).filter(group => group.items.length);
-    const unassigned = visibleItems.filter(item => !item.sectionId || !page.content.sections.some(section => section.id === item.sectionId));
+    if (!page?.content.sections.length) return [{ id: 'all', title: '', description: '', items: publicItems }].filter(group => group.items.length);
+    const groups = page.content.sections.map(section => ({ ...section, items: publicItems.filter(item => item.sectionId === section.id) })).filter(group => group.items.length);
+    const unassigned = publicItems.filter(item => !item.sectionId || !page.content.sections.some(section => section.id === item.sectionId));
     if (unassigned.length) groups.push({ id: 'unassigned', title: 'Lainnya', description: '', items: unassigned });
     return groups;
-  }, [page, visibleItems]);
-  useEffect(() => {
-    if (activeCategory !== 'all' && !categoryOptions.some(option => option.id === activeCategory)) setActiveCategory('all');
-  }, [activeCategory, categoryOptions]);
+  }, [page, publicItems]);
 
   const handleItemOpen = useCallback((item: CatalogPageItem) => {
     if (embedded || !page?.id) return;
@@ -1381,11 +1361,7 @@ export const PublicCatalogPageView: React.FC<PublicCatalogPageViewProps> = ({ cl
     {hasHero && <section className="relative mt-8 w-full overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-sm"><div className="pointer-events-none absolute -right-24 -top-24 h-64 w-64 rounded-full bg-[var(--accent-soft)] opacity-70" /><div className="relative grid items-center gap-6 p-6 sm:p-10 md:grid-cols-[minmax(0,1fr)_minmax(220px,0.78fr)]"><div className="min-w-0"><p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent-strong)]">{content.heroEyebrow || 'PRODUK DIGITAL'}</p><h2 className="mt-3 max-w-2xl text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{content.heroTitle || page.title}</h2>{content.heroDescription && <p className="mt-4 max-w-xl text-sm leading-relaxed text-[var(--muted)] sm:text-base">{content.heroDescription}</p>}{content.heroCtaLabel && heroCtaHref && <a href={heroCtaHref} target={heroCtaHref.startsWith('http') ? '_blank' : undefined} rel={heroCtaHref.startsWith('http') ? 'noreferrer' : undefined} className="mt-6 inline-flex min-h-11 items-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-[var(--accent-hover)]">{content.heroCtaLabel}<ArrowRight size={16} /></a>}</div><div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)]">{content.heroImageUrl ? <img src={content.heroImageUrl} alt={content.heroImageAlt || 'Visual katalog produk'} className="h-full w-full object-cover" /> : <div className="flex h-full flex-col items-center justify-center gap-2 text-center text-[var(--muted)]"><Package size={42} strokeWidth={1.5} className="text-[var(--accent-strong)]" /><span className="text-xs font-semibold">Koleksi produk digital</span></div>}</div></div></section>}
     {content.benefits.length > 0 && <section className="mt-10 w-full"><div className="mb-4 flex items-end justify-between gap-4"><div><p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--muted)]">Keunggulan</p><h2 className="mt-2 text-2xl font-bold tracking-tight">{content.benefitsHeading || 'Belanja digital dengan lebih mudah'}</h2></div><Badge color="var(--surface)"><BadgeCheck size={13} className="mr-1.5" /> Terpilih</Badge></div><div className="grid gap-3 md:grid-cols-3">{content.benefits.map((benefit, index) => <article key={benefit.id || `benefit-${index}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-4 shadow-sm"><span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-strong)]">{String(index + 1).padStart(2, '0')}</span><h3 className="mt-4 text-sm font-bold">{benefit.title || 'Benefit produk'}</h3>{benefit.description && <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{benefit.description}</p>}</article>)}</div></section>}
     <section id="catalog-products" className="mt-10 min-w-0 w-full">
-      <div className="mb-5 flex flex-col gap-3 sm:flex-row">
-        <label className="relative min-w-0 flex-1"><span className="sr-only">Cari produk atau link</span><Search size={17} className="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 text-[var(--muted)]" /><input type="search" value={searchQuery} onChange={event => setSearchQuery(event.target.value)} placeholder="Cari produk atau link..." className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] py-2.5 pl-10 pr-4 text-sm text-[var(--text)] outline-none focus:border-[var(--accent)]" /></label>
-        {categoryOptions.length > 1 && <label className="flex min-w-0 items-center gap-2"><span className="sr-only">Filter bagian katalog</span><select value={activeCategory} onChange={event => setActiveCategory(event.target.value)} className="min-h-11 w-full rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2.5 text-sm font-semibold text-[var(--text)] outline-none focus:border-[var(--accent)] sm:w-auto"><option value="all">Semua bagian</option>{categoryOptions.map(option => <option key={option.id} value={option.id}>{option.title}</option>)}</select></label>}
-      </div>
-      {sectionGroups.length ? <div className="space-y-9">{sectionGroups.map(group => <section key={group.id} aria-label={group.title || 'Produk katalog'}>{group.title && <div className="mb-4"><h2 className="text-xl font-bold text-[var(--text)]">{group.title}</h2>{group.description && <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">{group.description}</p>}</div>}<div className={productGridClass} data-layout={productLayout}>{group.items.map((item, index) => <CatalogPublicCard key={item.id || `${item.landingPageId}-${index}`} item={item} index={index} layout={productLayout} onOpen={handleItemOpen} />)}</div></section>)}</div> : <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">{publicItems.length ? 'Tidak ada kartu yang cocok dengan pencarian Anda.' : 'Belum ada produk atau link yang ditampilkan.'}</div>}
+      {sectionGroups.length ? <div className="space-y-9">{sectionGroups.map(group => <section key={group.id} aria-label={group.title || 'Produk katalog'}>{group.title && <div className="mb-4"><h2 className="text-xl font-bold text-[var(--text)]">{group.title}</h2>{group.description && <p className="mt-1 text-sm leading-relaxed text-[var(--muted)]">{group.description}</p>}</div>}<div className={productGridClass} data-layout={productLayout}>{group.items.map((item, index) => <CatalogPublicCard key={item.id || `${item.landingPageId}-${index}`} item={item} index={index} layout={productLayout} onOpen={handleItemOpen} />)}</div></section>)}</div> : <div className="rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-8 text-center text-sm text-[var(--muted)]">Belum ada produk atau link yang ditampilkan.</div>}
     </section>
     <footer className="mt-12 flex items-center gap-2 text-xs text-[var(--muted)]"><span className="h-1.5 w-1.5 rounded-full bg-[var(--accent)]" aria-hidden="true" /> Made with @arunika 2026</footer></main></div>;
 };
