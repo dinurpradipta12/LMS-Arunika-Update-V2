@@ -6,7 +6,6 @@ import {
   BookOpen,
   Check,
   CheckCircle2,
-  ChevronRight,
   ClipboardCheck,
   Copy,
   Download,
@@ -15,21 +14,16 @@ import {
   FileText,
   GraduationCap,
   HelpCircle,
-  Layout,
-  LayoutGrid,
   Link as LinkIcon,
   Loader2,
   LockKeyhole,
   Mail,
-  MessageCircle,
   Plus,
   RefreshCw,
   Save,
   Share2,
-  Scissors,
   Trash2,
   UserRound,
-  Users,
   Video,
   X,
   XCircle
@@ -52,7 +46,7 @@ import {
 import { Badge, Button, Card, Input, Textarea } from './UI';
 import { setPublicMetadata } from './PublicMetadata';
 import logoUtama from '../src/logo-utama.png';
-import { CHAT_CENTER_SPACE_LABEL } from './ChatCenterPages';
+import SpacesDashboardPage from './SpacesDashboardPage';
 
 const DEFAULT_QUIZ_TITLE = 'Post-Test Kelas';
 export const RECORDED_CLASS_SPACE_LABEL = 'Intensive & Mini Class Series';
@@ -1372,178 +1366,7 @@ const RecordingCoverEditor: React.FC<{
   );
 };
 
-export const SpacesDashboard: React.FC<{ courses: Course[] }> = ({ courses }) => {
-  const productCount = courses.filter(course => (course.spaceType || 'product_tutorial') === 'product_tutorial').length;
-  const classCount = courses.filter(course => course.spaceType === 'recorded_class').length;
-
-  return (
-    <div className="mx-auto w-full max-w-[1500px] space-y-6 p-4 md:p-6 xl:p-8">
-      <div>
-        <Badge>Learning Spaces</Badge>
-        <h1 className="text-3xl font-bold mt-4">Pilih ruang yang ingin dikelola</h1>
-        <p className="text-sm text-[var(--muted)] mt-2 max-w-2xl leading-relaxed">
-          Tutorial produk dan {RECORDED_CLASS_SPACE_LABEL} memakai alur publik yang berbeda, sehingga materi produk tetap rapi sementara webinar dapat memiliki post-test dan hasil peserta.
-        </p>
-      </div>
-
-      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
-        <Link to="/admin/products" className="group block">
-          <Card className="h-full p-4 group-hover:border-[var(--border-strong)] md:p-5">
-            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-              <BookOpen size={19} />
-            </div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 01</p>
-                <h2 className="mt-1.5 text-lg font-bold">Tutorial Produk Digital</h2>
-              </div>
-              <Badge>{productCount} Kursus</Badge>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Materi tutorial produk, video panduan, teks, dan asset unduhan seperti yang sudah digunakan saat ini.</p>
-            <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent-strong)]">Buka ruang <ChevronRight size={15} /></span>
-          </Card>
-        </Link>
-
-        <Link to="/admin/classes" className="group block">
-          <Card className="h-full p-4 group-hover:border-[var(--border-strong)] md:p-5">
-            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--success-soft)] text-[var(--success-text)]">
-              <GraduationCap size={19} />
-            </div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 02</p>
-                <h2 className="mt-1.5 text-lg font-bold">{RECORDED_CLASS_SPACE_LABEL}</h2>
-              </div>
-              <Badge color="var(--success-soft)">{classCount} Kelas</Badge>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Recording webinar, materi pendukung, asset kelas, post-test otomatis, dan rekap hasil peserta.</p>
-            <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--success-text)]">Buka ruang <ChevronRight size={15} /></span>
-          </Card>
-        </Link>
-
-        <Link to="/admin/forms" className="group block">
-          <Card className="h-full p-4 group-hover:border-[var(--border-strong)] md:p-5">
-            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-              <ClipboardCheck size={19} />
-            </div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 03</p>
-                <h2 className="mt-1.5 text-lg font-bold">Form Maker</h2>
-              </div>
-              <Badge>Event</Badge>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Bangun form pendaftaran, kumpulkan responder, dan kelola status konfirmasi atau pembayaran.</p>
-            <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent-strong)]">Buka ruang <ChevronRight size={15} /></span>
-          </Card>
-        </Link>
-
-        <Link to="/admin/qna" className="group block">
-          <Card className="h-full p-4 group-hover:border-[var(--border-strong)] md:p-5">
-            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--surface-soft)] text-[var(--accent-strong)]">
-              <HelpCircle size={19} />
-            </div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 04</p>
-                <h2 className="mt-1.5 text-lg font-bold">Q&amp;A Audience</h2>
-              </div>
-              <Badge>Realtime</Badge>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Kumpulkan pertanyaan audience, moderasi sebelum tampil, voting, dan layar presenter untuk webinar.</p>
-            <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent-strong)]">Buka ruang <ChevronRight size={15} /></span>
-          </Card>
-        </Link>
-
-        <Link to="/admin/landing-pages" className="group block">
-          <Card className="h-full p-4 group-hover:border-[var(--border-strong)] md:p-5">
-            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-              <Layout size={19} />
-            </div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 05</p>
-                <h2 className="mt-1.5 text-lg font-bold">Landing Page</h2>
-              </div>
-              <Badge>Promosi</Badge>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Susun halaman promosi produk dengan blok drag-and-drop, CTA, dan informasi pembayaran QR Code.</p>
-            <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent-strong)]">Buka ruang <ChevronRight size={15} /></span>
-          </Card>
-        </Link>
-
-        <Link to="/admin/catalog-pages" className="group block">
-          <Card className="h-full p-4 group-hover:border-[var(--border-strong)] md:p-5">
-            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--success-soft)] text-[var(--success-text)]">
-              <LayoutGrid size={19} />
-            </div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 06</p>
-                <h2 className="mt-1.5 text-lg font-bold">Katalog Produk</h2>
-              </div>
-              <Badge color="var(--success-soft)">Link-in-bio</Badge>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Satukan beberapa landing page dalam satu katalog produk yang mudah dibagikan.</p>
-            <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--success-text)]">Buka ruang <ChevronRight size={15} /></span>
-          </Card>
-        </Link>
-
-        <Link to="/admin/video-clipper" className="group block">
-          <Card className="h-full p-4 group-hover:border-[var(--border-strong)] md:p-5">
-            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-              <Scissors size={19} />
-            </div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 07</p>
-                <h2 className="mt-1.5 text-lg font-bold">Video Clipper</h2>
-              </div>
-              <Badge>Tools</Badge>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Potong video yang Anda miliki menjadi preview pendek dan download hasilnya untuk Landing Page.</p>
-            <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent-strong)]">Buka tools <ChevronRight size={15} /></span>
-          </Card>
-        </Link>
-
-        <Link to="/admin/one-to-one" className="group block">
-          <Card className="h-full p-4 group-hover:border-[var(--border-strong)] md:p-5">
-            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--success-soft)] text-[var(--success-text)]">
-              <Users size={19} />
-            </div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 08</p>
-                <h2 className="mt-1.5 text-lg font-bold">1:1 Mentorship</h2>
-              </div>
-              <Badge color="var(--success-soft)">Privat</Badge>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Buat dashboard personal per mentee untuk recording, kalender, task, dan catatan mentor dengan link tanpa login.</p>
-            <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--success-text)]">Buka ruang <ChevronRight size={15} /></span>
-          </Card>
-        </Link>
-
-        <Link to="/admin/chat-center" className="group block">
-          <Card className="h-full p-4 group-hover:border-[var(--border-strong)] md:p-5">
-            <div className="mb-4 flex h-10 w-10 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-[var(--accent-strong)]">
-              <MessageCircle size={19} />
-            </div>
-            <div className="flex items-start justify-between gap-4">
-              <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Space 09</p>
-                <h2 className="mt-1.5 text-lg font-bold">{CHAT_CENTER_SPACE_LABEL}</h2>
-              </div>
-              <Badge>Privat</Badge>
-            </div>
-            <p className="mt-3 text-xs leading-relaxed text-[var(--muted)]">Kelola percakapan 1:1 melalui link publik yang aman, dengan durasi akses yang bisa diatur.</p>
-            <span className="mt-5 inline-flex items-center gap-2 text-xs font-semibold text-[var(--accent-strong)]">Buka ruang <ChevronRight size={15} /></span>
-          </Card>
-        </Link>
-      </div>
-    </div>
-  );
-};
-
+export const SpacesDashboard: React.FC<{ courses: Course[] }> = ({ courses }) => <SpacesDashboardPage courses={courses} />;
 export const RecordedClassesPage: React.FC<{
   courses: Course[];
   onCreateCourse: (course: Course) => Promise<void>;
