@@ -33,8 +33,10 @@ import {
   Plus,
   Quote,
   Save,
+  ShoppingBag,
   Sparkles,
   Star,
+  Tag,
   Trash2,
   Upload,
   UserRound,
@@ -197,6 +199,7 @@ const LANDING_BLOCK_OPTIONS: Array<{
   { value: 'image', label: 'Gambar', description: 'Galeri foto atau banner produk', icon: ImagePlus },
   { value: 'video', label: 'Video', description: 'Video demo atau testimoni', icon: Video },
   { value: 'classes', label: 'Kelas', description: 'Daftar kelas, pemateri & jadwal', icon: BookOpen },
+  { value: 'products', label: 'Katalog Produk', description: 'Daftar produk, detail, tanggal & CTA', icon: ShoppingBag },
   { value: 'features', label: 'Manfaat', description: 'Keunggulan dalam grid', icon: Star },
   { value: 'audience', label: 'Siapa yang Cocok', description: 'Siapa yang cocok mengikuti kelas', icon: Users },
   { value: 'topics', label: 'Topik bahasan', description: 'Kategori dengan daftar poin', icon: List },
@@ -226,6 +229,17 @@ type LandingClassItem = {
   date: string;
   imageUrl: string;
   imageAlt: string;
+};
+type LandingProductItem = {
+  id: string;
+  title: string;
+  detail: string;
+  description: string;
+  date: string;
+  imageUrl: string;
+  imageAlt: string;
+  buttonLabel: string;
+  buttonUrl: string;
 };
 type LandingVideoLayout = 'grid' | 'slider' | 'row';
 type LandingVideoSourceType = 'youtube' | 'upload';
@@ -508,6 +522,24 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
         date: '17 November 2026 · 19.00 WIB',
         imageUrl: '',
         imageAlt: 'Foto kelas'
+      }]
+    },
+    products: {
+      eyebrow: 'Katalog Produk',
+      heading: 'Pilihan Produk & Penawaran',
+      intro: '',
+      layout: 'stack',
+      overflowLayout: 'gallery',
+      items: [{
+        id: 'landing-product-default-1',
+        title: 'Nama Produk Pertama',
+        detail: 'Rp 150.000 · Akses selamanya',
+        description: 'Jelaskan manfaat utama dan apa saja yang didapatkan dari produk ini.',
+        date: '',
+        imageUrl: '',
+        imageAlt: 'Foto produk',
+        buttonLabel: 'Lihat Produk',
+        buttonUrl: ''
       }]
     },
     cta: {
@@ -816,6 +848,33 @@ const normalizeClassItems = (value: unknown, fallback: LandingClassItem[] = []):
   }));
 };
 
+const createProductItem = (index = 0): LandingProductItem => ({
+  id: `landing-product-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+  title: `Produk ${index + 1}`,
+  detail: 'Rp 150.000',
+  description: 'Jelaskan keunggulan dan isi produk ini secara singkat.',
+  date: '',
+  imageUrl: '',
+  imageAlt: 'Foto produk',
+  buttonLabel: 'Lihat Produk',
+  buttonUrl: ''
+});
+
+const normalizeProductItems = (value: unknown, fallback: LandingProductItem[] = []): LandingProductItem[] => {
+  if (!Array.isArray(value)) return fallback;
+  return value.slice(0, 20).map((item, index) => ({
+    id: asText(item?.id, `landing-product-${index}`),
+    title: asText(item?.title || item?.name),
+    detail: asText(item?.detail || item?.productDetail || item?.product_detail || item?.price),
+    description: asText(item?.description || item?.body),
+    date: asText(item?.date || item?.scheduleDate || item?.schedule_date),
+    imageUrl: asText(item?.imageUrl || item?.image_url),
+    imageAlt: asText(item?.imageAlt || item?.image_alt, 'Foto produk'),
+    buttonLabel: asText(item?.buttonLabel || item?.button_label, 'Lihat Produk'),
+    buttonUrl: asText(item?.buttonUrl || item?.button_url || item?.url)
+  }));
+};
+
 const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   const type = LANDING_BLOCK_TYPES.has(value?.type) ? value.type as LandingBlockType : 'text';
   const fallback = createLandingBlock(type, index);
@@ -864,6 +923,11 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   if (type === 'bonus') data.items = normalizeBonusItems(rawData.items, rawData);
   if (type === 'classes') {
     data.items = normalizeClassItems(rawData.items, fallback.data.items);
+    data.layout = normalizeClassLayout(rawData.layout);
+    data.overflowLayout = normalizeClassOverflowLayout(rawData.overflowLayout);
+  }
+  if (type === 'products') {
+    data.items = normalizeProductItems(rawData.items, fallback.data.items);
     data.layout = normalizeClassLayout(rawData.layout);
     data.overflowLayout = normalizeClassOverflowLayout(rawData.overflowLayout);
   }
@@ -925,9 +989,9 @@ const getLandingPreviewImage = (page: LandingPage) => {
       const firstImage = block.data.images.find((item: any) => asText(item?.url).trim());
       if (firstImage) return asText(firstImage.url).trim();
     }
-    if (block.type === 'classes' && Array.isArray(block.data?.items)) {
-      const firstClassImage = block.data.items.find((item: any) => asText(item?.imageUrl).trim());
-      if (firstClassImage) return asText(firstClassImage.imageUrl).trim();
+    if ((block.type === 'classes' || block.type === 'products') && Array.isArray(block.data?.items)) {
+      const firstItemImage = block.data.items.find((item: any) => asText(item?.imageUrl).trim());
+      if (firstItemImage) return asText(firstItemImage.imageUrl).trim();
     }
   }
   return '';
@@ -2108,6 +2172,357 @@ const LandingClassesBlock: React.FC<{
   );
 };
 
+const LandingProductsBlock: React.FC<{
+  data: Record<string, any>;
+  onCtaClick?: (label: string) => void;
+  onReorderItems?: (items: LandingProductItem[]) => void;
+}> = ({ data, onCtaClick, onReorderItems }) => {
+  const layout = normalizeClassLayout(data.layout);
+  const overflowLayout = normalizeClassOverflowLayout(data.overflowLayout);
+  const eyebrow = asText(data.eyebrow, 'Katalog Produk').trim();
+  const heading = asText(data.heading, 'Pilihan Produk & Penawaran').trim();
+  const intro = asText(data.intro).trim();
+  const items = normalizeProductItems(data.items, data);
+  const sectionHeadingColor = headingColorValue(data.headingColor);
+  const galleryRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+
+  useEffect(() => {
+    setActiveIndex(current => Math.min(current, Math.max(0, items.length - 1)));
+  }, [items.length]);
+
+  const effectiveMode: 'stack' | 'gallery' | 'slider' =
+    layout === 'gallery'
+      ? 'gallery'
+      : layout === 'slider'
+        ? 'slider'
+        : layout === 'stack_all'
+          ? 'stack'
+          : items.length > 3
+            ? overflowLayout
+            : 'stack';
+
+  const moveProductItem = (fromIndex: number, toIndex: number) => {
+    if (!onReorderItems || fromIndex === toIndex || toIndex < 0 || toIndex >= items.length) return;
+    const next = [...items];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    onReorderItems(next);
+    if (effectiveMode === 'slider') setActiveIndex(toIndex);
+  };
+
+  const renderCardOrderControls = (index: number, isHorizontal: boolean) => {
+    if (!onReorderItems || items.length <= 1) return null;
+    const PrevIcon = isHorizontal ? ChevronLeft : MoveUp;
+    const NextIcon = isHorizontal ? ChevronRight : MoveDown;
+    return (
+      <div
+        onClick={event => event.stopPropagation()}
+        onMouseDown={event => event.stopPropagation()}
+        className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/95 px-1.5 py-1 shadow-sm backdrop-blur-sm"
+      >
+        <span className="cursor-grab px-0.5 text-[var(--muted)]" title="Tarik kartu untuk mengubah urutan">
+          <GripVertical size={13} />
+        </span>
+        <select
+          value={index}
+          aria-label={`Urutan produk ${index + 1}`}
+          onChange={event => moveProductItem(index, Number(event.target.value))}
+          className="cursor-pointer rounded-md bg-transparent px-1 py-0.5 text-[11px] font-bold text-[var(--accent-strong)] outline-none hover:bg-[var(--accent-soft)]"
+        >
+          {items.map((_, optionIndex) => (
+            <option key={`canvas-product-order-${optionIndex}`} value={optionIndex}>
+              #{optionIndex + 1}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={index === 0}
+          onClick={() => moveProductItem(index, index - 1)}
+          aria-label={`Majukan urutan produk ${index + 1}`}
+          title="Pindah ke urutan sebelumnya"
+          className="rounded-md p-1 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)] disabled:opacity-30"
+        >
+          <PrevIcon size={13} />
+        </button>
+        <button
+          type="button"
+          disabled={index === items.length - 1}
+          onClick={() => moveProductItem(index, index + 1)}
+          aria-label={`Mundurkan urutan produk ${index + 1}`}
+          title="Pindah ke urutan berikutnya"
+          className="rounded-md p-1 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)] disabled:opacity-30"
+        >
+          <NextIcon size={13} />
+        </button>
+      </div>
+    );
+  };
+
+  const scrollGallery = (direction: 'prev' | 'next') => {
+    const container = galleryRef.current;
+    if (!container) return;
+    const scrollAmount = Math.max(280, Math.round(container.clientWidth * 0.8));
+    container.scrollBy({
+      left: direction === 'next' ? scrollAmount : -scrollAmount,
+      behavior: 'smooth'
+    });
+  };
+
+  const renderCta = (item: LandingProductItem) => {
+    const href = safeHref(item.buttonUrl);
+    const label = item.buttonLabel.trim() || 'Lihat Produk';
+    if (href) {
+      const opensNewTab = /^https?:/i.test(href);
+      return (
+        <a
+          href={href}
+          target={opensNewTab ? '_blank' : undefined}
+          rel={opensNewTab ? 'noreferrer' : undefined}
+          onClick={event => {
+            if (onReorderItems) event.preventDefault();
+            onCtaClick?.(label);
+          }}
+          className="mt-2 inline-flex min-h-10 w-fit items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-4 py-2 text-xs font-semibold text-white shadow-sm transition-colors hover:bg-[var(--accent-hover)]"
+        >
+          <span>{label}</span>
+          <ExternalLink size={14} />
+        </a>
+      );
+    }
+    if (onReorderItems) {
+      return (
+        <span className="mt-2 inline-flex min-h-10 w-fit items-center justify-center gap-1.5 rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 py-2 text-xs font-semibold text-[var(--muted)]">
+          <span>{label}</span>
+          <span className="text-[10px]">(isi link CTA)</span>
+        </span>
+      );
+    }
+    return null;
+  };
+
+  const renderHorizontalCard = (item: LandingProductItem, index: number) => (
+    <article
+      key={`${item.id}-${index}`}
+      draggable={Boolean(onReorderItems && items.length > 1)}
+      onDragStart={event => {
+        if (!onReorderItems) return;
+        event.stopPropagation();
+        setDraggedIndex(index);
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('application/x-landing-product-index', String(index));
+      }}
+      onDragOver={event => {
+        if (!onReorderItems) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onDrop={event => {
+        if (!onReorderItems) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const rawFrom = event.dataTransfer.getData('application/x-landing-product-index');
+        const fromIndex = rawFrom !== '' ? Number(rawFrom) : draggedIndex;
+        setDraggedIndex(null);
+        if (fromIndex !== null && Number.isFinite(fromIndex)) {
+          moveProductItem(fromIndex, index);
+        }
+      }}
+      onDragEnd={() => setDraggedIndex(null)}
+      className={`relative grid overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:grid-cols-[minmax(180px,240px)_minmax(0,1fr)] ${draggedIndex === index ? 'opacity-60 ring-2 ring-[var(--accent)]' : ''}`}
+    >
+      <div className="relative min-h-[190px] bg-[var(--accent-soft)] sm:min-h-full">
+        {onReorderItems && items.length > 1 && (
+          <div className="absolute left-2.5 top-2.5 z-10">
+            {renderCardOrderControls(index, effectiveMode === 'slider')}
+          </div>
+        )}
+        {item.imageUrl ? (
+          <img src={item.imageUrl} alt={item.imageAlt || item.title || `Foto produk ${index + 1}`} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full min-h-[190px] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto produk dari pengaturan blok.</div>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-col justify-center space-y-2.5 p-5 sm:py-6 sm:pr-6">
+        {item.date && (
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-strong)]">
+              <Calendar size={12} />
+              <span>{item.date}</span>
+            </span>
+          </div>
+        )}
+        <h3 className="text-lg font-semibold leading-snug">{item.title || `Produk ${index + 1}`}</h3>
+        {item.detail && (
+          <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)]">
+            <Tag size={14} className="shrink-0" />
+            <span>{item.detail}</span>
+          </p>
+        )}
+        {item.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
+        {renderCta(item)}
+      </div>
+    </article>
+  );
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-6 shadow-sm md:p-8" aria-label={heading || 'Katalog Produk'}>
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          {eyebrow && <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{eyebrow}</p>}
+          <h2 className="mt-2 text-2xl font-bold" style={{ color: sectionHeadingColor }}>{heading || 'Pilihan Produk & Penawaran'}</h2>
+          {intro && <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{intro}</p>}
+        </div>
+        {effectiveMode === 'gallery' && items.length > 1 && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => scrollGallery('prev')}
+              aria-label="Geser produk ke kiri"
+              title="Geser ke kiri"
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)] shadow-sm transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollGallery('next')}
+              aria-label="Geser produk ke kanan"
+              title="Geser ke kanan"
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)] shadow-sm transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
+      </div>
+      {items.length ? (
+        effectiveMode === 'gallery' ? (
+          <div>
+            <div ref={galleryRef} className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 scroll-smooth">
+              {items.map((item, index) => (
+                <article
+                  key={`${item.id}-${index}`}
+                  draggable={Boolean(onReorderItems && items.length > 1)}
+                  onDragStart={event => {
+                    if (!onReorderItems) return;
+                    event.stopPropagation();
+                    setDraggedIndex(index);
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('application/x-landing-product-index', String(index));
+                  }}
+                  onDragOver={event => {
+                    if (!onReorderItems) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onDrop={event => {
+                    if (!onReorderItems) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const rawFrom = event.dataTransfer.getData('application/x-landing-product-index');
+                    const fromIndex = rawFrom !== '' ? Number(rawFrom) : draggedIndex;
+                    setDraggedIndex(null);
+                    if (fromIndex !== null && Number.isFinite(fromIndex)) {
+                      moveProductItem(fromIndex, index);
+                    }
+                  }}
+                  onDragEnd={() => setDraggedIndex(null)}
+                  className={`flex w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:w-[320px] ${draggedIndex === index ? 'opacity-60 ring-2 ring-[var(--accent)]' : ''}`}
+                >
+                  <div className="relative aspect-square w-full overflow-hidden bg-[var(--accent-soft)]">
+                    {onReorderItems && items.length > 1 && (
+                      <div className="absolute left-2.5 top-2.5 z-10">
+                        {renderCardOrderControls(index, true)}
+                      </div>
+                    )}
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.imageAlt || item.title || `Foto produk ${index + 1}`} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full min-h-[200px] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto produk dari pengaturan blok.</div>
+                    )}
+                  </div>
+                  <div className="flex flex-1 flex-col justify-between space-y-3 p-5">
+                    <div className="space-y-2.5">
+                      {item.date && (
+                        <div className="flex flex-wrap items-center gap-2">
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-strong)]">
+                            <Calendar size={12} />
+                            <span>{item.date}</span>
+                          </span>
+                        </div>
+                      )}
+                      <h3 className="text-lg font-semibold leading-snug">{item.title || `Produk ${index + 1}`}</h3>
+                      {item.detail && (
+                        <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)]">
+                          <Tag size={14} className="shrink-0" />
+                          <span>{item.detail}</span>
+                        </p>
+                      )}
+                      {item.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
+                    </div>
+                    {renderCta(item)}
+                  </div>
+                </article>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-[var(--muted)]">Geser ke samping atau gunakan tombol panah untuk melihat produk lainnya.</p>
+          </div>
+        ) : effectiveMode === 'slider' ? (
+          <div className="space-y-4">
+            {renderHorizontalCard(items[activeIndex] || items[0], activeIndex)}
+            {items.length > 1 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                <p className="text-xs font-semibold text-[var(--muted)]">Produk {activeIndex + 1} dari {items.length}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveIndex((activeIndex - 1 + items.length) % items.length)}
+                    aria-label="Produk sebelumnya"
+                    title="Produk sebelumnya"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <div className="flex items-center gap-1.5" aria-label="Pilih slide produk">
+                    {items.map((item, index) => (
+                      <button
+                        key={`${item.id}-dot-${index}`}
+                        type="button"
+                        onClick={() => setActiveIndex(index)}
+                        aria-label={`Tampilkan produk ${index + 1}`}
+                        aria-current={index === activeIndex ? 'true' : undefined}
+                        className={`h-2.5 rounded-full transition-all ${index === activeIndex ? 'w-6 bg-[var(--accent)]' : 'w-2.5 bg-[var(--border-strong)] hover:bg-[var(--muted)]'}`}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveIndex((activeIndex + 1) % items.length)}
+                    aria-label="Produk berikutnya"
+                    title="Produk berikutnya"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {items.map((item, index) => renderHorizontalCard(item, index))}
+          </div>
+        )
+      ) : (
+        <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-6 text-center text-sm text-[var(--muted)]">Belum ada produk yang ditampilkan.</div>
+      )}
+    </section>
+  );
+};
+
 export const LandingBlockRenderer: React.FC<{
   block: LandingBlock;
   pageTitle?: string;
@@ -2227,6 +2642,14 @@ export const LandingBlockRenderer: React.FC<{
       return (
         <LandingClassesBlock
           data={data}
+          onReorderItems={onUpdateData ? nextItems => onUpdateData({ ...data, items: nextItems }) : undefined}
+        />
+      );
+    case 'products':
+      return (
+        <LandingProductsBlock
+          data={data}
+          onCtaClick={onCtaClick}
           onReorderItems={onUpdateData ? nextItems => onUpdateData({ ...data, items: nextItems }) : undefined}
         />
       );
@@ -3359,6 +3782,147 @@ const LandingClassesEditor: React.FC<{
   );
 };
 
+const LandingProductsEditor: React.FC<{
+  items: LandingProductItem[];
+  layout: LandingClassLayout;
+  overflowLayout: LandingClassOverflowLayout;
+  onChange: (items: LandingProductItem[]) => void;
+  onLayoutChange: (layout: LandingClassLayout) => void;
+  onOverflowLayoutChange: (overflowLayout: LandingClassOverflowLayout) => void;
+}> = ({ items, layout, overflowLayout, onChange, onLayoutChange, onOverflowLayoutChange }) => {
+  const maxProducts = 20;
+  const [compactOrderMode, setCompactOrderMode] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const updateItem = (index: number, patch: Partial<LandingProductItem>) =>
+    onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const moveItem = (fromIndex: number, toIndex: number) =>
+    onChange(reorderArrayItem(items, fromIndex, toIndex));
+  const addItem = () => {
+    if (items.length >= maxProducts) return;
+    onChange([...items, createProductItem(items.length)]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <label className="flex flex-col gap-2">
+        <span className="text-xs font-semibold text-[var(--muted)]">Tampilan katalog produk</span>
+        <select
+          value={layout}
+          onChange={event => onLayoutChange(normalizeClassLayout(event.target.value))}
+          className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+        >
+          {LANDING_CLASS_LAYOUT_OPTIONS.map(option => (
+            <option key={option.value} value={option.value}>
+              {option.label.replace(/kelas/gi, 'produk')}
+            </option>
+          ))}
+        </select>
+        <span className="text-[11px] leading-relaxed text-[var(--muted)]">
+          {(LANDING_CLASS_LAYOUT_OPTIONS.find(option => option.value === layout)?.description || '').replace(/kelas/gi, 'produk')}
+        </span>
+      </label>
+      {layout === 'stack' && (
+        <label className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+          <span className="text-xs font-semibold text-[var(--text)]">Tampilan otomatis saat lebih dari 3 produk</span>
+          <select
+            value={overflowLayout}
+            onChange={event => onOverflowLayoutChange(normalizeClassOverflowLayout(event.target.value))}
+            className="min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+          >
+            {LANDING_CLASS_OVERFLOW_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <span className="text-[11px] leading-relaxed text-[var(--muted)]">
+            {(LANDING_CLASS_OVERFLOW_OPTIONS.find(option => option.value === overflowLayout)?.description || '').replace(/kelas/gi, 'produk')}
+          </span>
+        </label>
+      )}
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted)]">Daftar produk ({items.length}/{maxProducts})</p>
+          {items.length > 1 && (
+            <p className="mt-0.5 text-[11px] text-[var(--muted)]">Tarik kartu, pilih nomor urutan, atau klik panah untuk mengurutkan.</p>
+          )}
+        </div>
+        {items.length > 1 && (
+          <button
+            type="button"
+            onClick={() => setCompactOrderMode(current => !current)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--accent-strong)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]"
+          >
+            {compactOrderMode ? 'Tampilkan detail form' : 'Ringkas untuk urutkan'}
+          </button>
+        )}
+      </div>
+      {items.length ? items.map((item, index) => (
+        <div
+          key={`product-editor-${item.id}-${index}`}
+          draggable={items.length > 1}
+          onDragStart={event => {
+            setDraggedIndex(index);
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('application/x-product-editor-index', String(index));
+          }}
+          onDragOver={event => {
+            if (items.length > 1) event.preventDefault();
+          }}
+          onDrop={event => {
+            event.preventDefault();
+            const rawFrom = event.dataTransfer.getData('application/x-product-editor-index');
+            const fromIndex = rawFrom !== '' ? Number(rawFrom) : draggedIndex;
+            setDraggedIndex(null);
+            if (fromIndex !== null && Number.isFinite(fromIndex)) {
+              moveItem(fromIndex, index);
+            }
+          }}
+          onDragEnd={() => setDraggedIndex(null)}
+          className={`space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 transition-shadow ${draggedIndex === index ? 'opacity-60 ring-2 ring-[var(--accent)]' : ''}`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {items.length > 1 && (
+                <span className="cursor-grab text-[var(--muted)]" title="Tarik untuk mengurutkan produk">
+                  <GripVertical size={15} />
+                </span>
+              )}
+              {compactOrderMode && item.imageUrl && (
+                <img src={item.imageUrl} alt={item.title || `Produk ${index + 1}`} className="h-9 w-9 shrink-0 rounded-lg border border-[var(--border)] object-cover" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Produk {index + 1}</p>
+                {compactOrderMode && (
+                  <p className="truncate text-xs text-[var(--muted)]">{item.title || 'Belum ada nama produk'}{item.detail ? ` · ${item.detail}` : ''}</p>
+                )}
+              </div>
+            </div>
+            <CardItemOrderToolbar
+              index={index}
+              total={items.length}
+              label={`produk ${index + 1}`}
+              onMove={toIndex => moveItem(index, toIndex)}
+              onRemove={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+            />
+          </div>
+          {!compactOrderMode && (
+            <>
+              <ImageUploader label="Foto produk" value={item.imageUrl} onChange={value => updateItem(index, { imageUrl: value })} />
+              <Input label="URL foto produk (opsional)" value={item.imageUrl.startsWith('data:') ? '' : item.imageUrl} onChange={event => updateItem(index, { imageUrl: event.target.value })} placeholder="https://.../foto-produk.jpg" />
+              <Input label="Alt foto" value={item.imageAlt} onChange={event => updateItem(index, { imageAlt: event.target.value })} placeholder="Foto produk" />
+              <Input label="Nama produk" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Template Social Media Calendar" />
+              <Input label="Detail produk" value={item.detail} onChange={event => updateItem(index, { detail: event.target.value })} placeholder="Contoh: Rp 150.000 · Template Canva & Notion" />
+              <Input label="Tanggal / jadwal (opsional)" value={item.date} onChange={event => updateItem(index, { date: event.target.value })} placeholder="Contoh: 17 November 2026 · Promo Terbatas" />
+              <Textarea label="Deskripsi produk" value={item.description} onChange={event => updateItem(index, { description: event.target.value })} placeholder="Jelaskan manfaat, fitur, dan isi produk ini." className="min-h-[110px]" />
+              <Input label="Teks tombol CTA" value={item.buttonLabel} onChange={event => updateItem(index, { buttonLabel: event.target.value })} placeholder="Contoh: Lihat Produk / Beli Sekarang" />
+              <Input label="Link CTA produk" icon={LinkIcon} value={item.buttonUrl} onChange={event => updateItem(index, { buttonUrl: event.target.value })} placeholder="https://arunika.space/landing/..." />
+            </>
+          )}
+        </div>
+      )) : <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 py-6 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada produk. Tambahkan produk pertama untuk ditampilkan di halaman publik.</div>}
+      <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxProducts}>Tambah produk</Button>
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Setiap produk dapat memiliki foto, nama produk, detail produk, tanggal opsional, deskripsi, dan tombol CTA ke link masing-masing.</p>
+    </div>
+  );
+};
+
 const pipeItemsToText = (items: Array<{ title: string; description: string }>) => items.map(item => `${item.title} | ${item.description}`).join('\n');
 const textToPipeItems = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean).map(line => { const [title, ...description] = line.split('|'); return { title: title.trim(), description: description.join('|').trim() }; });
 const faqItemsToText = (items: Array<{ question: string; answer: string }>) => items.map(item => `${item.question} | ${item.answer}`).join('\n');
@@ -3369,7 +3933,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const patch = (values: Record<string, any>) => onChange({ ...data, ...values });
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
   const pricingButtonFields = <div className="space-y-2"><Input label="Label tombol pilihan paket" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Pilih paket" /><p className="text-[11px] leading-relaxed text-[var(--muted)]">Setelah memilih paket, pengunjung akan melihat total pembayaran dan QR Code di blok Pembayaran.</p></div>;
-  const hasHeadingColor = ['hero', 'text', 'features', 'audience', 'topics', 'classes', 'workflow', 'pricing', 'profile', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
+  const hasHeadingColor = ['hero', 'text', 'features', 'audience', 'topics', 'classes', 'products', 'workflow', 'pricing', 'profile', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero': {
@@ -3500,6 +4064,27 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
           {headingColorField}
           <Textarea label="Pembuka (opsional)" value={asText(data.intro)} onChange={event => patch({ intro: event.target.value })} placeholder="Jelaskan secara singkat rangkaian kelas yang akan diikuti." className="min-h-[90px]" />
           <LandingClassesEditor
+            items={items}
+            layout={layout}
+            overflowLayout={overflowLayout}
+            onChange={nextItems => patch({ items: nextItems })}
+            onLayoutChange={nextLayout => patch({ layout: nextLayout })}
+            onOverflowLayoutChange={nextOverflow => patch({ overflowLayout: nextOverflow })}
+          />
+        </div>
+      );
+    }
+    case 'products': {
+      const items = normalizeProductItems(data.items, data);
+      const layout = normalizeClassLayout(data.layout);
+      const overflowLayout = normalizeClassOverflowLayout(data.overflowLayout);
+      return (
+        <div className="space-y-4">
+          <Input label="Eyebrow (opsional)" value={asText(data.eyebrow, 'Katalog Produk')} onChange={event => patch({ eyebrow: event.target.value })} placeholder="Contoh: Katalog Produk" />
+          <Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} placeholder="Contoh: Pilihan Produk & Penawaran" />
+          {headingColorField}
+          <Textarea label="Pembuka (opsional)" value={asText(data.intro)} onChange={event => patch({ intro: event.target.value })} placeholder="Jelaskan secara singkat produk yang ditawarkan." className="min-h-[90px]" />
+          <LandingProductsEditor
             items={items}
             layout={layout}
             overflowLayout={overflowLayout}

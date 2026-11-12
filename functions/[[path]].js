@@ -98,7 +98,7 @@ const getLandingImage = (row) => {
       const firstImage = parseJson(data.images).find((item) => item?.url);
       if (firstImage?.url) return firstImage.url;
     }
-    if (block?.type === 'classes' || block?.type === 'bonus') {
+    if (block?.type === 'classes' || block?.type === 'products' || block?.type === 'bonus') {
       const firstItem = parseJson(data.items).find((item) => item?.imageUrl || item?.image_url);
       if (firstItem?.imageUrl || firstItem?.image_url) return firstItem.imageUrl || firstItem.image_url;
     }
