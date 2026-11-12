@@ -197,6 +197,7 @@ const LANDING_BLOCK_OPTIONS: Array<{
   { value: 'video', label: 'Video', description: 'Video demo atau testimoni', icon: Video },
   { value: 'classes', label: 'Kelas', description: 'Daftar kelas, pemateri & jadwal', icon: BookOpen },
   { value: 'features', label: 'Manfaat', description: 'Keunggulan dalam grid', icon: Star },
+  { value: 'audience', label: 'Siapa yang Cocok', description: 'Siapa yang cocok mengikuti kelas', icon: Users },
   { value: 'topics', label: 'Topik bahasan', description: 'Kategori dengan daftar poin', icon: List },
   { value: 'workflow', label: 'Workflow', description: 'Tahapan proses bernomor', icon: ListOrdered },
   { value: 'pricing', label: 'Harga', description: 'Paket dan harga produk', icon: CreditCard },
@@ -357,6 +358,16 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
         { title: 'Praktis digunakan', description: 'Mulai dengan langkah yang sederhana dan jelas.' },
         { title: 'Hasil lebih terarah', description: 'Dapatkan sistem yang membantu Anda bergerak lebih cepat.' },
         { title: 'Dukungan berkelanjutan', description: 'Ada panduan dan bantuan saat Anda membutuhkannya.' }
+      ]
+    },
+    audience: {
+      heading: 'Siapa yang cocok mengikuti kelas ini?',
+      subheading: 'Dirancang untuk berbagai latar belakang yang ingin berkembang lebih terarah',
+      description: 'Kelas ini disusun agar mudah diikuti baik oleh pemula maupun praktisi yang ingin memperdalam pemahaman dan praktik.',
+      items: [
+        { title: 'Pemula yang ingin belajar dari dasar', description: 'Belum memiliki pengalaman sebelumnya namun ingin memahami fondasi materi secara runtut.' },
+        { title: 'Praktisi & kreator aktif', description: 'Sudah berkarya dan ingin meningkatkan kualitas serta struktur kerja ke level berikutnya.' },
+        { title: 'Mahasiswa & pembelajar mandiri', description: 'Ingin menambah wawasan praktis langsung dari studi kasus dan pengalaman pemateri.' }
       ]
     },
     topics: {
@@ -788,7 +799,7 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   const fallback = createLandingBlock(type, index);
   const rawData = value?.data && typeof value.data === 'object' && !Array.isArray(value.data) ? value.data : {};
   const data = { ...fallback.data, ...rawData };
-  if (type === 'features') data.items = normalizeLineItems(rawData.items, fallback.data.items);
+  if (type === 'features' || type === 'audience') data.items = normalizeLineItems(rawData.items, fallback.data.items);
   if (type === 'hero') {
     data.headerImageUrl = asText(rawData.headerImageUrl || rawData.header_image_url);
     data.headerImageAlt = asText(rawData.headerImageAlt || rawData.header_image_alt, fallback.data.headerImageAlt);
@@ -1839,6 +1850,28 @@ export const LandingBlockRenderer: React.FC<{
           </div>
         </section>
       );
+    case 'audience': {
+      const subheading = asText(data.subheading).trim();
+      const description = asText(data.description).trim();
+      return (
+        <section className="space-y-4">
+          <div className="space-y-2">
+            <h2 className="text-2xl font-bold" style={{ color: sectionHeadingColor }}>{asText(data.heading, 'Siapa yang cocok mengikuti kelas ini?')}</h2>
+            {subheading && <p className="text-base font-semibold text-[var(--accent-strong)]">{subheading}</p>}
+            {description && <p className="max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{description}</p>}
+          </div>
+          <div className="grid gap-4 md:grid-cols-3">
+            {normalizeLineItems(data.items, []).map((item, index) => (
+              <div key={`${item.title}-${index}`} className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-5 shadow-sm">
+                <span className="flex h-9 w-9 items-center justify-center rounded-xl bg-[var(--accent-soft)] text-sm font-bold text-[var(--accent-strong)]">{index + 1}</span>
+                <h3 className="mt-4 font-semibold">{item.title || 'Target peserta'}</h3>
+                <p className="mt-2 text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>
+              </div>
+            ))}
+          </div>
+        </section>
+      );
+    }
     case 'topics':
       return <LandingTopicsBlock data={data} />;
     case 'classes':
@@ -2770,7 +2803,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const patch = (values: Record<string, any>) => onChange({ ...data, ...values });
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
   const pricingButtonFields = <div className="space-y-2"><Input label="Label tombol pilihan paket" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Pilih paket" /><p className="text-[11px] leading-relaxed text-[var(--muted)]">Setelah memilih paket, pengunjung akan melihat total pembayaran dan QR Code di blok Pembayaran.</p></div>;
-  const hasHeadingColor = ['hero', 'text', 'features', 'topics', 'classes', 'workflow', 'pricing', 'profile', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
+  const hasHeadingColor = ['hero', 'text', 'features', 'audience', 'topics', 'classes', 'workflow', 'pricing', 'profile', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero': {
@@ -2876,6 +2909,16 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
     }
     case 'features':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Manfaat (satu per baris, format: Judul | Deskripsi)" value={pipeItemsToText(normalizeLineItems(data.items, []))} onChange={event => patch({ items: textToPipeItems(event.target.value) })} className="min-h-[180px]" /></div>;
+    case 'audience':
+      return (
+        <div className="space-y-4">
+          <Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} placeholder="Siapa yang cocok mengikuti kelas ini?" />
+          {headingColorField}
+          <Input label="Sub judul (opsional)" value={asText(data.subheading)} onChange={event => patch({ subheading: event.target.value })} placeholder="Contoh: Dirancang untuk berbagai latar belakang" />
+          <Textarea label="Deskripsi (opsional)" value={asText(data.description)} onChange={event => patch({ description: event.target.value })} placeholder="Jelaskan gambaran umum peserta yang paling cocok mengikuti kelas ini." className="min-h-[100px]" />
+          <Textarea label="Daftar kotak (satu per baris, format: Judul | Deskripsi)" value={pipeItemsToText(normalizeLineItems(data.items, []))} onChange={event => patch({ items: textToPipeItems(event.target.value) })} className="min-h-[180px]" />
+        </div>
+      );
     case 'topics': {
       const items = normalizeTopicCategories(data.categories, []);
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Pembuka (opsional)" value={asText(data.intro)} onChange={event => patch({ intro: event.target.value })} placeholder="Jelaskan secara singkat topik yang akan dibahas." className="min-h-[90px]" /><LandingTopicsEditor items={items} onChange={categories => patch({ categories })} /></div>;
