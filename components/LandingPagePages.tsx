@@ -215,7 +215,8 @@ const LANDING_BLOCK_TYPES = new Set<LandingBlockType>(LANDING_BLOCK_OPTIONS.map(
 
 type LandingImageLayout = 'banner' | 'slider' | 'marquee' | 'row';
 type LandingImageItem = { url: string; alt: string; caption: string };
-type LandingClassLayout = 'stack' | 'row';
+type LandingClassLayout = 'stack' | 'gallery' | 'slider' | 'stack_all';
+type LandingClassOverflowLayout = 'gallery' | 'slider';
 type LandingClassItem = {
   id: string;
   title: string;
@@ -292,8 +293,15 @@ const LANDING_IMAGE_LAYOUT_OPTIONS: Array<{ value: LandingImageLayout; label: st
 ];
 
 const LANDING_CLASS_LAYOUT_OPTIONS: Array<{ value: LandingClassLayout; label: string; description: string }> = [
-  { value: 'stack', label: 'Card tersusun rapi satu per satu (seperti Bonus)', description: 'Setiap kelas tampil sebagai card horizontal yang tersusun rapi dari atas ke bawah.' },
-  { value: 'row', label: 'Card dalam 1 baris', description: 'Semua kelas tampil berjajar dalam satu baris.' }
+  { value: 'stack', label: 'Default: Tersusun rapi (otomatis Gallery/Slider jika > 3 kelas)', description: '1–3 kelas tampil tersusun rapi satu per satu. Jika lebih dari 3 kelas, otomatis menjadi Gallery ke samping atau Slider.' },
+  { value: 'gallery', label: 'Gallery ke samping (geser horizontal)', description: 'Semua card kelas tampil berjajar ke samping dan bisa digeser.' },
+  { value: 'slider', label: 'Slider (navigasi panah & indikator)', description: 'Card kelas tampil satu per satu dalam slider interaktif.' },
+  { value: 'stack_all', label: 'Selalu tersusun satu per satu ke bawah', description: 'Semua card kelas tetap tersusun dari atas ke bawah berapa pun jumlahnya.' }
+];
+
+const LANDING_CLASS_OVERFLOW_OPTIONS: Array<{ value: LandingClassOverflowLayout; label: string; description: string }> = [
+  { value: 'gallery', label: 'Gallery ke samping', description: 'Saat kelas lebih dari 3, otomatis tampil berjajar ke samping.' },
+  { value: 'slider', label: 'Slider', description: 'Saat kelas lebih dari 3, otomatis tampil sebagai slider dengan tombol panah.' }
 ];
 
 const LANDING_VIDEO_LAYOUT_OPTIONS: Array<{ value: LandingVideoLayout; label: string; description: string }> = [
@@ -490,6 +498,7 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       heading: 'Rangkaian Kelas & Jadwal',
       intro: '',
       layout: 'stack',
+      overflowLayout: 'gallery',
       items: [{
         id: 'landing-class-default-1',
         title: 'Sesi 1: Judul Kelas Pertama',
@@ -782,9 +791,16 @@ const createClassItem = (index = 0): LandingClassItem => ({
   imageAlt: 'Foto kelas'
 });
 
-const normalizeClassLayout = (value: unknown): LandingClassLayout => (
-  ['stack', 'row'].includes(asText(value)) ? asText(value) as LandingClassLayout : 'stack'
-);
+const normalizeClassLayout = (value: unknown): LandingClassLayout => {
+  const raw = asText(value).trim();
+  if (raw === 'row' || raw === 'gallery') return 'gallery';
+  if (raw === 'slider') return 'slider';
+  if (raw === 'stack_all') return 'stack_all';
+  return 'stack';
+};
+
+const normalizeClassOverflowLayout = (value: unknown): LandingClassOverflowLayout =>
+  asText(value).trim() === 'slider' ? 'slider' : 'gallery';
 
 const normalizeClassItems = (value: unknown, fallback: LandingClassItem[] = []): LandingClassItem[] => {
   if (!Array.isArray(value)) return fallback;
@@ -848,6 +864,7 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   if (type === 'classes') {
     data.items = normalizeClassItems(rawData.items, fallback.data.items);
     data.layout = normalizeClassLayout(rawData.layout);
+    data.overflowLayout = normalizeClassOverflowLayout(rawData.overflowLayout);
   }
   return {
     id: asText(value?.id, fallback.id),
@@ -1677,87 +1694,185 @@ const LandingProfileBlock: React.FC<{ data: Record<string, any> }> = ({ data }) 
 
 const LandingClassesBlock: React.FC<{ data: Record<string, any> }> = ({ data }) => {
   const layout = normalizeClassLayout(data.layout);
+  const overflowLayout = normalizeClassOverflowLayout(data.overflowLayout);
   const eyebrow = asText(data.eyebrow, 'Rangkaian Kelas').trim();
   const heading = asText(data.heading, 'Daftar Kelas & Pemateri').trim();
   const intro = asText(data.intro).trim();
   const items = normalizeClassItems(data.items, data);
   const sectionHeadingColor = headingColorValue(data.headingColor);
+  const galleryRef = useRef<HTMLDivElement>(null);
+  const [activeIndex, setActiveIndex] = useState(0);
+
+  useEffect(() => {
+    setActiveIndex(current => Math.min(current, Math.max(0, items.length - 1)));
+  }, [items.length]);
+
+  const effectiveMode: 'stack' | 'gallery' | 'slider' =
+    layout === 'gallery'
+      ? 'gallery'
+      : layout === 'slider'
+        ? 'slider'
+        : layout === 'stack_all'
+          ? 'stack'
+          : items.length > 3
+            ? overflowLayout
+            : 'stack';
+
+  const scrollGallery = (direction: 'prev' | 'next') => {
+    const container = galleryRef.current;
+    if (!container) return;
+    const scrollAmount = Math.max(280, Math.round(container.clientWidth * 0.8));
+    container.scrollBy({
+      left: direction === 'next' ? scrollAmount : -scrollAmount,
+      behavior: 'smooth'
+    });
+  };
+
+  const renderHorizontalCard = (item: LandingClassItem, index: number) => (
+    <article key={`${item.id}-${index}`} className="grid overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
+      <div className="min-h-[190px] bg-[var(--accent-soft)] sm:min-h-full">
+        {item.imageUrl ? (
+          <img src={item.imageUrl} alt={item.imageAlt || item.title || `Foto kelas ${index + 1}`} className="h-full w-full object-cover" />
+        ) : (
+          <div className="flex h-full min-h-[190px] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto kelas dari pengaturan blok.</div>
+        )}
+      </div>
+      <div className="flex min-w-0 flex-col justify-center space-y-2.5 p-5 sm:py-6 sm:pr-6">
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Kelas {index + 1}</span>
+          {item.date && (
+            <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-strong)]">
+              <Calendar size={12} />
+              <span>{item.date}</span>
+            </span>
+          )}
+        </div>
+        <h3 className="text-lg font-semibold leading-snug">{item.title || `Kelas ${index + 1}`}</h3>
+        {item.speaker && (
+          <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)]">
+            <UserRound size={14} className="shrink-0" />
+            <span>Pemateri: {item.speaker}</span>
+          </p>
+        )}
+        {item.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
+      </div>
+    </article>
+  );
 
   return (
     <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-6 shadow-sm md:p-8" aria-label={heading || 'Daftar Kelas'}>
-      <div className="mb-6">
-        {eyebrow && <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{eyebrow}</p>}
-        <h2 className="mt-2 text-2xl font-bold" style={{ color: sectionHeadingColor }}>{heading || 'Daftar Kelas & Pemateri'}</h2>
-        {intro && <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{intro}</p>}
+      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
+        <div>
+          {eyebrow && <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{eyebrow}</p>}
+          <h2 className="mt-2 text-2xl font-bold" style={{ color: sectionHeadingColor }}>{heading || 'Daftar Kelas & Pemateri'}</h2>
+          {intro && <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{intro}</p>}
+        </div>
+        {effectiveMode === 'gallery' && items.length > 1 && (
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => scrollGallery('prev')}
+              aria-label="Geser kelas ke kiri"
+              title="Geser ke kiri"
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)] shadow-sm transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]"
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <button
+              type="button"
+              onClick={() => scrollGallery('next')}
+              aria-label="Geser kelas ke kanan"
+              title="Geser ke kanan"
+              className="rounded-xl border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)] shadow-sm transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]"
+            >
+              <ChevronRight size={18} />
+            </button>
+          </div>
+        )}
       </div>
       {items.length ? (
-        layout === 'row' ? (
-          <div className="flex gap-4 overflow-x-auto pb-2">
-            {items.map((item, index) => (
-              <article key={`${item.id}-${index}`} className="flex min-w-[270px] flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:min-w-[290px]">
-                <div className="aspect-[16/10] w-full overflow-hidden bg-[var(--accent-soft)]">
-                  {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.imageAlt || item.title || `Foto kelas ${index + 1}`} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full min-h-[160px] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto kelas dari pengaturan blok.</div>
-                  )}
-                </div>
-                <div className="flex flex-1 flex-col justify-between space-y-3 p-5">
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center justify-between gap-2">
-                      <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Kelas {index + 1}</span>
-                      {item.date && (
-                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-strong)]">
-                          <Calendar size={12} />
-                          <span>{item.date}</span>
-                        </span>
-                      )}
-                    </div>
-                    <h3 className="text-lg font-semibold leading-snug">{item.title || `Kelas ${index + 1}`}</h3>
-                    {item.speaker && (
-                      <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)]">
-                        <UserRound size={14} className="shrink-0" />
-                        <span>{item.speaker}</span>
-                      </p>
+        effectiveMode === 'gallery' ? (
+          <div>
+            <div ref={galleryRef} className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 scroll-smooth">
+              {items.map((item, index) => (
+                <article key={`${item.id}-${index}`} className="flex w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:w-[320px]">
+                  <div className="aspect-square w-full overflow-hidden bg-[var(--accent-soft)]">
+                    {item.imageUrl ? (
+                      <img src={item.imageUrl} alt={item.imageAlt || item.title || `Foto kelas ${index + 1}`} className="h-full w-full object-cover" />
+                    ) : (
+                      <div className="flex h-full min-h-[200px] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto kelas dari pengaturan blok.</div>
                     )}
-                    {item.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
                   </div>
+                  <div className="flex flex-1 flex-col justify-between space-y-3 p-5">
+                    <div className="space-y-2.5">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Kelas {index + 1}</span>
+                        {item.date && (
+                          <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-strong)]">
+                            <Calendar size={12} />
+                            <span>{item.date}</span>
+                          </span>
+                        )}
+                      </div>
+                      <h3 className="text-lg font-semibold leading-snug">{item.title || `Kelas ${index + 1}`}</h3>
+                      {item.speaker && (
+                        <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)]">
+                          <UserRound size={14} className="shrink-0" />
+                          <span>Pemateri: {item.speaker}</span>
+                        </p>
+                      )}
+                      {item.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
+                    </div>
+                  </div>
+                </article>
+              ))}
+            </div>
+            <p className="mt-2 text-xs text-[var(--muted)]">Geser ke samping atau gunakan tombol panah untuk melihat kelas lainnya.</p>
+          </div>
+        ) : effectiveMode === 'slider' ? (
+          <div className="space-y-4">
+            {renderHorizontalCard(items[activeIndex] || items[0], activeIndex)}
+            {items.length > 1 && (
+              <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                <p className="text-xs font-semibold text-[var(--muted)]">Kelas {activeIndex + 1} dari {items.length}</p>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={() => setActiveIndex((activeIndex - 1 + items.length) % items.length)}
+                    aria-label="Kelas sebelumnya"
+                    title="Kelas sebelumnya"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+                  <div className="flex items-center gap-1.5" aria-label="Pilih slide kelas">
+                    {items.map((item, index) => (
+                      <button
+                        key={`${item.id}-dot-${index}`}
+                        type="button"
+                        onClick={() => setActiveIndex(index)}
+                        aria-label={`Tampilkan kelas ${index + 1}`}
+                        aria-current={index === activeIndex ? 'true' : undefined}
+                        className={`h-2.5 rounded-full transition-all ${index === activeIndex ? 'w-6 bg-[var(--accent)]' : 'w-2.5 bg-[var(--border-strong)] hover:bg-[var(--muted)]'}`}
+                      />
+                    ))}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setActiveIndex((activeIndex + 1) % items.length)}
+                    aria-label="Kelas berikutnya"
+                    title="Kelas berikutnya"
+                    className="rounded-lg border border-[var(--border)] bg-[var(--surface)] p-2 text-[var(--text)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
                 </div>
-              </article>
-            ))}
+              </div>
+            )}
           </div>
         ) : (
           <div className="space-y-4">
-            {items.map((item, index) => (
-              <article key={`${item.id}-${index}`} className="grid overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:grid-cols-[minmax(170px,240px)_minmax(0,1fr)]">
-                <div className="min-h-[190px] bg-[var(--accent-soft)] sm:min-h-full">
-                  {item.imageUrl ? (
-                    <img src={item.imageUrl} alt={item.imageAlt || item.title || `Foto kelas ${index + 1}`} className="h-full w-full object-cover" />
-                  ) : (
-                    <div className="flex h-full min-h-[190px] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto kelas dari pengaturan blok.</div>
-                  )}
-                </div>
-                <div className="flex min-w-0 flex-col justify-center space-y-2.5 p-5 sm:py-6 sm:pr-6">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Kelas {index + 1}</span>
-                    {item.date && (
-                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-strong)]">
-                        <Calendar size={12} />
-                        <span>{item.date}</span>
-                      </span>
-                    )}
-                  </div>
-                  <h3 className="text-lg font-semibold leading-snug">{item.title || `Kelas ${index + 1}`}</h3>
-                  {item.speaker && (
-                    <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)]">
-                      <UserRound size={14} className="shrink-0" />
-                      <span>Pemateri: {item.speaker}</span>
-                    </p>
-                  )}
-                  {item.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
-                </div>
-              </article>
-            ))}
+            {items.map((item, index) => renderHorizontalCard(item, index))}
           </div>
         )
       ) : (
@@ -2766,9 +2881,11 @@ const LandingPricingEditor: React.FC<{ items: LandingPricingPackage[]; onChange:
 const LandingClassesEditor: React.FC<{
   items: LandingClassItem[];
   layout: LandingClassLayout;
+  overflowLayout: LandingClassOverflowLayout;
   onChange: (items: LandingClassItem[]) => void;
   onLayoutChange: (layout: LandingClassLayout) => void;
-}> = ({ items, layout, onChange, onLayoutChange }) => {
+  onOverflowLayoutChange: (overflowLayout: LandingClassOverflowLayout) => void;
+}> = ({ items, layout, overflowLayout, onChange, onLayoutChange, onOverflowLayoutChange }) => {
   const maxClasses = 20;
   const updateItem = (index: number, patch: Partial<LandingClassItem>) =>
     onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
@@ -2792,6 +2909,21 @@ const LandingClassesEditor: React.FC<{
           {LANDING_CLASS_LAYOUT_OPTIONS.find(option => option.value === layout)?.description}
         </span>
       </label>
+      {layout === 'stack' && (
+        <label className="flex flex-col gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+          <span className="text-xs font-semibold text-[var(--text)]">Tampilan otomatis saat lebih dari 3 kelas</span>
+          <select
+            value={overflowLayout}
+            onChange={event => onOverflowLayoutChange(normalizeClassOverflowLayout(event.target.value))}
+            className="min-h-[44px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-3 py-2 text-sm outline-none focus:border-[var(--accent)]"
+          >
+            {LANDING_CLASS_OVERFLOW_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+          </select>
+          <span className="text-[11px] leading-relaxed text-[var(--muted)]">
+            {LANDING_CLASS_OVERFLOW_OPTIONS.find(option => option.value === overflowLayout)?.description}
+          </span>
+        </label>
+      )}
       <div className="flex items-center justify-between gap-3">
         <p className="text-xs font-semibold text-[var(--muted)]">Daftar kelas</p>
         <span className="text-[11px] text-[var(--muted)]">{items.length}/{maxClasses} kelas</span>
@@ -2950,6 +3082,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
     case 'classes': {
       const items = normalizeClassItems(data.items, data);
       const layout = normalizeClassLayout(data.layout);
+      const overflowLayout = normalizeClassOverflowLayout(data.overflowLayout);
       return (
         <div className="space-y-4">
           <Input label="Eyebrow (opsional)" value={asText(data.eyebrow, 'Rangkaian Kelas')} onChange={event => patch({ eyebrow: event.target.value })} placeholder="Contoh: Rangkaian Kelas" />
@@ -2959,8 +3092,10 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
           <LandingClassesEditor
             items={items}
             layout={layout}
+            overflowLayout={overflowLayout}
             onChange={nextItems => patch({ items: nextItems })}
             onLayoutChange={nextLayout => patch({ layout: nextLayout })}
+            onOverflowLayoutChange={nextOverflow => patch({ overflowLayout: nextOverflow })}
           />
         </div>
       );
