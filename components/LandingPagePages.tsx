@@ -3497,7 +3497,28 @@ const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
       <div className="grid gap-5 md:grid-cols-2">
         {pages.map(page => {
           const insight = insights[page.id];
-          return <Card key={page.id} className="flex h-full flex-col gap-5">
+          const coverImage = getLandingPreviewImage(page);
+          const heroBlock = page.blocks.find(block => block.type === 'hero');
+          const textBlock = page.blocks.find(block => block.type === 'text' && asText(block.data?.body).trim());
+          const summaryDescription =
+            page.description.trim() ||
+            asText(heroBlock?.data?.body).trim() ||
+            asText(heroBlock?.data?.headline).trim() ||
+            asText(textBlock?.data?.body).trim() ||
+            'Belum ada deskripsi landing page.';
+          return <Card key={page.id} className="flex h-full flex-col gap-5 overflow-hidden">
+            {coverImage && (
+              <div
+                onClick={() => navigate(`/admin/landing-pages/${page.id}`)}
+                className="group relative -mx-6 -mt-6 mb-1 aspect-[16/8] cursor-pointer overflow-hidden border-b border-[var(--border)] bg-[var(--surface-soft)]"
+              >
+                <img
+                  src={coverImage}
+                  alt={page.title}
+                  className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                />
+              </div>
+            )}
             <div className="flex items-start justify-between gap-3">
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2"><Badge color="var(--accent-soft)">{LANDING_PAGE_SPACE_LABEL}</Badge><span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${page.status === 'published' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : page.status === 'archived' ? 'bg-[var(--danger-soft)] text-[var(--danger-text)]' : 'bg-[var(--surface-soft)] text-[var(--muted)]'}`}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</span></div>
@@ -3506,7 +3527,7 @@ const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
               </div>
               <Layout className="shrink-0 text-[var(--accent-strong)]" size={24} />
             </div>
-            <p className="line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{page.description || 'Belum ada deskripsi landing page.'}</p>
+            <p className="line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{summaryDescription}</p>
             <div className="grid grid-cols-3 gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
               <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><Eye size={13} /> Views</span><strong className="mt-1 block text-sm">{formatInsightCount(insight?.total_views)}</strong></div>
               <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><Users size={13} /> Unik</span><strong className="mt-1 block text-sm">{formatInsightCount(insight?.unique_visitors)}</strong></div>
