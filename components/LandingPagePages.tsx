@@ -503,6 +503,11 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
     cta: {
       heading: 'Siap mulai bersama kami?',
       body: 'Ambil langkah pertama dan hubungi kami untuk mendapatkan informasi lengkap.',
+      cardColor: '',
+      headingColor: '',
+      bodyColor: '',
+      buttonColor: '#ffffff',
+      buttonTextColor: '#17283a',
       buttonLabel: 'Hubungi kami',
       buttonUrl: ''
     },
@@ -1024,8 +1029,8 @@ const NoticeBanner: React.FC<{ notice: Notice | null }> = ({ notice }) => notice
   </div>
 ) : null;
 
-const ActionLink: React.FC<{ label: string; href?: string; className?: string; onClick?: () => void }> = ({ label, href, className = '', onClick }) => href ? (
-  <a href={safeHref(href) || '#'} onClick={onClick} className={`inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-hover)] ${className}`}>
+const ActionLink: React.FC<{ label: string; href?: string; className?: string; style?: React.CSSProperties; onClick?: () => void }> = ({ label, href, className = '', style, onClick }) => href ? (
+  <a href={safeHref(href) || '#'} onClick={onClick} style={style} className={`inline-flex items-center justify-center gap-2 rounded-xl bg-[var(--accent)] px-5 py-3 text-sm font-semibold text-white transition-colors hover:bg-[var(--accent-hover)] ${className}`}>
     {label} <ExternalLink size={15} />
   </a>
 ) : null;
@@ -2005,13 +2010,30 @@ export const LandingBlockRenderer: React.FC<{
         </section>
       );
     }
-    case 'cta':
+    case 'cta': {
+      const ctaCardBg = isHexColor(data.cardColor) ? asText(data.cardColor).trim() : 'var(--accent)';
+      const ctaHeadingColor = isHexColor(data.headingColor) ? asText(data.headingColor).trim() : '#ffffff';
+      const ctaBodyColor = isHexColor(data.bodyColor) ? asText(data.bodyColor).trim() : 'rgba(255, 255, 255, 0.85)';
+      const ctaButtonBg = isHexColor(data.buttonColor) ? asText(data.buttonColor).trim() : '#ffffff';
+      const ctaButtonText = isHexColor(data.buttonTextColor) ? asText(data.buttonTextColor).trim() : 'var(--accent-strong)';
       return (
-        <section className="rounded-2xl bg-[var(--accent)] p-7 text-white shadow-sm md:flex md:items-center md:justify-between md:gap-8 md:p-9">
-          <div><h2 className="text-2xl font-bold" style={{ color: isHexColor(data.headingColor) ? asText(data.headingColor).trim() : 'white' }}>{asText(data.heading, 'Siap mulai?')}</h2><p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed text-white/80">{asText(data.body)}</p></div>
-          <ActionLink label={asText(data.buttonLabel, 'Hubungi kami')} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('cta')} className="mt-5 shrink-0 bg-white text-[var(--accent-strong)] hover:bg-white/90 md:mt-0" />
+        <section className="rounded-2xl p-7 text-white shadow-sm md:flex md:items-center md:justify-between md:gap-8 md:p-9" style={{ backgroundColor: ctaCardBg }}>
+          <div>
+            <h2 className="text-2xl font-bold" style={{ color: ctaHeadingColor }}>{asText(data.heading, 'Siap mulai?')}</h2>
+            <p className="mt-2 max-w-2xl whitespace-pre-wrap text-sm leading-relaxed" style={{ color: ctaBodyColor }}>{asText(data.body)}</p>
+          </div>
+          {asText(data.buttonLabel, 'Hubungi kami').trim() && (
+            <ActionLink
+              label={asText(data.buttonLabel, 'Hubungi kami')}
+              href={asText(data.buttonUrl) || '#'}
+              onClick={() => onCtaClick?.('cta')}
+              style={{ backgroundColor: ctaButtonBg, color: ctaButtonText }}
+              className="mt-5 shrink-0 hover:opacity-90 md:mt-0"
+            />
+          )}
         </section>
       );
+    }
     case 'spacer':
       return <div aria-hidden="true" style={{ height: `${Math.min(240, Math.max(8, Number(data.height) || 48))}px` }} />;
     default:
@@ -2995,7 +3017,93 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<LandingBonusEditor items={items} onChange={updateItems} /></div>;
     }
     case 'cta':
-      return <div className="space-y-4"><Input label="Judul CTA" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Deskripsi CTA" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} />{commonButtonFields}</div>;
+      return (
+        <div className="space-y-4">
+          <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+            <div>
+              <p className="text-xs font-semibold text-[var(--muted)]">Warna latar card CTA</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Ubah warna latar card CTA sesuai kebutuhan.</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={isHexColor(data.cardColor) ? asText(data.cardColor).trim() : '#17283a'}
+                onChange={event => patch({ cardColor: event.target.value })}
+                aria-label="Warna latar card CTA"
+                className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
+              />
+              <span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.cardColor) ? asText(data.cardColor).toUpperCase() : 'Default tema'}</span>
+            </div>
+            {isHexColor(data.cardColor) && (
+              <button type="button" onClick={() => patch({ cardColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">
+                Gunakan warna default tema
+              </button>
+            )}
+          </div>
+          <Input label="Judul CTA" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />
+          {headingColorField}
+          <Textarea label="Deskripsi CTA" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} />
+          <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+            <div>
+              <p className="text-xs font-semibold text-[var(--muted)]">Warna deskripsi CTA</p>
+            </div>
+            <div className="flex items-center gap-3">
+              <input
+                type="color"
+                value={isHexColor(data.bodyColor) ? asText(data.bodyColor).trim() : '#ffffff'}
+                onChange={event => patch({ bodyColor: event.target.value })}
+                aria-label="Warna deskripsi CTA"
+                className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
+              />
+              <span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.bodyColor) ? asText(data.bodyColor).toUpperCase() : 'Default putih lembut'}</span>
+            </div>
+            {isHexColor(data.bodyColor) && (
+              <button type="button" onClick={() => patch({ bodyColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">
+                Gunakan warna default
+              </button>
+            )}
+          </div>
+          {commonButtonFields}
+          <div className="grid gap-3 sm:grid-cols-2">
+            <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <p className="text-xs font-semibold text-[var(--muted)]">Warna latar tombol</p>
+              <div className="flex items-center gap-2.5">
+                <input
+                  type="color"
+                  value={isHexColor(data.buttonColor) ? asText(data.buttonColor).trim() : '#ffffff'}
+                  onChange={event => patch({ buttonColor: event.target.value })}
+                  aria-label="Warna latar tombol CTA"
+                  className="h-10 w-12 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
+                />
+                <span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.buttonColor) ? asText(data.buttonColor).toUpperCase() : '#FFFFFF'}</span>
+              </div>
+              {isHexColor(data.buttonColor) && asText(data.buttonColor).toLowerCase() !== '#ffffff' && (
+                <button type="button" onClick={() => patch({ buttonColor: '#ffffff' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">
+                  Reset ke putih
+                </button>
+              )}
+            </div>
+            <div className="space-y-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <p className="text-xs font-semibold text-[var(--muted)]">Warna teks tombol</p>
+              <div className="flex items-center gap-2.5">
+                <input
+                  type="color"
+                  value={isHexColor(data.buttonTextColor) ? asText(data.buttonTextColor).trim() : '#17283a'}
+                  onChange={event => patch({ buttonTextColor: event.target.value })}
+                  aria-label="Warna teks tombol CTA"
+                  className="h-10 w-12 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
+                />
+                <span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.buttonTextColor) ? asText(data.buttonTextColor).toUpperCase() : 'Default tema'}</span>
+              </div>
+              {isHexColor(data.buttonTextColor) && (
+                <button type="button" onClick={() => patch({ buttonTextColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">
+                  Gunakan default tema
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      );
     case 'spacer':
       return <div className="space-y-4"><Input label="Tinggi jarak (px)" type="number" min="8" max="240" value={asText(data.height, '48')} onChange={event => patch({ height: event.target.value })} /></div>;
     default:
