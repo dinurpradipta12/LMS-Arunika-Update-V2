@@ -154,15 +154,18 @@ const getPublicRow = async (env, route) => {
 
 const isDataImage = (value) => /^data:image\//i.test(String(value || '').trim());
 
-const getImageProxyUrl = (route) => {
+const getImageProxyUrl = (route, updatedAt) => {
+  const version = updatedAt ? Date.parse(updatedAt) : NaN;
   if (route.domain) {
     const url = new URL('/catalog/_domain/og-image', route.url);
     url.searchParams.set('domain', route.domain);
+    if (Number.isFinite(version)) url.searchParams.set('v', String(version));
     return url.toString();
   }
   const url = new URL(`/${route.kind}/${encodeURIComponent(route.slug)}/og-image`, route.url);
   url.search = '';
   url.hash = '';
+  if (Number.isFinite(version)) url.searchParams.set('v', String(version));
   return url.toString();
 };
 
@@ -184,22 +187,108 @@ const decodeDataImage = (value) => {
   }
 };
 
-const getImageResponse = async (env, route, method = 'GET') => {
+const ROBOTS_TXT = [
+  'User-agent: WhatsApp',
+  'Allow: /',
+  '',
+  'User-agent: facebookexternalhit',
+  'Allow: /',
+  '',
+  'User-agent: Facebot',
+  'Allow: /',
+  '',
+  'User-agent: meta-externalagent',
+  'Allow: /',
+  '',
+  'User-agent: Twitterbot',
+  'Allow: /',
+  '',
+  'User-agent: *',
+  'Allow: /'
+].join('\n');
+
+const compressOversizedImageIfNeeded = async (image, route) => {
+  if (image.bytes.byteLength <= 280000 || route.url.searchParams.get('raw') === '1') {
+    return image;
+  }
   try {
-    const row = await getPublicRow(env, route);
-    if (!row) return new Response(null, { status: 404 });
-    const image = decodeDataImage(getPublicImage(route.kind, row));
-    if (!image) return new Response(null, { status: 404 });
-    return new Response(method === 'HEAD' ? null : image.bytes, {
-      status: 200,
-      headers: {
-        'content-type': image.contentType,
-        'content-length': String(image.bytes.byteLength),
-        'cache-control': 'public, max-age=300, s-maxage=300',
-        'access-control-allow-origin': '*',
-        'x-content-type-options': 'nosniff'
+    const rawUrl = new URL(route.url.toString());
+    rawUrl.searchParams.set('raw', '1');
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 3200);
+    const resized = await fetch(
+      `https://wsrv.nl/?url=${encodeURIComponent(rawUrl.toString())}&w=1200&q=78&output=jpg`,
+      { signal: controller.signal }
+    );
+    clearTimeout(timeoutId);
+    if (!resized.ok) return image;
+    const buffer = new Uint8Array(await resized.arrayBuffer());
+    if (buffer.byteLength > 0 && buffer.byteLength <= 280000) {
+      return { contentType: 'image/jpeg', bytes: buffer };
+    }
+    return image;
+  } catch {
+    return image;
+  }
+};
+
+const getImageResponse = async (context, route, method = 'GET') => {
+  try {
+    const cache = typeof caches !== 'undefined' ? caches.default : null;
+    const cacheKey = new Request(route.url.toString(), { method: 'GET' });
+    if (cache) {
+      const cached = await cache.match(cacheKey);
+      if (cached) {
+        if (method === 'HEAD') {
+          return new Response(null, { status: cached.status, headers: cached.headers });
+        }
+        return cached;
       }
-    });
+    }
+
+    let rawImage = '';
+    if (route.kind === 'landing' || route.kind === 'catalog') {
+      const fastRow = await callPublicRpc(context.env, 'get_public_share_image', {
+        p_kind: route.kind,
+        p_slug: route.slug,
+        p_domain: route.domain || ''
+      });
+      if (fastRow && typeof fastRow === 'object' && 'image' in fastRow) {
+        rawImage = fastRow.image || '';
+      } else {
+        const row = await getPublicRow(context.env, route);
+        if (!row) return new Response(null, { status: 404 });
+        rawImage = getPublicImage(route.kind, row);
+      }
+    } else {
+      const row = await getPublicRow(context.env, route);
+      if (!row) return new Response(null, { status: 404 });
+      rawImage = getPublicImage(route.kind, row);
+    }
+
+    const decoded = decodeDataImage(rawImage);
+    if (!decoded) return new Response(null, { status: 404 });
+    const image = await compressOversizedImageIfNeeded(decoded, route);
+
+    const headers = {
+      'content-type': image.contentType,
+      'content-length': String(image.bytes.byteLength),
+      'cache-control': 'public, max-age=300, s-maxage=300',
+      'access-control-allow-origin': '*',
+      'x-content-type-options': 'nosniff'
+    };
+
+    const fullResponse = new Response(image.bytes, { status: 200, headers });
+    if (cache) {
+      const toCache = fullResponse.clone();
+      if (typeof context.waitUntil === 'function') {
+        context.waitUntil(cache.put(cacheKey, toCache).catch(() => {}));
+      } else {
+        await cache.put(cacheKey, toCache).catch(() => {});
+      }
+    }
+
+    return method === 'HEAD' ? new Response(null, { status: 200, headers }) : fullResponse;
   } catch {
     return new Response(null, { status: 404 });
   }
@@ -226,6 +315,24 @@ const getMetadata = async (env, route) => {
   }
 
   try {
+    if (route.kind === 'landing' || route.kind === 'catalog') {
+      const fastMeta = await callPublicRpc(env, 'get_public_share_metadata', {
+        p_kind: route.kind,
+        p_slug: route.slug,
+        p_domain: route.domain || ''
+      });
+      if (fastMeta && typeof fastMeta === 'object' && fastMeta.title) {
+        const hasDataImage = Boolean(fastMeta.hasDataImage);
+        return {
+          title: cleanText(fastMeta.title, route.kind === 'catalog' ? 'Katalog Produk' : 'Landing Page'),
+          description: truncate(fastMeta.description, 300),
+          image: hasDataImage ? '' : cleanText(fastMeta.imageUrl),
+          imageMimeType: cleanText(fastMeta.imageMimeType),
+          imageProxyUrl: hasDataImage ? getImageProxyUrl(route, fastMeta.updatedAt) : ''
+        };
+      }
+    }
+
     if (route.kind === 'landing') {
       const row = await getPublicRow(env, route);
       const image = getPublicImage(route.kind, row);
@@ -234,7 +341,7 @@ const getMetadata = async (env, route) => {
         description: truncate(getLandingDescription(row), 300),
         image,
         imageMimeType: isDataImage(image) ? (String(image).match(/^data:([^;,]+)/i)?.[1] || 'image/jpeg') : '',
-        imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
+        imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route, row.updatedAt || row.updated_at) : ''
       } : null;
     }
 
@@ -246,7 +353,7 @@ const getMetadata = async (env, route) => {
         description: truncate(row.description || row.eventName, 300),
         image,
         imageMimeType: isDataImage(image) ? (String(image).match(/^data:([^;,]+)/i)?.[1] || 'image/jpeg') : '',
-        imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
+        imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route, row.updatedAt || row.updated_at) : ''
       } : null;
     }
 
@@ -258,7 +365,7 @@ const getMetadata = async (env, route) => {
         description: truncate(getCatalogDescription(row), 300),
         image,
         imageMimeType: isDataImage(image) ? (String(image).match(/^data:([^;,]+)/i)?.[1] || 'image/jpeg') : '',
-        imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
+        imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route, row.updatedAt || row.updated_at) : ''
       } : null;
     }
 
@@ -269,7 +376,7 @@ const getMetadata = async (env, route) => {
       description: truncate(row.description || row.eventName || row.welcomeMessage, 300),
       image,
       imageMimeType: isDataImage(image) ? (String(image).match(/^data:([^;,]+)/i)?.[1] || 'image/jpeg') : '',
-      imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
+      imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route, row.updatedAt || row.updated_at) : ''
     } : null;
   } catch {
     return null;
@@ -303,10 +410,21 @@ const injectMetadata = (html, metadata, pageUrl) => {
 export async function onRequest(context) {
   if (context.request.method !== 'GET' && context.request.method !== 'HEAD') return context.next();
 
+  const requestUrl = new URL(context.request.url);
+  if (requestUrl.pathname === '/robots.txt') {
+    return new Response(context.request.method === 'HEAD' ? null : ROBOTS_TXT, {
+      status: 200,
+      headers: {
+        'content-type': 'text/plain; charset=UTF-8',
+        'cache-control': 'public, max-age=300, s-maxage=300'
+      }
+    });
+  }
+
   const route = getPublicRoute(context.request);
   if (!route) return context.next();
 
-  if (route.action === 'image') return getImageResponse(context.env, route, context.request.method);
+  if (route.action === 'image') return getImageResponse(context, route, context.request.method);
 
   const metadata = await getMetadata(context.env, route);
   const fallbackMetadata = metadata || {

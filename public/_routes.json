@@ -11,7 +11,8 @@
     "/catalog",
     "/catalog/*",
     "/chat",
-    "/chat/*"
+    "/chat/*",
+    "/robots.txt"
   ],
   "exclude": []
 }

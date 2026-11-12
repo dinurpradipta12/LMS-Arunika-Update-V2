@@ -596,7 +596,20 @@ const readCatalogImage = (file: File, maxWidth = 1600): Promise<string> => new P
       const context = canvas.getContext('2d');
       if (!context) return reject(new Error('Gambar gagal diproses.'));
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      resolve(canvas.toDataURL('image/jpeg', 0.84));
+      let dataUrl = canvas.toDataURL('image/jpeg', 0.82);
+      if (dataUrl.length > 240_000) {
+        const retryScale = Math.min(1, 1200 / Math.max(canvas.width, canvas.height));
+        const retryCanvas = document.createElement('canvas');
+        retryCanvas.width = Math.max(1, Math.round(canvas.width * retryScale));
+        retryCanvas.height = Math.max(1, Math.round(canvas.height * retryScale));
+        const retryContext = retryCanvas.getContext('2d');
+        if (retryContext) {
+          retryContext.imageSmoothingEnabled = true;
+          retryContext.drawImage(canvas, 0, 0, retryCanvas.width, retryCanvas.height);
+          dataUrl = retryCanvas.toDataURL('image/jpeg', 0.74);
+        }
+      }
+      resolve(dataUrl);
     };
     image.src = String(reader.result || '');
   };

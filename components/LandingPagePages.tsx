@@ -1004,7 +1004,7 @@ const readImageDataUrl = (file: File, maxWidth = 1280, preservePng = false): Pro
       context.imageSmoothingEnabled = !preservePng;
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
       let dataUrl = canvas.toDataURL(preservePng ? 'image/png' : 'image/jpeg', preservePng ? undefined : 0.78);
-      if (!preservePng && dataUrl.length > 350_000) {
+      if (!preservePng && dataUrl.length > 240_000) {
         const retryScale = Math.min(1, 1000 / Math.max(canvas.width, canvas.height));
         const retryCanvas = document.createElement('canvas');
         retryCanvas.width = Math.max(1, Math.round(canvas.width * retryScale));
@@ -1059,7 +1059,10 @@ const compressDataUrlIfOversized = (
         context.imageSmoothingEnabled = true;
         context.drawImage(image, 0, 0, canvas.width, canvas.height);
         const keepPng = preservePng && raw.startsWith('data:image/png');
-        const compressed = canvas.toDataURL(keepPng ? 'image/png' : 'image/jpeg', keepPng ? undefined : quality);
+        let compressed = canvas.toDataURL(keepPng ? 'image/png' : 'image/jpeg', keepPng ? undefined : quality);
+        if (!keepPng && compressed.length > 240_000) {
+          compressed = canvas.toDataURL('image/jpeg', 0.64);
+        }
         resolve(compressed.length < raw.length ? compressed : raw);
       } catch {
         resolve(raw);
