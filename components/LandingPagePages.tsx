@@ -974,13 +974,14 @@ const whatsappHref = (phone: unknown, pageTitle: string, paymentAmount?: string,
 const errorMessage = (error: any) => {
   const message = asText(error?.message || error, 'Terjadi kesalahan.');
   if (message.includes('duplicate key') && message.includes('slug')) return 'Slug landing page sudah digunakan. Pilih slug yang berbeda.';
+  if (message.includes('statement timeout')) return 'Penyimpanan memakan waktu terlalu lama karena ukuran gambar besar. Silakan klik Simpan Page sekali lagi atau jalankan SQL optimasi terbaru.';
   if (message.includes('landing_pages') || message.includes('get_public_landing_page')) return 'Database landing page belum siap. Jalankan migration Landing Page Maker terbaru.';
   if (message.includes('landing_page_events') || message.includes('track_public_landing_event') || message.includes('get_landing_page_insight')) return 'Analytics landing page belum siap. Jalankan migration analytics landing page terbaru.';
   if (message.includes('Landing page tidak ditemukan')) return message;
   return message;
 };
 
-const readImageDataUrl = (file: File, maxWidth = 1600, preservePng = false): Promise<string> => new Promise((resolve, reject) => {
+const readImageDataUrl = (file: File, maxWidth = 1280, preservePng = false): Promise<string> => new Promise((resolve, reject) => {
   if (!file.type.startsWith('image/')) {
     reject(new Error('Pilih file gambar.'));
     return;
@@ -1002,7 +1003,19 @@ const readImageDataUrl = (file: File, maxWidth = 1600, preservePng = false): Pro
       }
       context.imageSmoothingEnabled = !preservePng;
       context.drawImage(image, 0, 0, canvas.width, canvas.height);
-      const dataUrl = canvas.toDataURL(preservePng ? 'image/png' : 'image/jpeg', preservePng ? undefined : 0.82);
+      let dataUrl = canvas.toDataURL(preservePng ? 'image/png' : 'image/jpeg', preservePng ? undefined : 0.78);
+      if (!preservePng && dataUrl.length > 350_000) {
+        const retryScale = Math.min(1, 1000 / Math.max(canvas.width, canvas.height));
+        const retryCanvas = document.createElement('canvas');
+        retryCanvas.width = Math.max(1, Math.round(canvas.width * retryScale));
+        retryCanvas.height = Math.max(1, Math.round(canvas.height * retryScale));
+        const retryContext = retryCanvas.getContext('2d');
+        if (retryContext) {
+          retryContext.imageSmoothingEnabled = true;
+          retryContext.drawImage(canvas, 0, 0, retryCanvas.width, retryCanvas.height);
+          dataUrl = retryCanvas.toDataURL('image/jpeg', 0.72);
+        }
+      }
       if (dataUrl.length > 2_000_000) {
         reject(new Error('Ukuran gambar terlalu besar. Gunakan gambar yang lebih kecil.'));
         return;
@@ -1013,6 +1026,87 @@ const readImageDataUrl = (file: File, maxWidth = 1600, preservePng = false): Pro
   };
   reader.readAsDataURL(file);
 });
+
+const compressDataUrlIfOversized = (
+  value: unknown,
+  maxWidth = 1080,
+  quality = 0.74,
+  preservePng = false
+): Promise<string> => {
+  const raw = asText(value);
+  if (!raw.startsWith('data:image/') || raw.length <= 220_000) {
+    return Promise.resolve(raw);
+  }
+  return new Promise(resolve => {
+    const timeoutId = window.setTimeout(() => resolve(raw), 2500);
+    const image = new Image();
+    image.onerror = () => {
+      window.clearTimeout(timeoutId);
+      resolve(raw);
+    };
+    image.onload = () => {
+      window.clearTimeout(timeoutId);
+      try {
+        const scale = Math.min(1, maxWidth / Math.max(image.width || 1, image.height || 1));
+        const canvas = document.createElement('canvas');
+        canvas.width = Math.max(1, Math.round((image.width || 1) * scale));
+        canvas.height = Math.max(1, Math.round((image.height || 1) * scale));
+        const context = canvas.getContext('2d');
+        if (!context) {
+          resolve(raw);
+          return;
+        }
+        context.imageSmoothingEnabled = true;
+        context.drawImage(image, 0, 0, canvas.width, canvas.height);
+        const keepPng = preservePng && raw.startsWith('data:image/png');
+        const compressed = canvas.toDataURL(keepPng ? 'image/png' : 'image/jpeg', keepPng ? undefined : quality);
+        resolve(compressed.length < raw.length ? compressed : raw);
+      } catch {
+        resolve(raw);
+      }
+    };
+    image.src = raw;
+  });
+};
+
+const optimizeLandingBlocksImages = async (blocks: LandingBlock[]): Promise<LandingBlock[]> =>
+  Promise.all(
+    blocks.map(async block => {
+      const data = { ...(block.data || {}) };
+      if (typeof data.headerImageUrl === 'string' && data.headerImageUrl.startsWith('data:image/')) {
+        data.headerImageUrl = await compressDataUrlIfOversized(data.headerImageUrl, 1280, 0.76, false);
+      }
+      if (typeof data.imageUrl === 'string' && data.imageUrl.startsWith('data:image/')) {
+        data.imageUrl = await compressDataUrlIfOversized(data.imageUrl, 1080, 0.76, block.type === 'hero');
+      }
+      if (typeof data.photoUrl === 'string' && data.photoUrl.startsWith('data:image/')) {
+        data.photoUrl = await compressDataUrlIfOversized(data.photoUrl, 900, 0.78, true);
+      }
+      if (typeof data.qrCode === 'string' && data.qrCode.startsWith('data:image/')) {
+        data.qrCode = await compressDataUrlIfOversized(data.qrCode, 800, 0.82, true);
+      }
+      if (Array.isArray(data.images)) {
+        data.images = await Promise.all(
+          data.images.map(async (item: any) =>
+            item && typeof item.url === 'string' && item.url.startsWith('data:image/')
+              ? { ...item, url: await compressDataUrlIfOversized(item.url, 1100, 0.74, false) }
+              : item
+          )
+        );
+        if (data.images[0]?.url) data.url = data.images[0].url;
+      }
+      if (Array.isArray(data.items)) {
+        data.items = await Promise.all(
+          data.items.map(async (item: any) =>
+            item && typeof item.imageUrl === 'string' && item.imageUrl.startsWith('data:image/')
+              ? { ...item, imageUrl: await compressDataUrlIfOversized(item.imageUrl, 960, 0.74, false) }
+              : item
+          )
+        );
+      }
+      return { ...block, data };
+    })
+  );
 
 const readVideoDataUrl = (file: File, maxBytes = 15 * 1024 * 1024): Promise<string> => new Promise((resolve, reject) => {
   if (!file.type.startsWith('video/')) {
@@ -1693,7 +1787,10 @@ const LandingProfileBlock: React.FC<{ data: Record<string, any> }> = ({ data }) 
   );
 };
 
-const LandingClassesBlock: React.FC<{ data: Record<string, any> }> = ({ data }) => {
+const LandingClassesBlock: React.FC<{
+  data: Record<string, any>;
+  onReorderItems?: (items: LandingClassItem[]) => void;
+}> = ({ data, onReorderItems }) => {
   const layout = normalizeClassLayout(data.layout);
   const overflowLayout = normalizeClassOverflowLayout(data.overflowLayout);
   const eyebrow = asText(data.eyebrow, 'Rangkaian Kelas').trim();
@@ -1703,6 +1800,7 @@ const LandingClassesBlock: React.FC<{ data: Record<string, any> }> = ({ data }) 
   const sectionHeadingColor = headingColorValue(data.headingColor);
   const galleryRef = useRef<HTMLDivElement>(null);
   const [activeIndex, setActiveIndex] = useState(0);
+  const [draggedClassIndex, setDraggedClassIndex] = useState<number | null>(null);
 
   useEffect(() => {
     setActiveIndex(current => Math.min(current, Math.max(0, items.length - 1)));
@@ -1719,6 +1817,64 @@ const LandingClassesBlock: React.FC<{ data: Record<string, any> }> = ({ data }) 
             ? overflowLayout
             : 'stack';
 
+  const moveClassItem = (fromIndex: number, toIndex: number) => {
+    if (!onReorderItems || fromIndex === toIndex || toIndex < 0 || toIndex >= items.length) return;
+    const next = [...items];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    onReorderItems(next);
+    if (effectiveMode === 'slider') setActiveIndex(toIndex);
+  };
+
+  const renderCardOrderControls = (index: number, isHorizontal: boolean) => {
+    if (!onReorderItems || items.length <= 1) return null;
+    const PrevIcon = isHorizontal ? ChevronLeft : MoveUp;
+    const NextIcon = isHorizontal ? ChevronRight : MoveDown;
+    return (
+      <div
+        onClick={event => event.stopPropagation()}
+        onMouseDown={event => event.stopPropagation()}
+        className="flex items-center gap-1 rounded-xl border border-[var(--border)] bg-[var(--surface)]/95 px-1.5 py-1 shadow-sm backdrop-blur-sm"
+      >
+        <span className="cursor-grab px-0.5 text-[var(--muted)]" title="Tarik kartu untuk mengubah urutan">
+          <GripVertical size={13} />
+        </span>
+        <select
+          value={index}
+          aria-label={`Urutan kelas ${index + 1}`}
+          onChange={event => moveClassItem(index, Number(event.target.value))}
+          className="cursor-pointer rounded-md bg-transparent px-1 py-0.5 text-[11px] font-bold text-[var(--accent-strong)] outline-none hover:bg-[var(--accent-soft)]"
+        >
+          {items.map((_, optionIndex) => (
+            <option key={`canvas-class-order-${optionIndex}`} value={optionIndex}>
+              #{optionIndex + 1}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={index === 0}
+          onClick={() => moveClassItem(index, index - 1)}
+          aria-label={`Majukan urutan kelas ${index + 1}`}
+          title="Pindah ke urutan sebelumnya"
+          className="rounded-md p-1 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)] disabled:opacity-30"
+        >
+          <PrevIcon size={13} />
+        </button>
+        <button
+          type="button"
+          disabled={index === items.length - 1}
+          onClick={() => moveClassItem(index, index + 1)}
+          aria-label={`Mundurkan urutan kelas ${index + 1}`}
+          title="Pindah ke urutan berikutnya"
+          className="rounded-md p-1 text-[var(--muted)] transition-colors hover:bg-[var(--surface-soft)] hover:text-[var(--text)] disabled:opacity-30"
+        >
+          <NextIcon size={13} />
+        </button>
+      </div>
+    );
+  };
+
   const scrollGallery = (direction: 'prev' | 'next') => {
     const container = galleryRef.current;
     if (!container) return;
@@ -1730,8 +1886,41 @@ const LandingClassesBlock: React.FC<{ data: Record<string, any> }> = ({ data }) 
   };
 
   const renderHorizontalCard = (item: LandingClassItem, index: number) => (
-    <article key={`${item.id}-${index}`} className="grid overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:grid-cols-[minmax(180px,240px)_minmax(0,1fr)]">
-      <div className="min-h-[190px] bg-[var(--accent-soft)] sm:min-h-full">
+    <article
+      key={`${item.id}-${index}`}
+      draggable={Boolean(onReorderItems && items.length > 1)}
+      onDragStart={event => {
+        if (!onReorderItems) return;
+        event.stopPropagation();
+        setDraggedClassIndex(index);
+        event.dataTransfer.effectAllowed = 'move';
+        event.dataTransfer.setData('application/x-landing-class-index', String(index));
+      }}
+      onDragOver={event => {
+        if (!onReorderItems) return;
+        event.preventDefault();
+        event.stopPropagation();
+      }}
+      onDrop={event => {
+        if (!onReorderItems) return;
+        event.preventDefault();
+        event.stopPropagation();
+        const rawFrom = event.dataTransfer.getData('application/x-landing-class-index');
+        const fromIndex = rawFrom !== '' ? Number(rawFrom) : draggedClassIndex;
+        setDraggedClassIndex(null);
+        if (fromIndex !== null && Number.isFinite(fromIndex)) {
+          moveClassItem(fromIndex, index);
+        }
+      }}
+      onDragEnd={() => setDraggedClassIndex(null)}
+      className={`relative grid overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:grid-cols-[minmax(180px,240px)_minmax(0,1fr)] ${draggedClassIndex === index ? 'opacity-60 ring-2 ring-[var(--accent)]' : ''}`}
+    >
+      <div className="relative min-h-[190px] bg-[var(--accent-soft)] sm:min-h-full">
+        {onReorderItems && items.length > 1 && (
+          <div className="absolute left-2.5 top-2.5 z-10">
+            {renderCardOrderControls(index, effectiveMode === 'slider')}
+          </div>
+        )}
         {item.imageUrl ? (
           <img src={item.imageUrl} alt={item.imageAlt || item.title || `Foto kelas ${index + 1}`} className="h-full w-full object-cover" />
         ) : (
@@ -1796,8 +1985,41 @@ const LandingClassesBlock: React.FC<{ data: Record<string, any> }> = ({ data }) 
           <div>
             <div ref={galleryRef} className="flex snap-x snap-mandatory gap-4 overflow-x-auto pb-3 scroll-smooth">
               {items.map((item, index) => (
-                <article key={`${item.id}-${index}`} className="flex w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:w-[320px]">
-                  <div className="aspect-square w-full overflow-hidden bg-[var(--accent-soft)]">
+                <article
+                  key={`${item.id}-${index}`}
+                  draggable={Boolean(onReorderItems && items.length > 1)}
+                  onDragStart={event => {
+                    if (!onReorderItems) return;
+                    event.stopPropagation();
+                    setDraggedClassIndex(index);
+                    event.dataTransfer.effectAllowed = 'move';
+                    event.dataTransfer.setData('application/x-landing-class-index', String(index));
+                  }}
+                  onDragOver={event => {
+                    if (!onReorderItems) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
+                  onDrop={event => {
+                    if (!onReorderItems) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    const rawFrom = event.dataTransfer.getData('application/x-landing-class-index');
+                    const fromIndex = rawFrom !== '' ? Number(rawFrom) : draggedClassIndex;
+                    setDraggedClassIndex(null);
+                    if (fromIndex !== null && Number.isFinite(fromIndex)) {
+                      moveClassItem(fromIndex, index);
+                    }
+                  }}
+                  onDragEnd={() => setDraggedClassIndex(null)}
+                  className={`flex w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:w-[320px] ${draggedClassIndex === index ? 'opacity-60 ring-2 ring-[var(--accent)]' : ''}`}
+                >
+                  <div className="relative aspect-square w-full overflow-hidden bg-[var(--accent-soft)]">
+                    {onReorderItems && items.length > 1 && (
+                      <div className="absolute left-2.5 top-2.5 z-10">
+                        {renderCardOrderControls(index, true)}
+                      </div>
+                    )}
                     {item.imageUrl ? (
                       <img src={item.imageUrl} alt={item.imageAlt || item.title || `Foto kelas ${index + 1}`} className="h-full w-full object-cover" />
                     ) : (
@@ -1894,7 +2116,8 @@ export const LandingBlockRenderer: React.FC<{
   participantCount?: number;
   onParticipantCountChange?: (nextCount: number) => void;
   hasPricingBlock?: boolean;
-}> = ({ block, pageTitle = 'produk ini', onCtaClick, selectedPackage, onSelectPackage, selectedAudience, onSelectAudience, participantCount, onParticipantCountChange, hasPricingBlock = false }) => {
+  onUpdateData?: (data: Record<string, any>) => void;
+}> = ({ block, pageTitle = 'produk ini', onCtaClick, selectedPackage, onSelectPackage, selectedAudience, onSelectAudience, participantCount, onParticipantCountChange, hasPricingBlock = false, onUpdateData }) => {
   const data = block.data || {};
   const textBody = asText(data.body);
   const sectionHeadingColor = headingColorValue(data.headingColor);
@@ -1998,7 +2221,12 @@ export const LandingBlockRenderer: React.FC<{
     case 'topics':
       return <LandingTopicsBlock data={data} />;
     case 'classes':
-      return <LandingClassesBlock data={data} />;
+      return (
+        <LandingClassesBlock
+          data={data}
+          onReorderItems={onUpdateData ? nextItems => onUpdateData({ ...data, items: nextItems }) : undefined}
+        />
+      );
     case 'workflow':
       return <LandingWorkflowBlock data={data} />;
     case 'pricing': {
@@ -2173,7 +2401,7 @@ const LandingPageShell: React.FC<{ page: LandingPage; children: React.ReactNode;
   </div>
 );
 
-const LandingPagePreview: React.FC<{ page: LandingPage; editable?: boolean; selectedBlockId?: string; onSelect?: (id: string) => void; onDrop?: (event: React.DragEvent, index: number) => void; onDragStart?: (event: React.DragEvent, blockId: string) => void; onMove?: (index: number, direction: -1 | 1) => void; onRemove?: (id: string) => void }> = ({ page, editable = false, selectedBlockId, onSelect, onDrop, onDragStart, onMove, onRemove }) => {
+const LandingPagePreview: React.FC<{ page: LandingPage; editable?: boolean; selectedBlockId?: string; onSelect?: (id: string) => void; onDrop?: (event: React.DragEvent, index: number) => void; onDragStart?: (event: React.DragEvent, blockId: string) => void; onMove?: (index: number, direction: -1 | 1) => void; onRemove?: (id: string) => void; onUpdateBlockData?: (blockId: string, data: Record<string, any>) => void }> = ({ page, editable = false, selectedBlockId, onSelect, onDrop, onDragStart, onMove, onRemove, onUpdateBlockData }) => {
   const [selectedPackage, setSelectedPackage] = useState<LandingPricingPackage | null>(null);
   const [selectedAudience, setSelectedAudience] = useState<LandingPricingAudience>('individual');
   const [participantCount, setParticipantCount] = useState(1);
@@ -2218,7 +2446,7 @@ const LandingPagePreview: React.FC<{ page: LandingPage; editable?: boolean; sele
             <button type="button" aria-label={`Turunkan ${LANDING_BLOCK_LABELS[block.type]}`} disabled={index === page.blocks.length - 1} onClick={event => { event.stopPropagation(); onMove?.(index, 1); }} className="rounded-lg p-1.5 text-[var(--muted)] hover:bg-[var(--surface-soft)] disabled:opacity-30"><MoveDown size={14} /></button>
             <button type="button" aria-label={`Hapus ${LANDING_BLOCK_LABELS[block.type]}`} onClick={event => { event.stopPropagation(); onRemove?.(block.id); }} className="rounded-lg p-1.5 text-[var(--danger-text)] hover:bg-[var(--danger-soft)]"><Trash2 size={14} /></button>
           </div>}
-          <LandingBlockRenderer block={block} pageTitle={page.title} selectedPackage={selectedPackage} onSelectPackage={handleSelectPackage} selectedAudience={selectedAudience} onSelectAudience={handleSelectAudience} participantCount={participantCount} onParticipantCountChange={handleParticipantCountChange} hasPricingBlock={hasPricingBlock} />
+          <LandingBlockRenderer block={block} pageTitle={page.title} selectedPackage={selectedPackage} onSelectPackage={handleSelectPackage} selectedAudience={selectedAudience} onSelectAudience={handleSelectAudience} participantCount={participantCount} onParticipantCountChange={handleParticipantCountChange} hasPricingBlock={hasPricingBlock} onUpdateData={editable && onUpdateBlockData ? nextData => onUpdateBlockData(block.id, nextData) : undefined} />
         </div>
       ))}
       {editable && page.blocks.length > 0 && <div onDragOver={event => event.preventDefault()} onDrop={event => onDrop?.(event, page.blocks.length)} className="h-8 rounded-xl border border-dashed border-transparent transition-colors hover:border-[var(--border-strong)]" aria-label="Taruh elemen di bagian paling bawah" />}
@@ -2409,6 +2637,70 @@ const HeroImageCropControls: React.FC<{ imageUrl: string; onChange: (value: stri
   );
 };
 
+const reorderArrayItem = <T,>(items: T[], fromIndex: number, toIndex: number): T[] => {
+  if (fromIndex === toIndex || toIndex < 0 || toIndex >= items.length) return items;
+  const next = [...items];
+  const [moved] = next.splice(fromIndex, 1);
+  next.splice(toIndex, 0, moved);
+  return next;
+};
+
+const CardItemOrderToolbar: React.FC<{
+  index: number;
+  total: number;
+  label: string;
+  onMove: (toIndex: number) => void;
+  onRemove: () => void;
+}> = ({ index, total, label, onMove, onRemove }) => (
+  <div className="flex items-center gap-1">
+    {total > 1 && (
+      <>
+        <select
+          value={index}
+          aria-label={`Posisi ${label}`}
+          onChange={event => onMove(Number(event.target.value))}
+          className="h-7 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[11px] font-bold text-[var(--accent-strong)] outline-none focus:border-[var(--accent)]"
+        >
+          {Array.from({ length: total }, (_, optionIndex) => (
+            <option key={`${label}-pos-${optionIndex}`} value={optionIndex}>
+              #{optionIndex + 1}
+            </option>
+          ))}
+        </select>
+        <button
+          type="button"
+          disabled={index === 0}
+          onClick={() => onMove(index - 1)}
+          aria-label={`Naikkan ${label}`}
+          title={`Naikkan ${label}`}
+          className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:opacity-30"
+        >
+          <MoveUp size={15} />
+        </button>
+        <button
+          type="button"
+          disabled={index === total - 1}
+          onClick={() => onMove(index + 1)}
+          aria-label={`Turunkan ${label}`}
+          title={`Turunkan ${label}`}
+          className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:opacity-30"
+        >
+          <MoveDown size={15} />
+        </button>
+      </>
+    )}
+    <button
+      type="button"
+      onClick={onRemove}
+      aria-label={`Hapus ${label}`}
+      title={`Hapus ${label}`}
+      className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"
+    >
+      <Trash2 size={16} />
+    </button>
+  </div>
+);
+
 const ImageGalleryUploader: React.FC<{ items: LandingImageItem[]; onChange: (items: LandingImageItem[]) => void }> = ({ items, onChange }) => {
   const inputRef = useRef<HTMLInputElement>(null);
   const [urlInput, setUrlInput] = useState('');
@@ -2418,6 +2710,7 @@ const ImageGalleryUploader: React.FC<{ items: LandingImageItem[]; onChange: (ite
 
   const updateItem = (index: number, patch: Partial<LandingImageItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
   const removeItem = (index: number) => onChange(items.filter((_, itemIndex) => itemIndex !== index));
+  const moveItem = (fromIndex: number, toIndex: number) => onChange(reorderArrayItem(items, fromIndex, toIndex));
 
   const handleFiles = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(event.target.files || []);
@@ -2470,16 +2763,23 @@ const ImageGalleryUploader: React.FC<{ items: LandingImageItem[]; onChange: (ite
       {items.length ? (
         <div className="space-y-3">
           {items.map((item, index) => (
-            <div key={`${item.url}-${index}`} className="rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+            <div key={`${item.url}-${index}`} className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+              <div className="flex items-center justify-between gap-2">
+                <p className="text-xs font-semibold text-[var(--text)]">Foto {index + 1}</p>
+                <CardItemOrderToolbar
+                  index={index}
+                  total={items.length}
+                  label={`foto ${index + 1}`}
+                  onMove={toIndex => moveItem(index, toIndex)}
+                  onRemove={() => removeItem(index)}
+                />
+              </div>
               <div className="flex items-start gap-3">
                 <img src={item.url} alt={item.alt || `Foto produk ${index + 1}`} className="h-20 w-20 shrink-0 rounded-lg border border-[var(--border)] bg-[var(--surface)] object-cover" />
                 <div className="min-w-0 flex-1 space-y-3">
                   <Input label={`Alt foto ${index + 1}`} value={item.alt} onChange={event => updateItem(index, { alt: event.target.value })} placeholder="Visual produk" />
                   <Input label="Caption (opsional)" value={item.caption} onChange={event => updateItem(index, { caption: event.target.value })} placeholder="Keterangan foto" />
                 </div>
-                <button type="button" onClick={() => removeItem(index)} aria-label={`Hapus foto ${index + 1}`} title={`Hapus foto ${index + 1}`} className="rounded-lg p-2 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]">
-                  <Trash2 size={16} />
-                </button>
               </div>
             </div>
           ))}
@@ -2507,6 +2807,7 @@ const LandingVideoEditor: React.FC<{
 }> = ({ items, layout, onChange, onLayoutChange }) => {
   const maxVideos = 12;
   const updateItem = (index: number, patch: Partial<LandingVideoItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const moveItem = (fromIndex: number, toIndex: number) => onChange(reorderArrayItem(items, fromIndex, toIndex));
   const addItem = () => {
     if (items.length >= maxVideos) return;
     onChange([...items, createVideoItem(items.length)]);
@@ -2532,7 +2833,13 @@ const LandingVideoEditor: React.FC<{
         <div key={`${item.id}-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold">Video {index + 1}</p>
-            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus video ${index + 1}`} title={`Hapus video ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+            <CardItemOrderToolbar
+              index={index}
+              total={items.length}
+              label={`video ${index + 1}`}
+              onMove={toIndex => moveItem(index, toIndex)}
+              onRemove={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+            />
           </div>
           <label className="flex flex-col gap-2">
             <span className="text-xs font-semibold text-[var(--muted)]">Mode sumber video</span>
@@ -2559,6 +2866,7 @@ const LandingVideoEditor: React.FC<{
 const LandingTopicsEditor: React.FC<{ items: LandingTopicCategory[]; onChange: (items: LandingTopicCategory[]) => void }> = ({ items, onChange }) => {
   const maxCategories = 12;
   const updateItem = (index: number, patch: Partial<LandingTopicCategory>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const moveItem = (fromIndex: number, toIndex: number) => onChange(reorderArrayItem(items, fromIndex, toIndex));
   const addItem = () => {
     if (items.length >= maxCategories) return;
     onChange([...items, createTopicCategory(items.length)]);
@@ -2577,7 +2885,13 @@ const LandingTopicsEditor: React.FC<{ items: LandingTopicCategory[]; onChange: (
         <div key={`${item.id}-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold">Kategori {index + 1}</p>
-            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus kategori ${index + 1}`} title={`Hapus kategori ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+            <CardItemOrderToolbar
+              index={index}
+              total={items.length}
+              label={`kategori ${index + 1}`}
+              onMove={toIndex => moveItem(index, toIndex)}
+              onRemove={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+            />
           </div>
           <Input label="Nama kategori / subjudul" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Strategi dan Optimasi Akun" />
           <Textarea label="Poin pembahasan (satu per baris)" value={item.items.join('\n')} onChange={event => updateItem(index, { items: event.target.value.split('\n') })} placeholder={'Audit kondisi akun.\nPenentuan positioning dan target audiens.\nEvaluasi content pillar.'} className="min-h-[140px]" />
@@ -2596,6 +2910,7 @@ const LandingWorkflowEditor: React.FC<{
 }> = ({ items, layout, onChange, onLayoutChange }) => {
   const maxSteps = 12;
   const updateItem = (index: number, patch: Partial<LandingWorkflowStep>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const moveItem = (fromIndex: number, toIndex: number) => onChange(reorderArrayItem(items, fromIndex, toIndex));
   const addItem = () => {
     if (items.length >= maxSteps) return;
     onChange([...items, createWorkflowStep(items.length)]);
@@ -2622,7 +2937,13 @@ const LandingWorkflowEditor: React.FC<{
         <div key={`${item.id}-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold">Tahap {index + 1}</p>
-            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus tahap ${index + 1}`} title={`Hapus tahap ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+            <CardItemOrderToolbar
+              index={index}
+              total={items.length}
+              label={`tahap ${index + 1}`}
+              onMove={toIndex => moveItem(index, toIndex)}
+              onRemove={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+            />
           </div>
           <div className="grid gap-3 sm:grid-cols-[100px_minmax(0,1fr)]">
             <Input label="Label" value={item.label} onChange={event => updateItem(index, { label: event.target.value })} placeholder="01" />
@@ -2760,6 +3081,7 @@ const LandingProfileEditor: React.FC<{
 const LandingTestimonialEditor: React.FC<{ items: LandingTestimonialItem[]; onChange: (items: LandingTestimonialItem[]) => void }> = ({ items, onChange }) => {
   const maxTestimonials = 20;
   const updateItem = (index: number, patch: Partial<LandingTestimonialItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const moveItem = (fromIndex: number, toIndex: number) => onChange(reorderArrayItem(items, fromIndex, toIndex));
   const addItem = () => {
     if (items.length >= maxTestimonials) return;
     onChange([...items, { quote: '', name: '', role: '', rating: 5 }]);
@@ -2775,7 +3097,13 @@ const LandingTestimonialEditor: React.FC<{ items: LandingTestimonialItem[]; onCh
         <div key={`testimonial-editor-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold">Testimoni {index + 1}</p>
-            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus testimoni ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+            <CardItemOrderToolbar
+              index={index}
+              total={items.length}
+              label={`testimoni ${index + 1}`}
+              onMove={toIndex => moveItem(index, toIndex)}
+              onRemove={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+            />
           </div>
           <Textarea label="Testimoni" value={item.quote} onChange={event => updateItem(index, { quote: event.target.value })} placeholder="Ceritakan pengalaman pelanggan..." className="min-h-[120px]" />
           <Input label="Nama pelanggan" value={item.name} onChange={event => updateItem(index, { name: event.target.value })} placeholder="Nama pelanggan" />
@@ -2800,6 +3128,7 @@ const LandingTestimonialEditor: React.FC<{ items: LandingTestimonialItem[]; onCh
 const LandingBonusEditor: React.FC<{ items: LandingBonusItem[]; onChange: (items: LandingBonusItem[]) => void }> = ({ items, onChange }) => {
   const maxBonuses = 12;
   const updateItem = (index: number, patch: Partial<LandingBonusItem>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const moveItem = (fromIndex: number, toIndex: number) => onChange(reorderArrayItem(items, fromIndex, toIndex));
   const addItem = () => {
     if (items.length >= maxBonuses) return;
     onChange([...items, { title: '', body: '', imageUrl: '', imageAlt: 'Visual bonus', caption: '' }]);
@@ -2815,7 +3144,13 @@ const LandingBonusEditor: React.FC<{ items: LandingBonusItem[]; onChange: (items
         <div key={`bonus-editor-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold">Bonus {index + 1}</p>
-            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus bonus ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+            <CardItemOrderToolbar
+              index={index}
+              total={items.length}
+              label={`bonus ${index + 1}`}
+              onMove={toIndex => moveItem(index, toIndex)}
+              onRemove={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+            />
           </div>
           <Input label="Judul bonus" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Template tambahan gratis" />
           <Textarea label="Keterangan bonus" value={item.body} onChange={event => updateItem(index, { body: event.target.value })} placeholder="Jelaskan isi dan manfaat bonus untuk pelanggan." />
@@ -2833,6 +3168,7 @@ const LandingBonusEditor: React.FC<{ items: LandingBonusItem[]; onChange: (items
 const LandingPricingEditor: React.FC<{ items: LandingPricingPackage[]; onChange: (items: LandingPricingPackage[]) => void }> = ({ items, onChange }) => {
   const maxPackages = 12;
   const updateItem = (index: number, patch: Partial<LandingPricingPackage>) => onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const moveItem = (fromIndex: number, toIndex: number) => onChange(reorderArrayItem(items, fromIndex, toIndex));
   const addItem = (audience: LandingPricingAudience) => {
     if (items.length >= maxPackages) return;
     onChange([...items, createPricingPackage(items.length, audience)]);
@@ -2861,7 +3197,13 @@ const LandingPricingEditor: React.FC<{ items: LandingPricingPackage[]; onChange:
         <div key={`pricing-editor-${item.id}-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
           <div className="flex items-center justify-between gap-3">
             <p className="text-sm font-semibold">Paket {index + 1}</p>
-            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus paket ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+            <CardItemOrderToolbar
+              index={index}
+              total={items.length}
+              label={`paket ${index + 1}`}
+              onMove={toIndex => moveItem(index, toIndex)}
+              onRemove={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+            />
           </div>
           <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Jenis konsultasi</span><select value={item.audience} onChange={event => updateAudience(index, event.target.value === 'team' ? 'team' : 'individual')} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"><option value="individual">Personal (1 orang)</option><option value="team">Tim (lebih dari 1 orang)</option></select></label>
           <Input label="Nama paket" value={item.name} onChange={event => updateItem(index, { name: event.target.value })} placeholder="Contoh: Paket Pro" />
@@ -2888,8 +3230,12 @@ const LandingClassesEditor: React.FC<{
   onOverflowLayoutChange: (overflowLayout: LandingClassOverflowLayout) => void;
 }> = ({ items, layout, overflowLayout, onChange, onLayoutChange, onOverflowLayoutChange }) => {
   const maxClasses = 20;
+  const [compactOrderMode, setCompactOrderMode] = useState(false);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const updateItem = (index: number, patch: Partial<LandingClassItem>) =>
     onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const moveItem = (fromIndex: number, toIndex: number) =>
+    onChange(reorderArrayItem(items, fromIndex, toIndex));
   const addItem = () => {
     if (items.length >= maxClasses) return;
     onChange([...items, createClassItem(items.length)]);
@@ -2925,23 +3271,83 @@ const LandingClassesEditor: React.FC<{
           </span>
         </label>
       )}
-      <div className="flex items-center justify-between gap-3">
-        <p className="text-xs font-semibold text-[var(--muted)]">Daftar kelas</p>
-        <span className="text-[11px] text-[var(--muted)]">{items.length}/{maxClasses} kelas</span>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <div>
+          <p className="text-xs font-semibold text-[var(--muted)]">Daftar kelas ({items.length}/{maxClasses})</p>
+          {items.length > 1 && (
+            <p className="mt-0.5 text-[11px] text-[var(--muted)]">Tarik kartu, pilih nomor urutan, atau klik panah untuk mengurutkan.</p>
+          )}
+        </div>
+        {items.length > 1 && (
+          <button
+            type="button"
+            onClick={() => setCompactOrderMode(current => !current)}
+            className="rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-2.5 py-1.5 text-[11px] font-semibold text-[var(--accent-strong)] transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--accent-soft)]"
+          >
+            {compactOrderMode ? 'Tampilkan detail form' : 'Ringkas untuk urutkan'}
+          </button>
+        )}
       </div>
       {items.length ? items.map((item, index) => (
-        <div key={`class-editor-${item.id}-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
-          <div className="flex items-center justify-between gap-3">
-            <p className="text-sm font-semibold">Kelas {index + 1}</p>
-            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus kelas ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+        <div
+          key={`class-editor-${item.id}-${index}`}
+          draggable={items.length > 1}
+          onDragStart={event => {
+            setDraggedIndex(index);
+            event.dataTransfer.effectAllowed = 'move';
+            event.dataTransfer.setData('application/x-class-editor-index', String(index));
+          }}
+          onDragOver={event => {
+            if (items.length > 1) event.preventDefault();
+          }}
+          onDrop={event => {
+            event.preventDefault();
+            const rawFrom = event.dataTransfer.getData('application/x-class-editor-index');
+            const fromIndex = rawFrom !== '' ? Number(rawFrom) : draggedIndex;
+            setDraggedIndex(null);
+            if (fromIndex !== null && Number.isFinite(fromIndex)) {
+              moveItem(fromIndex, index);
+            }
+          }}
+          onDragEnd={() => setDraggedIndex(null)}
+          className={`space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3 transition-shadow ${draggedIndex === index ? 'opacity-60 ring-2 ring-[var(--accent)]' : ''}`}
+        >
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex min-w-0 items-center gap-2">
+              {items.length > 1 && (
+                <span className="cursor-grab text-[var(--muted)]" title="Tarik untuk mengurutkan kelas">
+                  <GripVertical size={15} />
+                </span>
+              )}
+              {compactOrderMode && item.imageUrl && (
+                <img src={item.imageUrl} alt={item.title || `Kelas ${index + 1}`} className="h-9 w-9 shrink-0 rounded-lg border border-[var(--border)] object-cover" />
+              )}
+              <div className="min-w-0">
+                <p className="text-sm font-semibold">Kelas {index + 1}</p>
+                {compactOrderMode && (
+                  <p className="truncate text-xs text-[var(--muted)]">{item.title || 'Belum ada nama kelas'}{item.speaker ? ` · ${item.speaker}` : ''}</p>
+                )}
+              </div>
+            </div>
+            <CardItemOrderToolbar
+              index={index}
+              total={items.length}
+              label={`kelas ${index + 1}`}
+              onMove={toIndex => moveItem(index, toIndex)}
+              onRemove={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))}
+            />
           </div>
-          <ImageUploader label="Foto kelas / pemateri" value={item.imageUrl} onChange={value => updateItem(index, { imageUrl: value })} />
-          <Input label="URL foto kelas (opsional)" value={item.imageUrl.startsWith('data:') ? '' : item.imageUrl} onChange={event => updateItem(index, { imageUrl: event.target.value })} placeholder="https://.../foto-kelas.jpg" />
-          <Input label="Alt foto" value={item.imageAlt} onChange={event => updateItem(index, { imageAlt: event.target.value })} placeholder="Foto kelas" />
-          <Input label="Nama kelas" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Kelas 1 — Dasar Penulisan & Struktur" />
-          <Input label="Pemateri" value={item.speaker} onChange={event => updateItem(index, { speaker: event.target.value })} placeholder="Contoh: Nama Pemateri" />
-          <Input label="Tanggal pelaksanaan kelas" value={item.date} onChange={event => updateItem(index, { date: event.target.value })} placeholder="Contoh: 17 November 2026 · 19.00 WIB" />
-          <Textarea label="Keterangan kelas" value={item.description} onChange={event => updateItem(index, { description: event.target.value })} placeholder="Jelaskan materi, fokus bahasan, dan hasil yang didapat dari kelas ini." className="min-h-[110px]" />
+          {!compactOrderMode && (
+            <>
+              <ImageUploader label="Foto kelas / pemateri" value={item.imageUrl} onChange={value => updateItem(index, { imageUrl: value })} />
+              <Input label="URL foto kelas (opsional)" value={item.imageUrl.startsWith('data:') ? '' : item.imageUrl} onChange={event => updateItem(index, { imageUrl: event.target.value })} placeholder="https://.../foto-kelas.jpg" />
+              <Input label="Alt foto" value={item.imageAlt} onChange={event => updateItem(index, { imageAlt: event.target.value })} placeholder="Foto kelas" />
+              <Input label="Nama kelas" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Kelas 1 — Dasar Penulisan & Struktur" />
+              <Input label="Pemateri" value={item.speaker} onChange={event => updateItem(index, { speaker: event.target.value })} placeholder="Contoh: Nama Pemateri" />
+              <Input label="Tanggal pelaksanaan kelas" value={item.date} onChange={event => updateItem(index, { date: event.target.value })} placeholder="Contoh: 17 November 2026 · 19.00 WIB" />
+              <Textarea label="Keterangan kelas" value={item.description} onChange={event => updateItem(index, { description: event.target.value })} placeholder="Jelaskan materi, fokus bahasan, dan hasil yang didapat dari kelas ini." className="min-h-[110px]" />
+            </>
+          )}
         </div>
       )) : <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 py-6 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada kelas. Tambahkan kelas pertama untuk ditampilkan di halaman publik.</div>}
       <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxClasses}>Tambah kelas</Button>
@@ -3640,13 +4046,14 @@ export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
     try {
       const baseSlug = slugify(sourcePage.slug || sourcePage.title).slice(0, 75) || 'landing';
       const suffix = Date.now().toString(36).slice(-5);
-      const clonedBlocks = JSON.parse(JSON.stringify(sourcePage.blocks || [])).map((block: any, index: number) => {
+      const rawClonedBlocks = JSON.parse(JSON.stringify(sourcePage.blocks || [])).map((block: any, index: number) => {
         const normalized = normalizeLandingBlock(block, index);
         return {
           ...normalized,
           id: createBlockId(normalized.type, index)
         };
       });
+      const clonedBlocks = await optimizeLandingBlocksImages(rawClonedBlocks);
       const duplicatedDraft: LandingPage = {
         id: '',
         slug: `${baseSlug}-copy-${suffix}`,
@@ -3659,12 +4066,12 @@ export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
       const { data, error } = await client
         .from('landing_pages')
         .insert(landingWriteRow(duplicatedDraft))
-        .select('*')
+        .select('id, slug, title, description, theme, status, created_at, updated_at')
         .single();
       if (error) {
         setNotice({ tone: 'error', message: errorMessage(error) });
       } else if (data) {
-        const mapped = mapLandingRow(data);
+        const mapped = mapLandingRow({ ...data, blocks: clonedBlocks });
         setPages(current => [mapped, ...current]);
         setNotice({ tone: 'success', message: `Landing page “${sourcePage.title}” berhasil diduplikat sebagai draft.` });
       }
@@ -3891,15 +4298,61 @@ export const LandingPageEditor: React.FC<{ client: any }> = ({ client }) => {
       setNotice({ tone: 'error', message: 'Judul landing page wajib diisi.' });
       return;
     }
-    const normalized = { ...page, slug: slugify(page.slug || page.title), blocks: page.blocks.map(normalizeLandingBlock) };
     setIsSaving(true);
-    const { data, error } = await client.from('landing_pages').update(landingWriteRow(normalized)).eq('id', page.id).select('*').single();
-    if (error) setNotice({ tone: 'error', message: errorMessage(error) });
-    else {
-      setPage(mapLandingRow(data));
-      setNotice({ tone: 'success', message: 'Landing page berhasil disimpan.' });
+    setNotice(null);
+    try {
+      const optimizedBlocks = await optimizeLandingBlocksImages(page.blocks.map(normalizeLandingBlock));
+      const normalized: LandingPage = {
+        ...page,
+        slug: slugify(page.slug || page.title),
+        blocks: optimizedBlocks
+      };
+
+      let savedMeta: any = null;
+      let saveError: any = null;
+
+      if (typeof client.rpc === 'function') {
+        const rpcResult = await client.rpc('save_landing_page', {
+          p_id: normalized.id,
+          p_slug: normalized.slug,
+          p_title: normalized.title,
+          p_description: normalized.description,
+          p_theme: normalized.theme,
+          p_status: normalized.status,
+          p_blocks: normalized.blocks
+        });
+        if (!rpcResult?.error && rpcResult?.data) {
+          savedMeta = rpcResult.data;
+        } else if (
+          rpcResult?.error &&
+          !String(rpcResult.error.message || '').includes('save_landing_page')
+        ) {
+          saveError = rpcResult.error;
+        }
+      }
+
+      if (!savedMeta && !saveError) {
+        const { data, error } = await client
+          .from('landing_pages')
+          .update(landingWriteRow(normalized))
+          .eq('id', page.id)
+          .select('id, slug, title, description, theme, status, created_at, updated_at')
+          .single();
+        savedMeta = data;
+        saveError = error;
+      }
+
+      if (saveError) {
+        setNotice({ tone: 'error', message: errorMessage(saveError) });
+      } else {
+        setPage(mapLandingRow({ ...(savedMeta || normalized), blocks: normalized.blocks }));
+        setNotice({ tone: 'success', message: 'Landing page berhasil disimpan.' });
+      }
+    } catch (unexpectedError: any) {
+      setNotice({ tone: 'error', message: errorMessage(unexpectedError) });
+    } finally {
+      setIsSaving(false);
     }
-    setIsSaving(false);
   };
 
   const handleDuplicateCurrent = async () => {
@@ -3909,13 +4362,14 @@ export const LandingPageEditor: React.FC<{ client: any }> = ({ client }) => {
     try {
       const baseSlug = slugify(page.slug || page.title).slice(0, 75) || 'landing';
       const suffix = Date.now().toString(36).slice(-5);
-      const clonedBlocks = JSON.parse(JSON.stringify(page.blocks || [])).map((block: any, index: number) => {
+      const rawClonedBlocks = JSON.parse(JSON.stringify(page.blocks || [])).map((block: any, index: number) => {
         const normalized = normalizeLandingBlock(block, index);
         return {
           ...normalized,
           id: createBlockId(normalized.type, index)
         };
       });
+      const clonedBlocks = await optimizeLandingBlocksImages(rawClonedBlocks);
       const duplicatedDraft: LandingPage = {
         id: '',
         slug: `${baseSlug}-copy-${suffix}`,
@@ -3928,7 +4382,7 @@ export const LandingPageEditor: React.FC<{ client: any }> = ({ client }) => {
       const { data, error } = await client
         .from('landing_pages')
         .insert(landingWriteRow(duplicatedDraft))
-        .select('*')
+        .select('id, slug, title, description, theme, status, created_at, updated_at')
         .single();
       if (error) {
         setNotice({ tone: 'error', message: errorMessage(error) });
@@ -3950,7 +4404,7 @@ export const LandingPageEditor: React.FC<{ client: any }> = ({ client }) => {
     '--landing-editor-right-panel-width': `${panelWidths.right}px`
   } as React.CSSProperties;
 
-  return <div className="mx-auto flex max-w-[1600px] flex-col gap-6 p-4 pb-28 md:p-8 xl:h-[100dvh] xl:gap-5 xl:overflow-hidden xl:overscroll-none xl:pb-8"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/landing-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {LANDING_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">Editor Landing Page</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Tarik blok ke canvas, klik blok untuk mengedit, lalu simpan dan publikasikan.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={CopyPlus} onClick={() => void handleDuplicateCurrent()} isLoading={isDuplicating}>Duplikat Page</Button><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Page</Button></div></div><NoticeBanner notice={notice} /><div ref={editorLayoutRef} style={editorLayoutStyle} className="landing-editor-layout grid gap-5 xl:min-h-0 xl:flex-1 xl:items-stretch xl:overflow-hidden xl:overscroll-none"><Card className="space-y-4 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Elemen</p><h2 className="mt-2 text-lg font-bold">Tambah blok</h2><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tarik ke posisi yang diinginkan atau klik untuk menambah di bagian bawah.</p></div><div className="space-y-2">{LANDING_BLOCK_OPTIONS.map(option => { const Icon = option.icon; return <button key={option.value} type="button" draggable onDragStart={event => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-landing-block-type', option.value); }} onClick={() => addBlock(option.value)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-soft)]"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Icon size={16} /></span><span className="min-w-0"><span className="block text-sm font-semibold">{option.label}</span><span className="mt-0.5 block text-[10px] leading-snug text-[var(--muted)]">{option.description}</span></span><GripVertical size={14} className="ml-auto shrink-0 text-[var(--muted)]" /></button>; })}</div></Card><div role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel Elemen" aria-valuemin={LANDING_EDITOR_MIN_LEFT_PANEL_WIDTH} aria-valuemax={LANDING_EDITOR_MAX_LEFT_PANEL_WIDTH} aria-valuenow={panelWidths.left} tabIndex={0} title="Tarik untuk mengubah lebar panel Elemen. Klik dua kali untuk mengatur ulang." onPointerDown={event => handlePanelResizeStart('left', event)} onKeyDown={event => handlePanelResizeKeyDown('left', event)} onDoubleClick={() => setPanelWidths(current => ({ ...current, left: LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.left }))} className={`landing-editor-resizer group relative hidden touch-none select-none xl:flex xl:h-full xl:min-h-[160px] xl:cursor-col-resize xl:items-center xl:justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${resizingPanel === 'left' ? 'is-resizing' : ''}`}><span aria-hidden="true" className="h-full w-px rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)]" /></div><div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain"><LandingPagePreview page={page} editable selectedBlockId={selectedBlockId || undefined} onSelect={setSelectedBlockId} onDrop={handleDrop} onDragStart={(event, blockId) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-landing-block-id', blockId); }} onMove={moveBlock} onRemove={removeBlock} /></div><div role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel Pengaturan" aria-valuemin={LANDING_EDITOR_MIN_RIGHT_PANEL_WIDTH} aria-valuemax={LANDING_EDITOR_MAX_RIGHT_PANEL_WIDTH} aria-valuenow={panelWidths.right} tabIndex={0} title="Tarik untuk mengubah lebar panel Pengaturan. Klik dua kali untuk mengatur ulang." onPointerDown={event => handlePanelResizeStart('right', event)} onKeyDown={event => handlePanelResizeKeyDown('right', event)} onDoubleClick={() => setPanelWidths(current => ({ ...current, right: LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.right }))} className={`landing-editor-resizer group relative hidden touch-none select-none xl:flex xl:h-full xl:min-h-[160px] xl:cursor-col-resize xl:items-center xl:justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${resizingPanel === 'right' ? 'is-resizing' : ''}`}><span aria-hidden="true" className="h-full w-px rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)]" /></div><Card className="space-y-5 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-lg font-bold">{selectedBlock ? LANDING_BLOCK_LABELS[selectedBlock.type] : 'Landing page'}</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div>{selectedBlock ? <><button type="button" onClick={() => setSelectedBlockId(null)} className="text-xs font-semibold text-[var(--muted)] hover:text-[var(--text)]">← Kembali ke pengaturan page</button><BlockInspector block={selectedBlock} onChange={data => setPage(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selectedBlock.id ? { ...block, data } : block) } : current)} /></> : <PageSettingsPanel page={page} onChange={updatePage} />}</Card></div></div>;
+  return <div className="mx-auto flex max-w-[1600px] flex-col gap-6 p-4 pb-28 md:p-8 xl:h-[100dvh] xl:gap-5 xl:overflow-hidden xl:overscroll-none xl:pb-8"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/landing-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {LANDING_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">Editor Landing Page</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Tarik blok ke canvas, klik blok untuk mengedit, lalu simpan dan publikasikan.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={CopyPlus} onClick={() => void handleDuplicateCurrent()} isLoading={isDuplicating}>Duplikat Page</Button><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Page</Button></div></div><NoticeBanner notice={notice} /><div ref={editorLayoutRef} style={editorLayoutStyle} className="landing-editor-layout grid gap-5 xl:min-h-0 xl:flex-1 xl:items-stretch xl:overflow-hidden xl:overscroll-none"><Card className="space-y-4 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Elemen</p><h2 className="mt-2 text-lg font-bold">Tambah blok</h2><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tarik ke posisi yang diinginkan atau klik untuk menambah di bagian bawah.</p></div><div className="space-y-2">{LANDING_BLOCK_OPTIONS.map(option => { const Icon = option.icon; return <button key={option.value} type="button" draggable onDragStart={event => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-landing-block-type', option.value); }} onClick={() => addBlock(option.value)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-soft)]"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Icon size={16} /></span><span className="min-w-0"><span className="block text-sm font-semibold">{option.label}</span><span className="mt-0.5 block text-[10px] leading-snug text-[var(--muted)]">{option.description}</span></span><GripVertical size={14} className="ml-auto shrink-0 text-[var(--muted)]" /></button>; })}</div></Card><div role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel Elemen" aria-valuemin={LANDING_EDITOR_MIN_LEFT_PANEL_WIDTH} aria-valuemax={LANDING_EDITOR_MAX_LEFT_PANEL_WIDTH} aria-valuenow={panelWidths.left} tabIndex={0} title="Tarik untuk mengubah lebar panel Elemen. Klik dua kali untuk mengatur ulang." onPointerDown={event => handlePanelResizeStart('left', event)} onKeyDown={event => handlePanelResizeKeyDown('left', event)} onDoubleClick={() => setPanelWidths(current => ({ ...current, left: LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.left }))} className={`landing-editor-resizer group relative hidden touch-none select-none xl:flex xl:h-full xl:min-h-[160px] xl:cursor-col-resize xl:items-center xl:justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${resizingPanel === 'left' ? 'is-resizing' : ''}`}><span aria-hidden="true" className="h-full w-px rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)]" /></div><div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain"><LandingPagePreview page={page} editable selectedBlockId={selectedBlockId || undefined} onSelect={setSelectedBlockId} onDrop={handleDrop} onDragStart={(event, blockId) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-landing-block-id', blockId); }} onMove={moveBlock} onRemove={removeBlock} onUpdateBlockData={(blockId, data) => setPage(current => current ? { ...current, blocks: current.blocks.map(block => block.id === blockId ? { ...block, data } : block) } : current)} /></div><div role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel Pengaturan" aria-valuemin={LANDING_EDITOR_MIN_RIGHT_PANEL_WIDTH} aria-valuemax={LANDING_EDITOR_MAX_RIGHT_PANEL_WIDTH} aria-valuenow={panelWidths.right} tabIndex={0} title="Tarik untuk mengubah lebar panel Pengaturan. Klik dua kali untuk mengatur ulang." onPointerDown={event => handlePanelResizeStart('right', event)} onKeyDown={event => handlePanelResizeKeyDown('right', event)} onDoubleClick={() => setPanelWidths(current => ({ ...current, right: LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.right }))} className={`landing-editor-resizer group relative hidden touch-none select-none xl:flex xl:h-full xl:min-h-[160px] xl:cursor-col-resize xl:items-center xl:justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${resizingPanel === 'right' ? 'is-resizing' : ''}`}><span aria-hidden="true" className="h-full w-px rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)]" /></div><Card className="space-y-5 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-lg font-bold">{selectedBlock ? LANDING_BLOCK_LABELS[selectedBlock.type] : 'Landing page'}</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div>{selectedBlock ? <><button type="button" onClick={() => setSelectedBlockId(null)} className="text-xs font-semibold text-[var(--muted)] hover:text-[var(--text)]">← Kembali ke pengaturan page</button><BlockInspector block={selectedBlock} onChange={data => setPage(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selectedBlock.id ? { ...block, data } : block) } : current)} /></> : <PageSettingsPanel page={page} onChange={updatePage} />}</Card></div></div>;
 };
 
 export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: string }> = ({ client, slugOverride }) => {
