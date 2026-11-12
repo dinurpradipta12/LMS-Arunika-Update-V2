@@ -90,10 +90,17 @@ const getLandingImage = (row) => {
   const blocks = parseJson(row?.blocks);
   for (const block of blocks) {
     const data = block?.data || {};
+    if (data.headerImageUrl) return data.headerImageUrl;
+    if (data.header_image_url) return data.header_image_url;
     if (data.imageUrl) return data.imageUrl;
+    if (data.image_url) return data.image_url;
     if (block?.type === 'image') {
       const firstImage = parseJson(data.images).find((item) => item?.url);
       if (firstImage?.url) return firstImage.url;
+    }
+    if (block?.type === 'classes' || block?.type === 'bonus') {
+      const firstItem = parseJson(data.items).find((item) => item?.imageUrl || item?.image_url);
+      if (firstItem?.imageUrl || firstItem?.image_url) return firstItem.imageUrl || firstItem.image_url;
     }
   }
   return '';
@@ -104,9 +111,10 @@ const getPublicImage = (kind, row) => {
   if (kind === 'catalog') {
     const content = row?.content && typeof row.content === 'object' ? row.content : {};
     if (content.heroImageUrl) return content.heroImageUrl;
+    const firstImage = Array.isArray(row?.items) ? row.items.find((item) => item?.imageUrl || item?.image_url || item?.iconUrl || item?.icon_url) : null;
+    if (firstImage?.imageUrl || firstImage?.image_url) return firstImage.imageUrl || firstImage.image_url;
     if (row?.avatarUrl || row?.avatar_url) return row.avatarUrl || row.avatar_url;
-    const firstImage = Array.isArray(row?.items) ? row.items.find((item) => item?.imageUrl || item?.image_url) : null;
-    return firstImage?.imageUrl || firstImage?.image_url || '';
+    return firstImage?.iconUrl || firstImage?.icon_url || '';
   }
   return row?.headerImage || '';
 };
@@ -114,8 +122,19 @@ const getPublicImage = (kind, row) => {
 const getLandingDescription = (row) => {
   const description = cleanText(row?.description);
   if (description) return description;
-  const heroBlock = parseJson(row?.blocks).find((block) => block?.type === 'hero');
-  return cleanText(heroBlock?.data?.body);
+  const blocks = parseJson(row?.blocks);
+  const heroBlock = blocks.find((block) => block?.type === 'hero');
+  if (cleanText(heroBlock?.data?.body)) return cleanText(heroBlock?.data?.body);
+  const textBlock = blocks.find((block) => block?.type === 'text' && cleanText(block?.data?.body));
+  return cleanText(textBlock?.data?.body);
+};
+
+const getCatalogDescription = (row) => {
+  const content = row?.content && typeof row.content === 'object' ? row.content : {};
+  const direct = cleanText(row?.description || content.heroDescription || content.announcement);
+  if (direct) return direct;
+  const firstItem = Array.isArray(row?.items) ? row.items.find((item) => cleanText(item?.description || item?.title)) : null;
+  return cleanText(firstItem?.description || firstItem?.title);
 };
 
 const getPublicRow = async (env, route) => {
@@ -165,17 +184,19 @@ const decodeDataImage = (value) => {
   }
 };
 
-const getImageResponse = async (env, route) => {
+const getImageResponse = async (env, route, method = 'GET') => {
   try {
     const row = await getPublicRow(env, route);
     if (!row) return new Response(null, { status: 404 });
     const image = decodeDataImage(getPublicImage(route.kind, row));
     if (!image) return new Response(null, { status: 404 });
-    return new Response(image.bytes, {
+    return new Response(method === 'HEAD' ? null : image.bytes, {
       status: 200,
       headers: {
         'content-type': image.contentType,
+        'content-length': String(image.bytes.byteLength),
         'cache-control': 'public, max-age=300, s-maxage=300',
+        'access-control-allow-origin': '*',
         'x-content-type-options': 'nosniff'
       }
     });
@@ -212,6 +233,7 @@ const getMetadata = async (env, route) => {
         title: cleanText(row.title, 'Landing Page'),
         description: truncate(getLandingDescription(row), 300),
         image,
+        imageMimeType: isDataImage(image) ? (String(image).match(/^data:([^;,]+)/i)?.[1] || 'image/jpeg') : '',
         imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
       } : null;
     }
@@ -223,6 +245,7 @@ const getMetadata = async (env, route) => {
         title: cleanText(row.title, 'Form Maker'),
         description: truncate(row.description || row.eventName, 300),
         image,
+        imageMimeType: isDataImage(image) ? (String(image).match(/^data:([^;,]+)/i)?.[1] || 'image/jpeg') : '',
         imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
       } : null;
     }
@@ -231,9 +254,10 @@ const getMetadata = async (env, route) => {
       const row = await getPublicRow(env, route);
       const image = getPublicImage(route.kind, row);
       return row ? {
-        title: cleanText(row.title, 'Katalog Produk'),
-        description: truncate(row.description || row.content?.heroDescription, 300),
+        title: cleanText(row.title || row.content?.heroTitle, 'Katalog Produk'),
+        description: truncate(getCatalogDescription(row), 300),
         image,
+        imageMimeType: isDataImage(image) ? (String(image).match(/^data:([^;,]+)/i)?.[1] || 'image/jpeg') : '',
         imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
       } : null;
     }
@@ -244,6 +268,7 @@ const getMetadata = async (env, route) => {
       title: cleanText(row.title, 'Q&A Audience'),
       description: truncate(row.description || row.eventName || row.welcomeMessage, 300),
       image,
+      imageMimeType: isDataImage(image) ? (String(image).match(/^data:([^;,]+)/i)?.[1] || 'image/jpeg') : '',
       imageProxyUrl: isDataImage(image) ? getImageProxyUrl(route) : ''
     } : null;
   } catch {
@@ -254,9 +279,10 @@ const getMetadata = async (env, route) => {
 const injectMetadata = (html, metadata, pageUrl) => {
   const title = escapeHtml(metadata.title);
   const description = escapeHtml(metadata.description || '');
-  const image = toPublicAssetUrl(metadata.image, pageUrl) || toPublicAssetUrl(metadata.imageProxyUrl, pageUrl);
+  const image = toPublicAssetUrl(metadata.image, pageUrl) || toPublicAssetUrl(metadata.imageProxyUrl, pageUrl) || toPublicAssetUrl('/icon-512.png', pageUrl);
+  const imageType = escapeHtml(metadata.imageMimeType || (image.endsWith('.png') ? 'image/png' : 'image/jpeg'));
   const imageTags = image
-    ? `\n    <meta property="og:image" content="${escapeHtml(image)}" />\n    <meta property="og:image:alt" content="${title}" />\n    <meta name="twitter:image" content="${escapeHtml(image)}" />`
+    ? `\n    <meta property="og:image" content="${escapeHtml(image)}" />\n    <meta property="og:image:secure_url" content="${escapeHtml(image)}" />\n    <meta property="og:image:type" content="${imageType}" />\n    <meta property="og:image:alt" content="${title}" />\n    <meta itemprop="image" content="${escapeHtml(image)}" />\n    <meta name="twitter:image" content="${escapeHtml(image)}" />`
     : '';
   const tags = `
     <meta name="description" content="${description}" />
@@ -271,8 +297,7 @@ const injectMetadata = (html, metadata, pageUrl) => {
     <link rel="canonical" href="${escapeHtml(pageUrl)}" />`;
 
   return html
-    .replace(/<title>[\s\S]*?<\/title>/i, `<title>${title}</title>`)
-    .replace(/<\/head>/i, `${tags}\n  </head>`);
+    .replace(/<title>[\s\S]*?<\/title>/i, `<title>${title}</title>${tags}`);
 };
 
 export async function onRequest(context) {
@@ -281,7 +306,7 @@ export async function onRequest(context) {
   const route = getPublicRoute(context.request);
   if (!route) return context.next();
 
-  if (route.action === 'image') return getImageResponse(context.env, route);
+  if (route.action === 'image') return getImageResponse(context.env, route, context.request.method);
 
   const metadata = await getMetadata(context.env, route);
   const fallbackMetadata = metadata || {

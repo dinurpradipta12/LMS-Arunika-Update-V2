@@ -46,7 +46,14 @@ const removeMeta = (attribute: 'name' | 'property', key: string) => {
 
 const toAbsoluteUrl = (value: string | undefined) => {
   const candidate = String(value || '').trim();
-  if (!candidate || candidate.startsWith('data:') || candidate.startsWith('blob:')) return '';
+  if (!candidate || candidate.startsWith('blob:')) return '';
+  if (candidate.startsWith('data:image/')) {
+    const cleanPath = window.location.pathname.replace(/\/$/, '');
+    if (/^\/(landing|form|qna|catalog)\/[^/]+$/i.test(cleanPath)) {
+      return `${window.location.origin}${cleanPath}/og-image`;
+    }
+    return '';
+  }
   try {
     return new URL(candidate, window.location.origin).toString();
   } catch {
