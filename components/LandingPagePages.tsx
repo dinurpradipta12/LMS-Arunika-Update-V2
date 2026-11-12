@@ -8,6 +8,7 @@ import {
   Calendar,
   Check,
   Copy,
+  CopyPlus,
   CreditCard,
   Eye,
   ExternalLink,
@@ -3439,6 +3440,7 @@ type LandingPagesPageViewProps = {
   insights: Record<string, LandingInsightSummary>;
   isLoading: boolean;
   isCreating: boolean;
+  duplicatingId: string | null;
   notice: Notice | null;
   loadError: string | null;
   copiedSlug: string | null;
@@ -3446,6 +3448,7 @@ type LandingPagesPageViewProps = {
   isDeleting: boolean;
   insightTarget: LandingPage | null;
   onCreate: () => void | Promise<void>;
+  onDuplicate: (page: LandingPage) => void | Promise<void>;
   onRefresh: () => void | Promise<void>;
   onCopy: (page: LandingPage) => void | Promise<void>;
   onOpenInsight: (page: LandingPage) => void;
@@ -3462,6 +3465,7 @@ const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
   insights,
   isLoading,
   isCreating,
+  duplicatingId,
   notice,
   loadError,
   copiedSlug,
@@ -3469,6 +3473,7 @@ const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
   isDeleting,
   insightTarget,
   onCreate,
+  onDuplicate,
   onRefresh,
   onCopy,
   onOpenInsight,
@@ -3539,6 +3544,7 @@ const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
               <Button variant="secondary" className="px-2 text-xs" onClick={() => navigate(`/admin/landing-pages/${page.id}`)}>Edit Page</Button>
               <Button variant="secondary" className="px-2 text-xs" icon={BarChart3} onClick={() => onOpenInsight(page)}>Lihat insight</Button>
               <Button variant={copiedSlug === page.slug ? 'green' : 'secondary'} className="px-2 text-xs" icon={copiedSlug === page.slug ? Check : Copy} onClick={() => void onCopy(page)}>{copiedSlug === page.slug ? 'Tersalin' : 'Copy Link'}</Button>
+              <Button variant="secondary" className="px-2 text-xs" icon={CopyPlus} isLoading={duplicatingId === page.id} onClick={() => void onDuplicate(page)}>Duplikat</Button>
               <Button className="px-2 text-xs" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Buka Publik</Button>
               <Button type="button" variant="danger" className="px-2 text-xs" icon={Trash2} onClick={() => onDeleteTarget(page)}>Hapus</Button>
             </div>
@@ -3556,6 +3562,7 @@ export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
   const [pages, setPages] = useState<LandingPage[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [isCreating, setIsCreating] = useState(false);
+  const [duplicatingId, setDuplicatingId] = useState<string | null>(null);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [loadError, setLoadError] = useState<string | null>(null);
   const [copiedSlug, setCopiedSlug] = useState<string | null>(null);
@@ -3626,6 +3633,48 @@ export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
     setIsCreating(false);
   };
 
+  const handleDuplicate = async (sourcePage: LandingPage) => {
+    if (!client || duplicatingId) return;
+    setDuplicatingId(sourcePage.id);
+    setNotice(null);
+    try {
+      const baseSlug = slugify(sourcePage.slug || sourcePage.title).slice(0, 75) || 'landing';
+      const suffix = Date.now().toString(36).slice(-5);
+      const clonedBlocks = JSON.parse(JSON.stringify(sourcePage.blocks || [])).map((block: any, index: number) => {
+        const normalized = normalizeLandingBlock(block, index);
+        return {
+          ...normalized,
+          id: createBlockId(normalized.type, index)
+        };
+      });
+      const duplicatedDraft: LandingPage = {
+        id: '',
+        slug: `${baseSlug}-copy-${suffix}`,
+        title: `${sourcePage.title.trim() || 'Landing Page'} (Salinan)`.slice(0, 200),
+        description: sourcePage.description || '',
+        theme: sourcePage.theme || 'navy',
+        status: 'draft',
+        blocks: clonedBlocks
+      };
+      const { data, error } = await client
+        .from('landing_pages')
+        .insert(landingWriteRow(duplicatedDraft))
+        .select('*')
+        .single();
+      if (error) {
+        setNotice({ tone: 'error', message: errorMessage(error) });
+      } else if (data) {
+        const mapped = mapLandingRow(data);
+        setPages(current => [mapped, ...current]);
+        setNotice({ tone: 'success', message: `Landing page “${sourcePage.title}” berhasil diduplikat sebagai draft.` });
+      }
+    } catch (dupError: any) {
+      setNotice({ tone: 'error', message: errorMessage(dupError) });
+    } finally {
+      setDuplicatingId(null);
+    }
+  };
+
   const handleCopy = async (page: LandingPage) => {
     const url = createLandingShareLink(page.slug, page.updatedAt);
     try {
@@ -3664,6 +3713,7 @@ export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
     insights={insights}
     isLoading={isLoading}
     isCreating={isCreating}
+    duplicatingId={duplicatingId}
     notice={notice}
     loadError={loadError}
     copiedSlug={copiedSlug}
@@ -3671,6 +3721,7 @@ export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
     isDeleting={isDeleting}
     insightTarget={insightTarget}
     onCreate={handleCreate}
+    onDuplicate={handleDuplicate}
     onRefresh={fetchPages}
     onCopy={handleCopy}
     onOpenInsight={setInsightTarget}
@@ -3688,6 +3739,7 @@ export const LandingPageEditor: React.FC<{ client: any }> = ({ client }) => {
   const [selectedBlockId, setSelectedBlockId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
+  const [isDuplicating, setIsDuplicating] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const [panelWidths, setPanelWidths] = useState<LandingEditorPanelWidths>(readLandingEditorPanelWidths);
   const [resizingPanel, setResizingPanel] = useState<LandingEditorPanelSide | null>(null);
@@ -3850,6 +3902,46 @@ export const LandingPageEditor: React.FC<{ client: any }> = ({ client }) => {
     setIsSaving(false);
   };
 
+  const handleDuplicateCurrent = async () => {
+    if (!page || !client || isDuplicating) return;
+    setIsDuplicating(true);
+    setNotice(null);
+    try {
+      const baseSlug = slugify(page.slug || page.title).slice(0, 75) || 'landing';
+      const suffix = Date.now().toString(36).slice(-5);
+      const clonedBlocks = JSON.parse(JSON.stringify(page.blocks || [])).map((block: any, index: number) => {
+        const normalized = normalizeLandingBlock(block, index);
+        return {
+          ...normalized,
+          id: createBlockId(normalized.type, index)
+        };
+      });
+      const duplicatedDraft: LandingPage = {
+        id: '',
+        slug: `${baseSlug}-copy-${suffix}`,
+        title: `${page.title.trim() || 'Landing Page'} (Salinan)`.slice(0, 200),
+        description: page.description || '',
+        theme: page.theme || 'navy',
+        status: 'draft',
+        blocks: clonedBlocks
+      };
+      const { data, error } = await client
+        .from('landing_pages')
+        .insert(landingWriteRow(duplicatedDraft))
+        .select('*')
+        .single();
+      if (error) {
+        setNotice({ tone: 'error', message: errorMessage(error) });
+      } else if (data) {
+        navigate(`/admin/landing-pages/${data.id}`);
+      }
+    } catch (dupError: any) {
+      setNotice({ tone: 'error', message: errorMessage(dupError) });
+    } finally {
+      setIsDuplicating(false);
+    }
+  };
+
   if (isLoading) return <div className="flex min-h-[60vh] items-center justify-center gap-3 text-sm text-[var(--muted)]"><Loader2 size={18} className="animate-spin" /> Memuat editor landing page...</div>;
   if (!page) return <div className="mx-auto max-w-xl p-8"><Card className="space-y-4 text-center"><XCircle className="mx-auto text-[var(--danger-text)]" /><p>Landing page tidak ditemukan.</p><Button variant="secondary" onClick={() => navigate('/admin/landing-pages')}>Kembali</Button></Card></div>;
 
@@ -3858,7 +3950,7 @@ export const LandingPageEditor: React.FC<{ client: any }> = ({ client }) => {
     '--landing-editor-right-panel-width': `${panelWidths.right}px`
   } as React.CSSProperties;
 
-  return <div className="mx-auto flex max-w-[1600px] flex-col gap-6 p-4 pb-28 md:p-8 xl:h-[100dvh] xl:gap-5 xl:overflow-hidden xl:overscroll-none xl:pb-8"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/landing-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {LANDING_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">Editor Landing Page</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Tarik blok ke canvas, klik blok untuk mengedit, lalu simpan dan publikasikan.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Page</Button></div></div><NoticeBanner notice={notice} /><div ref={editorLayoutRef} style={editorLayoutStyle} className="landing-editor-layout grid gap-5 xl:min-h-0 xl:flex-1 xl:items-stretch xl:overflow-hidden xl:overscroll-none"><Card className="space-y-4 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Elemen</p><h2 className="mt-2 text-lg font-bold">Tambah blok</h2><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tarik ke posisi yang diinginkan atau klik untuk menambah di bagian bawah.</p></div><div className="space-y-2">{LANDING_BLOCK_OPTIONS.map(option => { const Icon = option.icon; return <button key={option.value} type="button" draggable onDragStart={event => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-landing-block-type', option.value); }} onClick={() => addBlock(option.value)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-soft)]"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Icon size={16} /></span><span className="min-w-0"><span className="block text-sm font-semibold">{option.label}</span><span className="mt-0.5 block text-[10px] leading-snug text-[var(--muted)]">{option.description}</span></span><GripVertical size={14} className="ml-auto shrink-0 text-[var(--muted)]" /></button>; })}</div></Card><div role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel Elemen" aria-valuemin={LANDING_EDITOR_MIN_LEFT_PANEL_WIDTH} aria-valuemax={LANDING_EDITOR_MAX_LEFT_PANEL_WIDTH} aria-valuenow={panelWidths.left} tabIndex={0} title="Tarik untuk mengubah lebar panel Elemen. Klik dua kali untuk mengatur ulang." onPointerDown={event => handlePanelResizeStart('left', event)} onKeyDown={event => handlePanelResizeKeyDown('left', event)} onDoubleClick={() => setPanelWidths(current => ({ ...current, left: LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.left }))} className={`landing-editor-resizer group relative hidden touch-none select-none xl:flex xl:h-full xl:min-h-[160px] xl:cursor-col-resize xl:items-center xl:justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${resizingPanel === 'left' ? 'is-resizing' : ''}`}><span aria-hidden="true" className="h-full w-px rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)]" /></div><div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain"><LandingPagePreview page={page} editable selectedBlockId={selectedBlockId || undefined} onSelect={setSelectedBlockId} onDrop={handleDrop} onDragStart={(event, blockId) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-landing-block-id', blockId); }} onMove={moveBlock} onRemove={removeBlock} /></div><div role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel Pengaturan" aria-valuemin={LANDING_EDITOR_MIN_RIGHT_PANEL_WIDTH} aria-valuemax={LANDING_EDITOR_MAX_RIGHT_PANEL_WIDTH} aria-valuenow={panelWidths.right} tabIndex={0} title="Tarik untuk mengubah lebar panel Pengaturan. Klik dua kali untuk mengatur ulang." onPointerDown={event => handlePanelResizeStart('right', event)} onKeyDown={event => handlePanelResizeKeyDown('right', event)} onDoubleClick={() => setPanelWidths(current => ({ ...current, right: LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.right }))} className={`landing-editor-resizer group relative hidden touch-none select-none xl:flex xl:h-full xl:min-h-[160px] xl:cursor-col-resize xl:items-center xl:justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${resizingPanel === 'right' ? 'is-resizing' : ''}`}><span aria-hidden="true" className="h-full w-px rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)]" /></div><Card className="space-y-5 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-lg font-bold">{selectedBlock ? LANDING_BLOCK_LABELS[selectedBlock.type] : 'Landing page'}</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div>{selectedBlock ? <><button type="button" onClick={() => setSelectedBlockId(null)} className="text-xs font-semibold text-[var(--muted)] hover:text-[var(--text)]">← Kembali ke pengaturan page</button><BlockInspector block={selectedBlock} onChange={data => setPage(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selectedBlock.id ? { ...block, data } : block) } : current)} /></> : <PageSettingsPanel page={page} onChange={updatePage} />}</Card></div></div>;
+  return <div className="mx-auto flex max-w-[1600px] flex-col gap-6 p-4 pb-28 md:p-8 xl:h-[100dvh] xl:gap-5 xl:overflow-hidden xl:overscroll-none xl:pb-8"><div className="flex flex-col justify-between gap-4 xl:flex-row xl:items-center"><div><Link to="/admin/landing-pages" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> {LANDING_PAGE_SPACE_LABEL}</Link><div className="flex flex-wrap items-center gap-3"><h1 className="text-3xl font-bold">Editor Landing Page</h1><Badge color={page.status === 'published' ? 'var(--success-soft)' : 'var(--surface-soft)'}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</Badge></div><p className="mt-2 text-sm text-[var(--muted)]">Tarik blok ke canvas, klik blok untuk mengedit, lalu simpan dan publikasikan.</p></div><div className="flex flex-wrap gap-2"><Button variant="secondary" icon={CopyPlus} onClick={() => void handleDuplicateCurrent()} isLoading={isDuplicating}>Duplikat Page</Button><Button variant="secondary" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Preview publik</Button><Button icon={Save} onClick={() => void handleSave()} isLoading={isSaving}>Simpan Page</Button></div></div><NoticeBanner notice={notice} /><div ref={editorLayoutRef} style={editorLayoutStyle} className="landing-editor-layout grid gap-5 xl:min-h-0 xl:flex-1 xl:items-stretch xl:overflow-hidden xl:overscroll-none"><Card className="space-y-4 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Elemen</p><h2 className="mt-2 text-lg font-bold">Tambah blok</h2><p className="mt-1 text-xs leading-relaxed text-[var(--muted)]">Tarik ke posisi yang diinginkan atau klik untuk menambah di bagian bawah.</p></div><div className="space-y-2">{LANDING_BLOCK_OPTIONS.map(option => { const Icon = option.icon; return <button key={option.value} type="button" draggable onDragStart={event => { event.dataTransfer.effectAllowed = 'copy'; event.dataTransfer.setData('application/x-landing-block-type', option.value); }} onClick={() => addBlock(option.value)} className="flex w-full items-center gap-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3 text-left transition-colors hover:border-[var(--border-strong)] hover:bg-[var(--surface-soft)]"><span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-[var(--accent-soft)] text-[var(--accent-strong)]"><Icon size={16} /></span><span className="min-w-0"><span className="block text-sm font-semibold">{option.label}</span><span className="mt-0.5 block text-[10px] leading-snug text-[var(--muted)]">{option.description}</span></span><GripVertical size={14} className="ml-auto shrink-0 text-[var(--muted)]" /></button>; })}</div></Card><div role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel Elemen" aria-valuemin={LANDING_EDITOR_MIN_LEFT_PANEL_WIDTH} aria-valuemax={LANDING_EDITOR_MAX_LEFT_PANEL_WIDTH} aria-valuenow={panelWidths.left} tabIndex={0} title="Tarik untuk mengubah lebar panel Elemen. Klik dua kali untuk mengatur ulang." onPointerDown={event => handlePanelResizeStart('left', event)} onKeyDown={event => handlePanelResizeKeyDown('left', event)} onDoubleClick={() => setPanelWidths(current => ({ ...current, left: LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.left }))} className={`landing-editor-resizer group relative hidden touch-none select-none xl:flex xl:h-full xl:min-h-[160px] xl:cursor-col-resize xl:items-center xl:justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${resizingPanel === 'left' ? 'is-resizing' : ''}`}><span aria-hidden="true" className="h-full w-px rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)]" /></div><div className="min-w-0 xl:min-h-0 xl:overflow-y-auto xl:overscroll-contain"><LandingPagePreview page={page} editable selectedBlockId={selectedBlockId || undefined} onSelect={setSelectedBlockId} onDrop={handleDrop} onDragStart={(event, blockId) => { event.dataTransfer.effectAllowed = 'move'; event.dataTransfer.setData('application/x-landing-block-id', blockId); }} onMove={moveBlock} onRemove={removeBlock} /></div><div role="separator" aria-orientation="vertical" aria-label="Ubah lebar panel Pengaturan" aria-valuemin={LANDING_EDITOR_MIN_RIGHT_PANEL_WIDTH} aria-valuemax={LANDING_EDITOR_MAX_RIGHT_PANEL_WIDTH} aria-valuenow={panelWidths.right} tabIndex={0} title="Tarik untuk mengubah lebar panel Pengaturan. Klik dua kali untuk mengatur ulang." onPointerDown={event => handlePanelResizeStart('right', event)} onKeyDown={event => handlePanelResizeKeyDown('right', event)} onDoubleClick={() => setPanelWidths(current => ({ ...current, right: LANDING_EDITOR_DEFAULT_PANEL_WIDTHS.right }))} className={`landing-editor-resizer group relative hidden touch-none select-none xl:flex xl:h-full xl:min-h-[160px] xl:cursor-col-resize xl:items-center xl:justify-center focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[var(--accent)] ${resizingPanel === 'right' ? 'is-resizing' : ''}`}><span aria-hidden="true" className="h-full w-px rounded-full bg-[var(--border)] transition-colors group-hover:bg-[var(--accent)]" /></div><Card className="space-y-5 xl:sticky xl:top-0 xl:h-full xl:max-h-full xl:min-h-0 xl:self-start xl:overflow-y-auto xl:overscroll-contain"><div className="flex items-center justify-between gap-3"><div><p className="text-xs font-semibold uppercase tracking-[0.14em] text-[var(--muted)]">Pengaturan</p><h2 className="mt-2 text-lg font-bold">{selectedBlock ? LANDING_BLOCK_LABELS[selectedBlock.type] : 'Landing page'}</h2></div><Palette size={20} className="text-[var(--accent-strong)]" /></div>{selectedBlock ? <><button type="button" onClick={() => setSelectedBlockId(null)} className="text-xs font-semibold text-[var(--muted)] hover:text-[var(--text)]">← Kembali ke pengaturan page</button><BlockInspector block={selectedBlock} onChange={data => setPage(current => current ? { ...current, blocks: current.blocks.map(block => block.id === selectedBlock.id ? { ...block, data } : block) } : current)} /></> : <PageSettingsPanel page={page} onChange={updatePage} />}</Card></div></div>;
 };
 
 export const PublicLandingPageView: React.FC<{ client: any; slugOverride?: string }> = ({ client, slugOverride }) => {
