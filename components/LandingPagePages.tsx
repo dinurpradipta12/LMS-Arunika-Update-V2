@@ -1796,12 +1796,14 @@ export const LandingBlockRenderer: React.FC<{
       return (
         <section className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
           {headerImageUrl && (
-            <div className="relative w-full overflow-hidden border-b border-[var(--border)] bg-[var(--surface-soft)]">
+            <div className="relative z-10 w-full overflow-hidden border-b border-[var(--border)] bg-[var(--surface-soft)]">
               <img src={headerImageUrl} alt={headerImageAlt} className="block h-auto w-full object-cover" />
             </div>
           )}
-          <div className="relative p-7 md:p-10">
-            <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[var(--accent-soft)] opacity-70" aria-hidden="true" />
+          <div className="relative overflow-hidden p-7 md:p-10">
+            {!headerImageUrl && (
+              <div className="pointer-events-none absolute -right-20 -top-24 hidden h-64 w-64 rounded-full bg-[var(--accent-soft)] opacity-70 md:block" aria-hidden="true" />
+            )}
             <div className={`relative grid gap-8 ${showVisual ? 'lg:grid-cols-[minmax(0,1fr)_240px] lg:items-center' : ''}`}>
               <div>
                 {asText(data.eyebrow) && <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent-strong)]">{asText(data.eyebrow)}</p>}
