@@ -3,7 +3,9 @@ import { createPortal } from 'react-dom';
 import {
   ArrowLeft,
   BarChart3,
+  BookOpen,
   Bold,
+  Calendar,
   Check,
   Copy,
   CreditCard,
@@ -193,6 +195,7 @@ const LANDING_BLOCK_OPTIONS: Array<{
   { value: 'text', label: 'Teks', description: 'Penjelasan produk', icon: Layout },
   { value: 'image', label: 'Gambar', description: 'Galeri foto atau banner produk', icon: ImagePlus },
   { value: 'video', label: 'Video', description: 'Video demo atau testimoni', icon: Video },
+  { value: 'classes', label: 'Kelas', description: 'Daftar kelas, pemateri & jadwal', icon: BookOpen },
   { value: 'features', label: 'Manfaat', description: 'Keunggulan dalam grid', icon: Star },
   { value: 'topics', label: 'Topik bahasan', description: 'Kategori dengan daftar poin', icon: List },
   { value: 'workflow', label: 'Workflow', description: 'Tahapan proses bernomor', icon: ListOrdered },
@@ -209,8 +212,18 @@ const LANDING_BLOCK_OPTIONS: Array<{
 const LANDING_BLOCK_LABELS = Object.fromEntries(LANDING_BLOCK_OPTIONS.map(item => [item.value, item.label])) as Record<LandingBlockType, string>;
 const LANDING_BLOCK_TYPES = new Set<LandingBlockType>(LANDING_BLOCK_OPTIONS.map(item => item.value));
 
-type LandingImageLayout = 'slider' | 'marquee' | 'row';
+type LandingImageLayout = 'banner' | 'slider' | 'marquee' | 'row';
 type LandingImageItem = { url: string; alt: string; caption: string };
+type LandingClassLayout = 'stack' | 'row';
+type LandingClassItem = {
+  id: string;
+  title: string;
+  speaker: string;
+  description: string;
+  date: string;
+  imageUrl: string;
+  imageAlt: string;
+};
 type LandingVideoLayout = 'grid' | 'slider' | 'row';
 type LandingVideoSourceType = 'youtube' | 'upload';
 type LandingVideoItem = {
@@ -271,9 +284,15 @@ const normalizeProfilePhotoPosition = (value: unknown) => {
 };
 
 const LANDING_IMAGE_LAYOUT_OPTIONS: Array<{ value: LandingImageLayout; label: string; description: string }> = [
+  { value: 'banner', label: '1 gambar banner penuh', description: 'Satu gambar tampil penuh selebar halaman sebagai banner.' },
   { value: 'slider', label: 'Foto slider', description: 'Satu foto utama dengan navigasi dan indikator.' },
   { value: 'marquee', label: 'Gallery otomatis', description: 'Bergerak dari kanan ke kiri dan berulang.' },
   { value: 'row', label: 'Gallery satu baris', description: 'Semua foto tampil statis dalam satu baris.' }
+];
+
+const LANDING_CLASS_LAYOUT_OPTIONS: Array<{ value: LandingClassLayout; label: string; description: string }> = [
+  { value: 'stack', label: 'Card tersusun rapi satu per satu (seperti Bonus)', description: 'Setiap kelas tampil sebagai card horizontal yang tersusun rapi dari atas ke bawah.' },
+  { value: 'row', label: 'Card dalam 1 baris', description: 'Semua kelas tampil berjajar dalam satu baris.' }
 ];
 
 const LANDING_VIDEO_LAYOUT_OPTIONS: Array<{ value: LandingVideoLayout; label: string; description: string }> = [
@@ -303,6 +322,9 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       eyebrow: 'Produk pilihan untuk Anda',
       headline: 'Tampilkan produk Anda dengan lebih meyakinkan',
       body: 'Jelaskan manfaat utama produk Anda dengan kalimat singkat yang mudah dipahami.',
+      headerImageUrl: '',
+      headerImageAlt: 'Header landing page',
+      showVisual: true,
       imageBoxScale: 1,
       imageBoxOffsetX: 0,
       imageFrame: 'boxed',
@@ -450,6 +472,21 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
         imageUrl: '',
         imageAlt: 'Visual bonus',
         caption: ''
+      }]
+    },
+    classes: {
+      eyebrow: 'Daftar Kelas',
+      heading: 'Rangkaian Kelas & Jadwal',
+      intro: '',
+      layout: 'stack',
+      items: [{
+        id: 'landing-class-default-1',
+        title: 'Sesi 1: Judul Kelas Pertama',
+        speaker: 'Nama Pemateri',
+        description: 'Jelaskan materi pokok dan apa yang akan dipelajari peserta pada sesi kelas ini.',
+        date: '17 November 2026 · 19.00 WIB',
+        imageUrl: '',
+        imageAlt: 'Foto kelas'
       }]
     },
     cta: {
@@ -719,6 +756,33 @@ const normalizeBonusItems = (value: unknown, legacyData: Record<string, any> = {
   return legacyItem.title || legacyItem.body || legacyItem.imageUrl ? [legacyItem] : [];
 };
 
+const createClassItem = (index = 0): LandingClassItem => ({
+  id: `landing-class-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
+  title: `Sesi ${index + 1}: Nama Kelas`,
+  speaker: 'Nama Pemateri',
+  description: 'Jelaskan isi materi atau pembahasan pada kelas ini.',
+  date: '',
+  imageUrl: '',
+  imageAlt: 'Foto kelas'
+});
+
+const normalizeClassLayout = (value: unknown): LandingClassLayout => (
+  ['stack', 'row'].includes(asText(value)) ? asText(value) as LandingClassLayout : 'stack'
+);
+
+const normalizeClassItems = (value: unknown, fallback: LandingClassItem[] = []): LandingClassItem[] => {
+  if (!Array.isArray(value)) return fallback;
+  return value.slice(0, 20).map((item, index) => ({
+    id: asText(item?.id, `landing-class-${index}`),
+    title: asText(item?.title || item?.name),
+    speaker: asText(item?.speaker || item?.instructor || item?.mentor),
+    description: asText(item?.description || item?.body),
+    date: asText(item?.date || item?.scheduleDate || item?.schedule_date),
+    imageUrl: asText(item?.imageUrl || item?.image_url),
+    imageAlt: asText(item?.imageAlt || item?.image_alt, 'Foto kelas')
+  }));
+};
+
 const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   const type = LANDING_BLOCK_TYPES.has(value?.type) ? value.type as LandingBlockType : 'text';
   const fallback = createLandingBlock(type, index);
@@ -726,6 +790,9 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   const data = { ...fallback.data, ...rawData };
   if (type === 'features') data.items = normalizeLineItems(rawData.items, fallback.data.items);
   if (type === 'hero') {
+    data.headerImageUrl = asText(rawData.headerImageUrl || rawData.header_image_url);
+    data.headerImageAlt = asText(rawData.headerImageAlt || rawData.header_image_alt, fallback.data.headerImageAlt);
+    data.showVisual = rawData.showVisual !== false && rawData.showVisual !== 'false' && rawData.show_visual !== false && rawData.show_visual !== 'false';
     data.imageBoxScale = normalizeHeroImageScale(rawData.imageBoxScale, fallback.data.imageBoxScale);
     data.imageBoxOffsetX = normalizeHeroImageBoxOffset(rawData.imageBoxOffsetX);
     data.imageFrame = normalizeHeroImageFrame(rawData.imageFrame);
@@ -748,7 +815,7 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
   }
   if (type === 'image') {
     data.images = normalizeImageItems(rawData.images, rawData);
-    data.layout = (['slider', 'marquee', 'row'].includes(rawData.layout) ? rawData.layout : fallback.data.layout) as LandingImageLayout;
+    data.layout = (['banner', 'slider', 'marquee', 'row'].includes(rawData.layout) ? rawData.layout : fallback.data.layout) as LandingImageLayout;
   }
   if (type === 'video') {
     data.videos = normalizeVideoItems(rawData.videos, rawData);
@@ -762,6 +829,10 @@ const normalizeLandingBlock = (value: any, index: number): LandingBlock => {
     data.photoPositionY = normalizeProfilePhotoPosition(rawData.photoPositionY);
   }
   if (type === 'bonus') data.items = normalizeBonusItems(rawData.items, rawData);
+  if (type === 'classes') {
+    data.items = normalizeClassItems(rawData.items, fallback.data.items);
+    data.layout = normalizeClassLayout(rawData.layout);
+  }
   return {
     id: asText(value?.id, fallback.id),
     type,
@@ -812,11 +883,17 @@ const createLandingShareLink = (slug: string, updatedAt?: string) => {
 
 const getLandingPreviewImage = (page: LandingPage) => {
   for (const block of page.blocks) {
+    const headerImageUrl = asText(block.data?.headerImageUrl).trim();
+    if (headerImageUrl) return headerImageUrl;
     const imageUrl = asText(block.data?.imageUrl).trim();
     if (imageUrl) return imageUrl;
     if (block.type === 'image' && Array.isArray(block.data?.images)) {
       const firstImage = block.data.images.find((item: any) => asText(item?.url).trim());
       if (firstImage) return asText(firstImage.url).trim();
+    }
+    if (block.type === 'classes' && Array.isArray(block.data?.items)) {
+      const firstClassImage = block.data.items.find((item: any) => asText(item?.imageUrl).trim());
+      if (firstClassImage) return asText(firstClassImage.imageUrl).trim();
     }
   }
   return '';
@@ -1203,7 +1280,7 @@ const LandingImageGalleryBlock: React.FC<{ data: Record<string, any> }> = ({ dat
     return <div className="flex min-h-48 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-sm text-[var(--muted)]">Upload gambar untuk menampilkan galeri produk.</div>;
   }
 
-  const layout = (['slider', 'marquee', 'row'].includes(data.layout) ? data.layout : 'row') as LandingImageLayout;
+  const layout = (['banner', 'slider', 'marquee', 'row'].includes(data.layout) ? data.layout : 'row') as LandingImageLayout;
   const openPreview = (index: number) => setLightboxIndex(index);
   const renderImageButton = (item: LandingImageItem, index: number, className: string, duplicate = false) => (
     <button
@@ -1222,7 +1299,28 @@ const LandingImageGalleryBlock: React.FC<{ data: Record<string, any> }> = ({ dat
 
   return (
     <>
-      {layout === 'slider' ? (
+      {layout === 'banner' ? (
+        <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+          <button
+            type="button"
+            onClick={() => openPreview(0)}
+            aria-label={`Lihat ${items[0].alt || 'banner produk'}`}
+            className="group relative block w-full overflow-hidden bg-[var(--surface-soft)]"
+          >
+            <img
+              src={items[0].url}
+              alt={items[0].alt || 'Banner produk'}
+              className="block h-auto w-full object-cover transition-transform duration-300 group-hover:scale-[1.01]"
+            />
+            <span className="pointer-events-none absolute inset-0 bg-slate-950/0 transition-colors group-hover:bg-slate-950/10" />
+          </button>
+          {items[0].caption.trim() && (
+            <div className="border-t border-[var(--border)] px-4 py-3">
+              <p className="text-xs leading-relaxed text-[var(--muted)]">{items[0].caption}</p>
+            </div>
+          )}
+        </section>
+      ) : layout === 'slider' ? (
         <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
           <div className="relative">
             {renderImageButton(items[activeIndex], activeIndex, 'block aspect-[16/9] w-full rounded-none border-0')}
@@ -1561,6 +1659,98 @@ const LandingProfileBlock: React.FC<{ data: Record<string, any> }> = ({ data }) 
   );
 };
 
+const LandingClassesBlock: React.FC<{ data: Record<string, any> }> = ({ data }) => {
+  const layout = normalizeClassLayout(data.layout);
+  const eyebrow = asText(data.eyebrow, 'Rangkaian Kelas').trim();
+  const heading = asText(data.heading, 'Daftar Kelas & Pemateri').trim();
+  const intro = asText(data.intro).trim();
+  const items = normalizeClassItems(data.items, data);
+  const sectionHeadingColor = headingColorValue(data.headingColor);
+
+  return (
+    <section className="overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface-soft)] p-6 shadow-sm md:p-8" aria-label={heading || 'Daftar Kelas'}>
+      <div className="mb-6">
+        {eyebrow && <p className="text-xs font-bold uppercase tracking-[0.16em] text-[var(--accent-strong)]">{eyebrow}</p>}
+        <h2 className="mt-2 text-2xl font-bold" style={{ color: sectionHeadingColor }}>{heading || 'Daftar Kelas & Pemateri'}</h2>
+        {intro && <p className="mt-2 max-w-3xl whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{intro}</p>}
+      </div>
+      {items.length ? (
+        layout === 'row' ? (
+          <div className="flex gap-4 overflow-x-auto pb-2">
+            {items.map((item, index) => (
+              <article key={`${item.id}-${index}`} className="flex min-w-[270px] flex-1 flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:min-w-[290px]">
+                <div className="aspect-[16/10] w-full overflow-hidden bg-[var(--accent-soft)]">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.imageAlt || item.title || `Foto kelas ${index + 1}`} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full min-h-[160px] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto kelas dari pengaturan blok.</div>
+                  )}
+                </div>
+                <div className="flex flex-1 flex-col justify-between space-y-3 p-5">
+                  <div className="space-y-2">
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Kelas {index + 1}</span>
+                      {item.date && (
+                        <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-strong)]">
+                          <Calendar size={12} />
+                          <span>{item.date}</span>
+                        </span>
+                      )}
+                    </div>
+                    <h3 className="text-lg font-semibold leading-snug">{item.title || `Kelas ${index + 1}`}</h3>
+                    {item.speaker && (
+                      <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)]">
+                        <UserRound size={14} className="shrink-0" />
+                        <span>{item.speaker}</span>
+                      </p>
+                    )}
+                    {item.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+        ) : (
+          <div className="space-y-4">
+            {items.map((item, index) => (
+              <article key={`${item.id}-${index}`} className="grid overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:grid-cols-[minmax(170px,240px)_minmax(0,1fr)]">
+                <div className="min-h-[190px] bg-[var(--accent-soft)] sm:min-h-full">
+                  {item.imageUrl ? (
+                    <img src={item.imageUrl} alt={item.imageAlt || item.title || `Foto kelas ${index + 1}`} className="h-full w-full object-cover" />
+                  ) : (
+                    <div className="flex h-full min-h-[190px] items-center justify-center px-4 text-center text-xs leading-relaxed text-[var(--muted)]">Tambahkan foto kelas dari pengaturan blok.</div>
+                  )}
+                </div>
+                <div className="flex min-w-0 flex-col justify-center space-y-2.5 p-5 sm:py-6 sm:pr-6">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="text-[10px] font-bold uppercase tracking-[0.14em] text-[var(--accent-strong)]">Kelas {index + 1}</span>
+                    {item.date && (
+                      <span className="inline-flex items-center gap-1.5 rounded-full bg-[var(--accent-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--accent-strong)]">
+                        <Calendar size={12} />
+                        <span>{item.date}</span>
+                      </span>
+                    )}
+                  </div>
+                  <h3 className="text-lg font-semibold leading-snug">{item.title || `Kelas ${index + 1}`}</h3>
+                  {item.speaker && (
+                    <p className="inline-flex items-center gap-1.5 text-xs font-semibold text-[var(--accent-strong)]">
+                      <UserRound size={14} className="shrink-0" />
+                      <span>Pemateri: {item.speaker}</span>
+                    </p>
+                  )}
+                  {item.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
+                </div>
+              </article>
+            ))}
+          </div>
+        )
+      ) : (
+        <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface)] p-6 text-center text-sm text-[var(--muted)]">Belum ada kelas yang ditampilkan.</div>
+      )}
+    </section>
+  );
+};
+
 export const LandingBlockRenderer: React.FC<{
   block: LandingBlock;
   pageTitle?: string;
@@ -1577,39 +1767,52 @@ export const LandingBlockRenderer: React.FC<{
   const textBody = asText(data.body);
   const sectionHeadingColor = headingColorValue(data.headingColor);
   switch (block.type) {
-    case 'hero':
+    case 'hero': {
       const heroImageBoxScale = normalizeHeroImageScale(data.imageBoxScale, 1);
       const heroImageBoxOffsetX = normalizeHeroImageBoxOffset(data.imageBoxOffsetX);
       const heroImageFrame = normalizeHeroImageFrame(data.imageFrame);
       const heroImageScale = normalizeHeroImageScale(data.imageScale);
       const heroImagePositionX = normalizeHeroImagePosition(data.imagePositionX);
       const heroImagePositionY = normalizeHeroImagePosition(data.imagePositionY);
+      const headerImageUrl = asText(data.headerImageUrl).trim();
+      const headerImageAlt = asText(data.headerImageAlt, 'Header landing page').trim() || 'Header landing page';
+      const showVisual = data.showVisual !== false;
       return (
-        <section className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] p-7 shadow-sm md:p-10">
-          <div className="absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[var(--accent-soft)] opacity-70" aria-hidden="true" />
-          <div className="relative grid gap-8 lg:grid-cols-[minmax(0,1fr)_240px] lg:items-center">
-            <div>
-              {asText(data.eyebrow) && <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent-strong)]">{asText(data.eyebrow)}</p>}
-              <h2 className="mt-3 max-w-3xl text-3xl font-bold leading-tight md:text-5xl" style={{ color: sectionHeadingColor }}>{asText(data.headline, 'Judul produk Anda')}</h2>
-              {textBody && <p className="mt-4 max-w-2xl whitespace-pre-wrap text-base leading-relaxed text-[var(--muted)]">{textBody}</p>}
-              <ActionLink label={asText(data.buttonLabel, 'Pelajari lebih lanjut')} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('hero')} className="mt-6" />
+        <section className="relative overflow-hidden rounded-3xl border border-[var(--border)] bg-[var(--surface)] shadow-sm">
+          {headerImageUrl && (
+            <div className="relative w-full overflow-hidden border-b border-[var(--border)] bg-[var(--surface-soft)]">
+              <img src={headerImageUrl} alt={headerImageAlt} className="block h-auto w-full object-cover" />
             </div>
-            {asText(data.imageUrl) ? (
-              heroImageFrame === 'none' ? (
-                <div className="relative flex min-h-40 w-full items-center justify-center overflow-visible transition-transform duration-200 ease-out">
-                  <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="max-h-64 max-w-full object-contain transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `translate(${(heroImagePositionX - 50) / 2}%, ${(heroImagePositionY - 50) / 2}%) scale(${heroImageScale})` }} />
-                </div>
-              ) : (
-                <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm transition-transform duration-200 ease-out" style={{ transform: `translateX(${heroImageBoxOffsetX}%) scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
-                  <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="absolute inset-0 h-full w-full object-cover transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `scale(${heroImageScale})` }} />
-                </div>
-              )
-            ) : (
-              <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-center text-xs text-[var(--muted)]">Visual produk dapat ditambahkan dari pengaturan blok.</div>
-            )}
+          )}
+          <div className="relative p-7 md:p-10">
+            <div className="pointer-events-none absolute -right-20 -top-24 h-64 w-64 rounded-full bg-[var(--accent-soft)] opacity-70" aria-hidden="true" />
+            <div className={`relative grid gap-8 ${showVisual ? 'lg:grid-cols-[minmax(0,1fr)_240px] lg:items-center' : ''}`}>
+              <div>
+                {asText(data.eyebrow) && <p className="text-xs font-bold uppercase tracking-[0.18em] text-[var(--accent-strong)]">{asText(data.eyebrow)}</p>}
+                <h2 className="mt-3 max-w-3xl text-3xl font-bold leading-tight md:text-5xl" style={{ color: sectionHeadingColor }}>{asText(data.headline, 'Judul produk Anda')}</h2>
+                {textBody && <p className="mt-4 max-w-2xl whitespace-pre-wrap text-base leading-relaxed text-[var(--muted)]">{textBody}</p>}
+                <ActionLink label={asText(data.buttonLabel, 'Pelajari lebih lanjut')} href={asText(data.buttonUrl)} onClick={() => onCtaClick?.('hero')} className="mt-6" />
+              </div>
+              {showVisual && (
+                asText(data.imageUrl) ? (
+                  heroImageFrame === 'none' ? (
+                    <div className="relative flex min-h-40 w-full items-center justify-center overflow-visible transition-transform duration-200 ease-out">
+                      <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="max-h-64 max-w-full object-contain transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `translate(${(heroImagePositionX - 50) / 2}%, ${(heroImagePositionY - 50) / 2}%) scale(${heroImageScale})` }} />
+                    </div>
+                  ) : (
+                    <div className="relative aspect-video w-full overflow-hidden rounded-2xl bg-[var(--surface-soft)] shadow-sm transition-transform duration-200 ease-out" style={{ transform: `translateX(${heroImageBoxOffsetX}%) scale(${heroImageBoxScale})`, transformOrigin: 'center right' }}>
+                      <img src={asText(data.imageUrl)} alt={asText(data.imageAlt, 'Visual produk')} className="absolute inset-0 h-full w-full object-cover transition-transform duration-200" style={{ objectPosition: `${heroImagePositionX}% ${heroImagePositionY}%`, transform: `scale(${heroImageScale})` }} />
+                    </div>
+                  )
+                ) : (
+                  <div className="flex min-h-40 items-center justify-center rounded-2xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] text-center text-xs text-[var(--muted)]">Visual produk dapat ditambahkan dari pengaturan blok.</div>
+                )
+              )}
+            </div>
           </div>
         </section>
       );
+    }
     case 'text':
       return (
         <section className="rounded-2xl border border-[var(--border)] bg-[var(--surface)] p-6 shadow-sm md:p-8">
@@ -1638,6 +1841,8 @@ export const LandingBlockRenderer: React.FC<{
       );
     case 'topics':
       return <LandingTopicsBlock data={data} />;
+    case 'classes':
+      return <LandingClassesBlock data={data} />;
     case 'workflow':
       return <LandingWorkflowBlock data={data} />;
     case 'pricing': {
@@ -2501,6 +2706,60 @@ const LandingPricingEditor: React.FC<{ items: LandingPricingPackage[]; onChange:
   );
 };
 
+const LandingClassesEditor: React.FC<{
+  items: LandingClassItem[];
+  layout: LandingClassLayout;
+  onChange: (items: LandingClassItem[]) => void;
+  onLayoutChange: (layout: LandingClassLayout) => void;
+}> = ({ items, layout, onChange, onLayoutChange }) => {
+  const maxClasses = 20;
+  const updateItem = (index: number, patch: Partial<LandingClassItem>) =>
+    onChange(items.map((item, itemIndex) => itemIndex === index ? { ...item, ...patch } : item));
+  const addItem = () => {
+    if (items.length >= maxClasses) return;
+    onChange([...items, createClassItem(items.length)]);
+  };
+
+  return (
+    <div className="space-y-4">
+      <label className="flex flex-col gap-2">
+        <span className="text-xs font-semibold text-[var(--muted)]">Tampilan daftar kelas</span>
+        <select
+          value={layout}
+          onChange={event => onLayoutChange(normalizeClassLayout(event.target.value))}
+          className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+        >
+          {LANDING_CLASS_LAYOUT_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}
+        </select>
+        <span className="text-[11px] leading-relaxed text-[var(--muted)]">
+          {LANDING_CLASS_LAYOUT_OPTIONS.find(option => option.value === layout)?.description}
+        </span>
+      </label>
+      <div className="flex items-center justify-between gap-3">
+        <p className="text-xs font-semibold text-[var(--muted)]">Daftar kelas</p>
+        <span className="text-[11px] text-[var(--muted)]">{items.length}/{maxClasses} kelas</span>
+      </div>
+      {items.length ? items.map((item, index) => (
+        <div key={`class-editor-${item.id}-${index}`} className="space-y-4 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-sm font-semibold">Kelas {index + 1}</p>
+            <button type="button" onClick={() => onChange(items.filter((_, itemIndex) => itemIndex !== index))} aria-label={`Hapus kelas ${index + 1}`} className="rounded-lg p-1.5 text-[var(--danger-text)] transition-colors hover:bg-[var(--danger-soft)]"><Trash2 size={16} /></button>
+          </div>
+          <ImageUploader label="Foto kelas / pemateri" value={item.imageUrl} onChange={value => updateItem(index, { imageUrl: value })} />
+          <Input label="URL foto kelas (opsional)" value={item.imageUrl.startsWith('data:') ? '' : item.imageUrl} onChange={event => updateItem(index, { imageUrl: event.target.value })} placeholder="https://.../foto-kelas.jpg" />
+          <Input label="Alt foto" value={item.imageAlt} onChange={event => updateItem(index, { imageAlt: event.target.value })} placeholder="Foto kelas" />
+          <Input label="Nama kelas" value={item.title} onChange={event => updateItem(index, { title: event.target.value })} placeholder="Contoh: Kelas 1 — Dasar Penulisan & Struktur" />
+          <Input label="Pemateri" value={item.speaker} onChange={event => updateItem(index, { speaker: event.target.value })} placeholder="Contoh: Nama Pemateri" />
+          <Input label="Tanggal pelaksanaan kelas" value={item.date} onChange={event => updateItem(index, { date: event.target.value })} placeholder="Contoh: 17 November 2026 · 19.00 WIB" />
+          <Textarea label="Keterangan kelas" value={item.description} onChange={event => updateItem(index, { description: event.target.value })} placeholder="Jelaskan materi, fokus bahasan, dan hasil yang didapat dari kelas ini." className="min-h-[110px]" />
+        </div>
+      )) : <div className="rounded-xl border border-dashed border-[var(--border-strong)] bg-[var(--surface-soft)] px-4 py-6 text-center text-xs leading-relaxed text-[var(--muted)]">Belum ada kelas. Tambahkan kelas pertama untuk ditampilkan di halaman publik.</div>}
+      <Button type="button" variant="secondary" icon={Plus} onClick={addItem} disabled={items.length >= maxClasses}>Tambah kelas</Button>
+      <p className="text-[11px] leading-relaxed text-[var(--muted)]">Setiap kelas dapat memiliki foto, nama kelas, pemateri, keterangan, dan tanggal pelaksanaan masing-masing.</p>
+    </div>
+  );
+};
+
 const pipeItemsToText = (items: Array<{ title: string; description: string }>) => items.map(item => `${item.title} | ${item.description}`).join('\n');
 const textToPipeItems = (value: string) => value.split('\n').map(line => line.trim()).filter(Boolean).map(line => { const [title, ...description] = line.split('|'); return { title: title.trim(), description: description.join('|').trim() }; });
 const faqItemsToText = (items: Array<{ question: string; answer: string }>) => items.map(item => `${item.question} | ${item.answer}`).join('\n');
@@ -2511,16 +2770,65 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const patch = (values: Record<string, any>) => onChange({ ...data, ...values });
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
   const pricingButtonFields = <div className="space-y-2"><Input label="Label tombol pilihan paket" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Pilih paket" /><p className="text-[11px] leading-relaxed text-[var(--muted)]">Setelah memilih paket, pengunjung akan melihat total pembayaran dan QR Code di blok Pembayaran.</p></div>;
-  const hasHeadingColor = ['hero', 'text', 'features', 'topics', 'workflow', 'pricing', 'profile', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
+  const hasHeadingColor = ['hero', 'text', 'features', 'topics', 'classes', 'workflow', 'pricing', 'profile', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
-    case 'hero':
-      return <div className="space-y-4"><Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} /><Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} />{headingColorField}<Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} /><ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} preservePng />{asText(data.imageUrl) && <HeroImageCropControls imageUrl={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} />}<label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Frame foto Hero</span><select value={normalizeHeroImageFrame(data.imageFrame)} onChange={event => patch({ imageFrame: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"><option value="boxed">Dengan frame kotak</option><option value="none">Tanpa frame</option></select><span className="text-[11px] leading-relaxed text-[var(--muted)]">Pilih apakah visual Hero tampil di dalam kotak dengan latar dan bayangan, atau tanpa frame.</span></label><HeroImageControls imageUrl={asText(data.imageUrl)} frame={normalizeHeroImageFrame(data.imageFrame)} boxScale={normalizeHeroImageScale(data.imageBoxScale, 1)} boxOffsetX={normalizeHeroImageBoxOffset(data.imageBoxOffsetX)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} /><Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />{commonButtonFields}</div>;
+    case 'hero': {
+      const showVisual = data.showVisual !== false;
+      return (
+        <div className="space-y-4">
+          <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+            <div>
+              <p className="text-xs font-semibold text-[var(--text)]">Foto Header</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Upload foto banner header yang tampil penuh di bagian paling atas blok Hero.</p>
+            </div>
+            <ImageUploader label="Upload foto header (opsional)" value={asText(data.headerImageUrl)} onChange={value => patch({ headerImageUrl: value })} />
+            <Input label="URL foto header (opsional)" value={asText(data.headerImageUrl).startsWith('data:') ? '' : asText(data.headerImageUrl)} onChange={event => patch({ headerImageUrl: event.target.value })} placeholder="https://.../header.jpg" />
+            <Input label="Alt foto header" value={asText(data.headerImageAlt, 'Header landing page')} onChange={event => patch({ headerImageAlt: event.target.value })} placeholder="Header landing page" />
+          </div>
+          <Input label="Eyebrow" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} />
+          <Input label="Judul utama" value={asText(data.headline)} onChange={event => patch({ headline: event.target.value })} />
+          {headingColorField}
+          <Textarea label="Deskripsi" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} />
+          <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+            <label className="flex flex-col gap-2">
+              <span className="text-xs font-semibold text-[var(--text)]">Visual Hero</span>
+              <select
+                value={showVisual ? 'show' : 'hide'}
+                onChange={event => patch({ showVisual: event.target.value !== 'hide' })}
+                className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+              >
+                <option value="show">Gunakan visual hero</option>
+                <option value="hide">Sembunyikan visual hero</option>
+              </select>
+              <span className="text-[11px] leading-relaxed text-[var(--muted)]">Pilih apakah ingin menampilkan atau menghilangkan area visual di sebelah kanan Hero.</span>
+            </label>
+            {showVisual && (
+              <div className="space-y-4 pt-2">
+                <ImageUploader label="Visual hero (opsional)" value={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} preservePng />
+                {asText(data.imageUrl) && <HeroImageCropControls imageUrl={asText(data.imageUrl)} onChange={value => patch({ imageUrl: value })} />}
+                <label className="flex flex-col gap-2">
+                  <span className="text-xs font-semibold text-[var(--muted)]">Frame foto Hero</span>
+                  <select value={normalizeHeroImageFrame(data.imageFrame)} onChange={event => patch({ imageFrame: event.target.value })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">
+                    <option value="boxed">Dengan frame kotak</option>
+                    <option value="none">Tanpa frame</option>
+                  </select>
+                  <span className="text-[11px] leading-relaxed text-[var(--muted)]">Pilih apakah visual Hero tampil di dalam kotak dengan latar dan bayangan, atau tanpa frame.</span>
+                </label>
+                <HeroImageControls imageUrl={asText(data.imageUrl)} frame={normalizeHeroImageFrame(data.imageFrame)} boxScale={normalizeHeroImageScale(data.imageBoxScale, 1)} boxOffsetX={normalizeHeroImageBoxOffset(data.imageBoxOffsetX)} scale={normalizeHeroImageScale(data.imageScale)} positionX={normalizeHeroImagePosition(data.imagePositionX)} positionY={normalizeHeroImagePosition(data.imagePositionY)} onChange={values => patch(values)} />
+                <Input label="Alt visual" value={asText(data.imageAlt)} onChange={event => patch({ imageAlt: event.target.value })} />
+              </div>
+            )}
+          </div>
+          {commonButtonFields}
+        </div>
+      );
+    }
     case 'text':
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<RichTextEditor label="Isi teks" value={asText(data.body)} onChange={body => patch({ body })} /></div>;
     case 'image': {
       const items = normalizeImageItems(data.images, data);
-      const layout = (['slider', 'marquee', 'row'].includes(data.layout) ? data.layout : 'row') as LandingImageLayout;
+      const layout = (['banner', 'slider', 'marquee', 'row'].includes(data.layout) ? data.layout : 'row') as LandingImageLayout;
       return (
         <div className="space-y-5">
           <label className="flex flex-col gap-2">
@@ -2571,6 +2879,24 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
     case 'topics': {
       const items = normalizeTopicCategories(data.categories, []);
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<Textarea label="Pembuka (opsional)" value={asText(data.intro)} onChange={event => patch({ intro: event.target.value })} placeholder="Jelaskan secara singkat topik yang akan dibahas." className="min-h-[90px]" /><LandingTopicsEditor items={items} onChange={categories => patch({ categories })} /></div>;
+    }
+    case 'classes': {
+      const items = normalizeClassItems(data.items, data);
+      const layout = normalizeClassLayout(data.layout);
+      return (
+        <div className="space-y-4">
+          <Input label="Eyebrow (opsional)" value={asText(data.eyebrow, 'Rangkaian Kelas')} onChange={event => patch({ eyebrow: event.target.value })} placeholder="Contoh: Rangkaian Kelas" />
+          <Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} placeholder="Contoh: Daftar Kelas & Pemateri" />
+          {headingColorField}
+          <Textarea label="Pembuka (opsional)" value={asText(data.intro)} onChange={event => patch({ intro: event.target.value })} placeholder="Jelaskan secara singkat rangkaian kelas yang akan diikuti." className="min-h-[90px]" />
+          <LandingClassesEditor
+            items={items}
+            layout={layout}
+            onChange={nextItems => patch({ items: nextItems })}
+            onLayoutChange={nextLayout => patch({ layout: nextLayout })}
+          />
+        </div>
+      );
     }
     case 'workflow': {
       const items = normalizeWorkflowSteps(data.steps, []);
@@ -2634,9 +2960,48 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   }
 };
 
-const PageSettingsPanel: React.FC<{ page: LandingPage; onChange: (patch: Partial<LandingPage>) => void }> = ({ page, onChange }) => (
-  <div className="space-y-4"><Input label="Judul landing page" value={page.title} onChange={event => onChange({ title: event.target.value })} /><Input label="Slug link publik" value={page.slug} onChange={event => onChange({ slug: event.target.value })} onBlur={() => onChange({ slug: slugify(page.slug || page.title) })} /><Textarea label="Deskripsi singkat" value={page.description} onChange={event => onChange({ description: event.target.value })} /><label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status halaman</span><select value={page.status} onChange={event => onChange({ status: event.target.value as LandingPageStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">{LANDING_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label><div className="space-y-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Nuansa warna</p><p className="mt-1 text-xs text-[var(--muted)]">Pilih aksen lembut untuk tombol dan elemen penting.</p></div><div className="grid grid-cols-2 gap-2">{FORM_THEME_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={page.theme === option.value} onClick={() => onChange({ theme: option.value })} className={`rounded-xl border p-2 text-left transition-colors ${page.theme === option.value ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><span className="mb-2 block h-6 rounded-lg" style={{ backgroundColor: option.swatch }} /><span className="block text-xs font-semibold">{option.label}</span></button>)}</div></div></div>
-);
+const PageSettingsPanel: React.FC<{ page: LandingPage; onChange: (patch: Partial<LandingPage>) => void }> = ({ page, onChange }) => {
+  const heroBlock = page.blocks.find(block => block.type === 'hero');
+  const heroData = heroBlock?.data || {};
+  const showHeroVisual = heroData.showVisual !== false;
+  const patchHero = (values: Record<string, any>) => {
+    if (!heroBlock) return;
+    onChange({
+      blocks: page.blocks.map(block => block.id === heroBlock.id ? { ...block, data: { ...block.data, ...values } } : block)
+    });
+  };
+
+  return (
+    <div className="space-y-4">
+      <Input label="Judul landing page" value={page.title} onChange={event => onChange({ title: event.target.value })} />
+      <Input label="Slug link publik" value={page.slug} onChange={event => onChange({ slug: event.target.value })} onBlur={() => onChange({ slug: slugify(page.slug || page.title) })} />
+      <Textarea label="Deskripsi singkat" value={page.description} onChange={event => onChange({ description: event.target.value })} />
+      {heroBlock && (
+        <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+          <div>
+            <p className="text-xs font-semibold text-[var(--text)]">Header & Visual Hero</p>
+            <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur foto header dan tampilan visual pada bagian Hero utama.</p>
+          </div>
+          <ImageUploader label="Upload foto header (opsional)" value={asText(heroData.headerImageUrl)} onChange={value => patchHero({ headerImageUrl: value })} />
+          <Input label="URL foto header (opsional)" value={asText(heroData.headerImageUrl).startsWith('data:') ? '' : asText(heroData.headerImageUrl)} onChange={event => patchHero({ headerImageUrl: event.target.value })} placeholder="https://.../header.jpg" />
+          <label className="flex flex-col gap-2">
+            <span className="text-xs font-semibold text-[var(--muted)]">Visual Hero</span>
+            <select
+              value={showHeroVisual ? 'show' : 'hide'}
+              onChange={event => patchHero({ showVisual: event.target.value !== 'hide' })}
+              className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]"
+            >
+              <option value="show">Gunakan visual hero</option>
+              <option value="hide">Sembunyikan visual hero</option>
+            </select>
+          </label>
+        </div>
+      )}
+      <label className="flex flex-col gap-2"><span className="text-xs font-semibold text-[var(--muted)]">Status halaman</span><select value={page.status} onChange={event => onChange({ status: event.target.value as LandingPageStatus })} className="min-h-[46px] rounded-xl border border-[var(--border)] bg-[var(--surface)] px-4 py-3 text-sm outline-none focus:border-[var(--accent)]">{LANDING_STATUS_OPTIONS.map(option => <option key={option.value} value={option.value}>{option.label}</option>)}</select></label>
+      <div className="space-y-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Nuansa warna</p><p className="mt-1 text-xs text-[var(--muted)]">Pilih aksen lembut untuk tombol dan elemen penting.</p></div><div className="grid grid-cols-2 gap-2">{FORM_THEME_OPTIONS.map(option => <button key={option.value} type="button" aria-pressed={page.theme === option.value} onClick={() => onChange({ theme: option.value })} className={`rounded-xl border p-2 text-left transition-colors ${page.theme === option.value ? 'border-[var(--accent)] ring-2 ring-[var(--accent-soft)]' : 'border-[var(--border)] hover:border-[var(--border-strong)]'}`}><span className="mb-2 block h-6 rounded-lg" style={{ backgroundColor: option.swatch }} /><span className="block text-xs font-semibold">{option.label}</span></button>)}</div></div>
+    </div>
+  );
+};
 
 const LandingInsightModal: React.FC<{
   page: LandingPage | null;

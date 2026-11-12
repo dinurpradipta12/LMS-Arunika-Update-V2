@@ -228,12 +228,19 @@ const getLandingPreviewImage = (landing: LandingOption | any) => {
   const blocks = Array.isArray(landing?.blocks) ? landing.blocks : [];
   for (const block of blocks) {
     const data = block?.data || {};
+    const headerImage = asText(data.headerImageUrl).trim();
+    if (headerImage) return headerImage;
     const direct = asText(data.imageUrl).trim();
     if (direct) return direct;
     if (block?.type === 'image') {
       const images = Array.isArray(data.images) ? data.images : [];
       const first = images.find((item: any) => asText(item?.url).trim());
       if (first) return asText(first.url).trim();
+    }
+    if (block?.type === 'classes') {
+      const items = Array.isArray(data.items) ? data.items : [];
+      const first = items.find((item: any) => asText(item?.imageUrl).trim());
+      if (first) return asText(first.imageUrl).trim();
     }
   }
   return '';
