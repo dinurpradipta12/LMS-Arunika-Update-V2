@@ -38,6 +38,7 @@ import {
   Sparkles,
   Star,
   Tag,
+  Ticket,
   Trash2,
   Upload,
   UserRound,
@@ -212,6 +213,7 @@ const LANDING_BLOCK_OPTIONS: Array<{
   { value: 'payment', label: 'Pembayaran', description: 'QR Code dan instruksi transfer', icon: CreditCard },
   { value: 'bonus', label: 'Bonus', description: 'Foto dan keterangan bonus', icon: Gift },
   { value: 'cta', label: 'CTA', description: 'Ajakan bertindak penutup', icon: Sparkles },
+  { value: 'ticket_cta', label: 'Book Tickets', description: 'Ajakan tiket dengan tombol besar', icon: Ticket },
   { value: 'spacer', label: 'Jarak', description: 'Atur ruang antar bagian', icon: MoveDown }
 ];
 
@@ -561,6 +563,20 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
       buttonColor: '#ffffff',
       buttonTextColor: '#17283a',
       buttonLabel: 'Hubungi kami',
+      buttonUrl: ''
+    },
+    ticket_cta: {
+      eyebrow: "DON'T JUST HEAR THE STORIES. SEE THEM ON SCREEN.",
+      heading: 'The Stories of Banua Are Waiting for You.',
+      body: 'Ada cerita yang membuatmu penasaran. Ada karakter yang membuatmu berpikir. Ada pengalaman yang hanya bisa kamu rasakan ketika layar mulai menyala.\n\nJangan lewatkan kesempatan untuk menjadi bagian dari perayaan sinema Banua.\n\nPilih film favoritmu. Amankan tiketmu. Sampai bertemu di ruang pemutaran!',
+      highlightTitle: 'ARUH FILM BANUA 2026',
+      highlightSubtitle: 'Stories from Banua, Made for the Big Screen.',
+      cardColor: '',
+      headingColor: '',
+      bodyColor: '',
+      buttonColor: '',
+      buttonTextColor: '#ffffff',
+      buttonLabel: 'BOOK YOUR TICKETS NOW',
       buttonUrl: ''
     },
     spacer: {
@@ -2885,6 +2901,73 @@ export const LandingBlockRenderer: React.FC<{
         </section>
       );
     }
+    case 'ticket_cta': {
+      const ticketCardBg = isHexColor(data.cardColor) ? asText(data.cardColor).trim() : 'var(--surface)';
+      const ticketHeadingColor = isHexColor(data.headingColor) ? asText(data.headingColor).trim() : 'var(--text)';
+      const ticketBodyColor = isHexColor(data.bodyColor) ? asText(data.bodyColor).trim() : 'var(--muted)';
+      const ticketButtonBg = isHexColor(data.buttonColor) ? asText(data.buttonColor).trim() : 'var(--accent)';
+      const ticketButtonText = isHexColor(data.buttonTextColor) ? asText(data.buttonTextColor).trim() : '#ffffff';
+      const eyebrow = asText(data.eyebrow).trim();
+      const highlightTitle = asText(data.highlightTitle).trim();
+      const highlightSubtitle = asText(data.highlightSubtitle).trim();
+      const buttonLabel = asText(data.buttonLabel, 'BOOK YOUR TICKETS NOW').trim();
+      const href = safeHref(asText(data.buttonUrl) || '#') || '#';
+      const opensNewTab = /^https?:/i.test(href);
+      return (
+        <section
+          className="rounded-2xl border border-[var(--border)] p-7 text-center shadow-sm md:p-11"
+          style={{ backgroundColor: ticketCardBg }}
+        >
+          <div className="mx-auto max-w-2xl space-y-5">
+            {eyebrow && (
+              <p
+                className="text-xs font-bold uppercase tracking-[0.18em]"
+                style={{ color: isHexColor(data.cardColor) ? ticketHeadingColor : 'var(--accent-strong)' }}
+              >
+                {eyebrow}
+              </p>
+            )}
+            <h2 className="text-2xl font-bold leading-tight sm:text-3xl" style={{ color: ticketHeadingColor }}>
+              {asText(data.heading, 'The Stories of Banua Are Waiting for You.')}
+            </h2>
+            {asText(data.body).trim() && (
+              <p className="whitespace-pre-wrap text-sm leading-relaxed sm:text-base" style={{ color: ticketBodyColor }}>
+                {asText(data.body)}
+              </p>
+            )}
+            {(highlightTitle || highlightSubtitle) && (
+              <div className="border-t border-[var(--border)]/60 pt-5">
+                {highlightTitle && (
+                  <p className="text-sm font-extrabold uppercase tracking-[0.18em] sm:text-base" style={{ color: ticketHeadingColor }}>
+                    {highlightTitle}
+                  </p>
+                )}
+                {highlightSubtitle && (
+                  <p className="mt-1 text-xs italic sm:text-sm" style={{ color: ticketBodyColor }}>
+                    {highlightSubtitle}
+                  </p>
+                )}
+              </div>
+            )}
+            {buttonLabel && (
+              <div className="pt-2">
+                <a
+                  href={href}
+                  target={opensNewTab ? '_blank' : undefined}
+                  rel={opensNewTab ? 'noreferrer' : undefined}
+                  onClick={() => onCtaClick?.('ticket_cta')}
+                  style={{ backgroundColor: ticketButtonBg, color: ticketButtonText }}
+                  className="inline-flex min-h-[58px] w-full items-center justify-center gap-2.5 rounded-2xl px-8 py-4 text-base font-extrabold tracking-wider shadow-md transition-opacity hover:opacity-90 sm:w-auto sm:min-w-[340px]"
+                >
+                  <Ticket size={20} className="shrink-0" />
+                  <span>{buttonLabel}</span>
+                </a>
+              </div>
+            )}
+          </div>
+        </section>
+      );
+    }
     case 'spacer':
       return <div aria-hidden="true" style={{ height: `${Math.min(240, Math.max(8, Number(data.height) || 48))}px` }} />;
     default:
@@ -4114,7 +4197,7 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
   const patch = (values: Record<string, any>) => onChange({ ...data, ...values });
   const commonButtonFields = <div className="grid gap-4"><Input label="Label tombol" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Daftar sekarang" /><Input label="Link tombol" value={asText(data.buttonUrl)} onChange={event => patch({ buttonUrl: event.target.value })} icon={LinkIcon} placeholder="/form/nama-form atau https://..." /><p className="-mt-2 text-xs leading-relaxed text-[var(--muted)]">Untuk pendaftaran, arahkan ke link Form Maker, misalnya <code>/form/nama-form</code>.</p></div>;
   const pricingButtonFields = <div className="space-y-2"><Input label="Label tombol pilihan paket" value={asText(data.buttonLabel)} onChange={event => patch({ buttonLabel: event.target.value })} placeholder="Contoh: Pilih paket" /><p className="text-[11px] leading-relaxed text-[var(--muted)]">Setelah memilih paket, pengunjung akan melihat total pembayaran dan QR Code di blok Pembayaran.</p></div>;
-  const hasHeadingColor = ['hero', 'text', 'features', 'audience', 'topics', 'classes', 'products', 'workflow', 'pricing', 'profile', 'faq', 'payment', 'bonus', 'cta'].includes(block.type);
+  const hasHeadingColor = ['hero', 'text', 'features', 'audience', 'topics', 'classes', 'products', 'workflow', 'pricing', 'profile', 'faq', 'payment', 'bonus', 'cta', 'ticket_cta'].includes(block.type);
   const headingColorField = hasHeadingColor ? <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3"><div><p className="text-xs font-semibold text-[var(--muted)]">Warna judul section</p><p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Atur warna judul bagian ini tanpa mengubah warna section lainnya.</p></div><div className="flex items-center gap-3"><input type="color" value={headingColorInputValue(data.headingColor)} onChange={event => patch({ headingColor: event.target.value })} aria-label="Warna judul section" className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1" /><span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.headingColor) ? asText(data.headingColor).toUpperCase() : 'Default tema'}</span></div>{isHexColor(data.headingColor) && <button type="button" onClick={() => patch({ headingColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">Gunakan warna default tema</button>}</div> : null;
   switch (block.type) {
     case 'hero': {
@@ -4330,19 +4413,20 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
       return <div className="space-y-4"><Input label="Judul bagian" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />{headingColorField}<LandingBonusEditor items={items} onChange={updateItems} /></div>;
     }
     case 'cta':
+    case 'ticket_cta':
       return (
         <div className="space-y-4">
           <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
             <div>
-              <p className="text-xs font-semibold text-[var(--muted)]">Warna latar card CTA</p>
-              <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Ubah warna latar card CTA sesuai kebutuhan.</p>
+              <p className="text-xs font-semibold text-[var(--muted)]">Warna latar card {block.type === 'ticket_cta' ? 'Book Tickets' : 'CTA'}</p>
+              <p className="mt-1 text-[11px] leading-relaxed text-[var(--muted)]">Ubah warna latar card sesuai kebutuhan.</p>
             </div>
             <div className="flex items-center gap-3">
               <input
                 type="color"
-                value={isHexColor(data.cardColor) ? asText(data.cardColor).trim() : '#17283a'}
+                value={isHexColor(data.cardColor) ? asText(data.cardColor).trim() : (block.type === 'ticket_cta' ? '#ffffff' : '#17283a')}
                 onChange={event => patch({ cardColor: event.target.value })}
-                aria-label="Warna latar card CTA"
+                aria-label="Warna latar card"
                 className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
               />
               <span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.cardColor) ? asText(data.cardColor).toUpperCase() : 'Default tema'}</span>
@@ -4353,22 +4437,31 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
               </button>
             )}
           </div>
-          <Input label="Judul CTA" value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />
+          {block.type === 'ticket_cta' && (
+            <Input label="Eyebrow (opsional)" value={asText(data.eyebrow)} onChange={event => patch({ eyebrow: event.target.value })} placeholder="DON'T JUST HEAR THE STORIES. SEE THEM ON SCREEN." />
+          )}
+          <Input label={block.type === 'ticket_cta' ? 'Judul utama' : 'Judul CTA'} value={asText(data.heading)} onChange={event => patch({ heading: event.target.value })} />
           {headingColorField}
-          <Textarea label="Deskripsi CTA" value={asText(data.body)} onChange={event => patch({ body: event.target.value })} />
+          <Textarea label={block.type === 'ticket_cta' ? 'Isi teks ajakan' : 'Deskripsi CTA'} value={asText(data.body)} onChange={event => patch({ body: event.target.value })} className={block.type === 'ticket_cta' ? 'min-h-[150px]' : undefined} />
+          {block.type === 'ticket_cta' && (
+            <>
+              <Input label="Nama program / event (opsional)" value={asText(data.highlightTitle)} onChange={event => patch({ highlightTitle: event.target.value })} placeholder="ARUH FILM BANUA 2026" />
+              <Input label="Tagline program (opsional)" value={asText(data.highlightSubtitle)} onChange={event => patch({ highlightSubtitle: event.target.value })} placeholder="Stories from Banua, Made for the Big Screen." />
+            </>
+          )}
           <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
             <div>
-              <p className="text-xs font-semibold text-[var(--muted)]">Warna deskripsi CTA</p>
+              <p className="text-xs font-semibold text-[var(--muted)]">Warna teks deskripsi</p>
             </div>
             <div className="flex items-center gap-3">
               <input
                 type="color"
-                value={isHexColor(data.bodyColor) ? asText(data.bodyColor).trim() : '#ffffff'}
+                value={isHexColor(data.bodyColor) ? asText(data.bodyColor).trim() : (block.type === 'ticket_cta' ? '#475569' : '#ffffff')}
                 onChange={event => patch({ bodyColor: event.target.value })}
-                aria-label="Warna deskripsi CTA"
+                aria-label="Warna deskripsi"
                 className="h-10 w-14 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
               />
-              <span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.bodyColor) ? asText(data.bodyColor).toUpperCase() : 'Default putih lembut'}</span>
+              <span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.bodyColor) ? asText(data.bodyColor).toUpperCase() : 'Default tema'}</span>
             </div>
             {isHexColor(data.bodyColor) && (
               <button type="button" onClick={() => patch({ bodyColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">
@@ -4383,16 +4476,16 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
               <div className="flex items-center gap-2.5">
                 <input
                   type="color"
-                  value={isHexColor(data.buttonColor) ? asText(data.buttonColor).trim() : '#ffffff'}
+                  value={isHexColor(data.buttonColor) ? asText(data.buttonColor).trim() : (block.type === 'ticket_cta' ? '#17283a' : '#ffffff')}
                   onChange={event => patch({ buttonColor: event.target.value })}
-                  aria-label="Warna latar tombol CTA"
+                  aria-label="Warna latar tombol"
                   className="h-10 w-12 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
                 />
-                <span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.buttonColor) ? asText(data.buttonColor).toUpperCase() : '#FFFFFF'}</span>
+                <span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.buttonColor) ? asText(data.buttonColor).toUpperCase() : 'Default tema'}</span>
               </div>
-              {isHexColor(data.buttonColor) && asText(data.buttonColor).toLowerCase() !== '#ffffff' && (
-                <button type="button" onClick={() => patch({ buttonColor: '#ffffff' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">
-                  Reset ke putih
+              {isHexColor(data.buttonColor) && (
+                <button type="button" onClick={() => patch({ buttonColor: block.type === 'ticket_cta' ? '' : '#ffffff' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">
+                  Reset ke default
                 </button>
               )}
             </div>
@@ -4401,16 +4494,16 @@ const BlockInspector: React.FC<{ block: LandingBlock; onChange: (data: Record<st
               <div className="flex items-center gap-2.5">
                 <input
                   type="color"
-                  value={isHexColor(data.buttonTextColor) ? asText(data.buttonTextColor).trim() : '#17283a'}
+                  value={isHexColor(data.buttonTextColor) ? asText(data.buttonTextColor).trim() : (block.type === 'ticket_cta' ? '#ffffff' : '#17283a')}
                   onChange={event => patch({ buttonTextColor: event.target.value })}
-                  aria-label="Warna teks tombol CTA"
+                  aria-label="Warna teks tombol"
                   className="h-10 w-12 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] p-1"
                 />
                 <span className="text-xs font-semibold text-[var(--text)]">{isHexColor(data.buttonTextColor) ? asText(data.buttonTextColor).toUpperCase() : 'Default tema'}</span>
               </div>
               {isHexColor(data.buttonTextColor) && (
-                <button type="button" onClick={() => patch({ buttonTextColor: '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">
-                  Gunakan default tema
+                <button type="button" onClick={() => patch({ buttonTextColor: block.type === 'ticket_cta' ? '#ffffff' : '' })} className="text-left text-[11px] font-semibold text-[var(--muted)] hover:text-[var(--text)]">
+                  Reset ke default
                 </button>
               )}
             </div>
