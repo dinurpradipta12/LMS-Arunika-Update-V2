@@ -7,6 +7,9 @@ import {
   Bold,
   Calendar,
   Check,
+  ChevronLeft,
+  ChevronRight,
+  Clock,
   Copy,
   CopyPlus,
   CreditCard,
@@ -23,8 +26,6 @@ import {
   List,
   ListOrdered,
   Loader2,
-  ChevronLeft,
-  ChevronRight,
   MoveDown,
   MoveUp,
   MousePointerClick,
@@ -230,12 +231,19 @@ type LandingClassItem = {
   imageUrl: string;
   imageAlt: string;
 };
+type LandingProductSchedule = {
+  id: string;
+  date: string;
+  times: string[];
+};
 type LandingProductItem = {
   id: string;
   title: string;
   detail: string;
   description: string;
   date: string;
+  availableTimeLabel: string;
+  availableTimes: LandingProductSchedule[];
   imageUrl: string;
   imageAlt: string;
   buttonLabel: string;
@@ -536,6 +544,8 @@ const createLandingBlock = (type: LandingBlockType, index = 0): LandingBlock => 
         detail: 'Rp 150.000 · Akses selamanya',
         description: 'Jelaskan manfaat utama dan apa saja yang didapatkan dari produk ini.',
         date: '',
+        availableTimeLabel: 'Available time',
+        availableTimes: [],
         imageUrl: '',
         imageAlt: 'Foto produk',
         buttonLabel: 'Lihat Produk',
@@ -848,12 +858,36 @@ const normalizeClassItems = (value: unknown, fallback: LandingClassItem[] = []):
   }));
 };
 
+const createProductSchedule = (index = 0): LandingProductSchedule => ({
+  id: `landing-product-schedule-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 6)}`,
+  date: '',
+  times: ['']
+});
+
+const normalizeProductSchedules = (value: unknown): LandingProductSchedule[] => {
+  if (!Array.isArray(value)) return [];
+  return value.slice(0, 20).map((entry, index) => {
+    const rawTimes = Array.isArray(entry?.times)
+      ? entry.times.map((time: unknown) => asText(time))
+      : entry?.time
+        ? [asText(entry.time)]
+        : [];
+    return {
+      id: asText(entry?.id, `landing-product-schedule-${index}`),
+      date: asText(entry?.date),
+      times: rawTimes.length ? rawTimes.slice(0, 16) : ['']
+    };
+  });
+};
+
 const createProductItem = (index = 0): LandingProductItem => ({
   id: `landing-product-${Date.now()}-${index}-${Math.random().toString(36).slice(2, 7)}`,
   title: `Produk ${index + 1}`,
   detail: 'Rp 150.000',
   description: 'Jelaskan keunggulan dan isi produk ini secara singkat.',
   date: '',
+  availableTimeLabel: 'Available time',
+  availableTimes: [],
   imageUrl: '',
   imageAlt: 'Foto produk',
   buttonLabel: 'Lihat Produk',
@@ -868,6 +902,8 @@ const normalizeProductItems = (value: unknown, fallback: LandingProductItem[] = 
     detail: asText(item?.detail || item?.productDetail || item?.product_detail || item?.price),
     description: asText(item?.description || item?.body),
     date: asText(item?.date || item?.scheduleDate || item?.schedule_date),
+    availableTimeLabel: asText(item?.availableTimeLabel || item?.available_time_label, 'Available time'),
+    availableTimes: normalizeProductSchedules(item?.availableTimes || item?.available_times),
     imageUrl: asText(item?.imageUrl || item?.image_url),
     imageAlt: asText(item?.imageAlt || item?.image_alt, 'Foto produk'),
     buttonLabel: asText(item?.buttonLabel || item?.button_label, 'Lihat Produk'),
@@ -1983,7 +2019,7 @@ const LandingClassesBlock: React.FC<{
       className={`relative grid overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:grid-cols-[minmax(180px,240px)_minmax(0,1fr)] ${draggedClassIndex === index ? 'opacity-60 ring-2 ring-[var(--accent)]' : ''}`}
     >
       <div className="relative min-h-[190px] bg-[var(--accent-soft)] sm:min-h-full">
-        {onReorderItems && items.length > 1 && (
+        {onReorderItems && (
           <div className="absolute left-2.5 top-2.5 z-10">
             {renderCardOrderControls(index, effectiveMode === 'slider')}
           </div>
@@ -2082,7 +2118,7 @@ const LandingClassesBlock: React.FC<{
                   className={`flex w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:w-[320px] ${draggedClassIndex === index ? 'opacity-60 ring-2 ring-[var(--accent)]' : ''}`}
                 >
                   <div className="relative aspect-square w-full overflow-hidden bg-[var(--accent-soft)]">
-                    {onReorderItems && items.length > 1 && (
+                    {onReorderItems && (
                       <div className="absolute left-2.5 top-2.5 z-10">
                         {renderCardOrderControls(index, true)}
                       </div>
@@ -2213,7 +2249,7 @@ const LandingProductsBlock: React.FC<{
   };
 
   const renderCardOrderControls = (index: number, isHorizontal: boolean) => {
-    if (!onReorderItems || items.length <= 1) return null;
+    if (!onReorderItems) return null;
     const PrevIcon = isHorizontal ? ChevronLeft : MoveUp;
     const NextIcon = isHorizontal ? ChevronRight : MoveDown;
     return (
@@ -2227,9 +2263,10 @@ const LandingProductsBlock: React.FC<{
         </span>
         <select
           value={index}
+          disabled={items.length <= 1}
           aria-label={`Urutan produk ${index + 1}`}
           onChange={event => moveProductItem(index, Number(event.target.value))}
-          className="cursor-pointer rounded-md bg-transparent px-1 py-0.5 text-[11px] font-bold text-[var(--accent-strong)] outline-none hover:bg-[var(--accent-soft)]"
+          className="cursor-pointer rounded-md bg-transparent px-1 py-0.5 text-[11px] font-bold text-[var(--accent-strong)] outline-none hover:bg-[var(--accent-soft)] disabled:cursor-default disabled:opacity-70"
         >
           {items.map((_, optionIndex) => (
             <option key={`canvas-product-order-${optionIndex}`} value={optionIndex}>
@@ -2239,7 +2276,7 @@ const LandingProductsBlock: React.FC<{
         </select>
         <button
           type="button"
-          disabled={index === 0}
+          disabled={items.length <= 1 || index === 0}
           onClick={() => moveProductItem(index, index - 1)}
           aria-label={`Majukan urutan produk ${index + 1}`}
           title="Pindah ke urutan sebelumnya"
@@ -2249,7 +2286,7 @@ const LandingProductsBlock: React.FC<{
         </button>
         <button
           type="button"
-          disabled={index === items.length - 1}
+          disabled={items.length <= 1 || index === items.length - 1}
           onClick={() => moveProductItem(index, index + 1)}
           aria-label={`Mundurkan urutan produk ${index + 1}`}
           title="Pindah ke urutan berikutnya"
@@ -2269,6 +2306,46 @@ const LandingProductsBlock: React.FC<{
       left: direction === 'next' ? scrollAmount : -scrollAmount,
       behavior: 'smooth'
     });
+  };
+
+  const renderAvailableTimes = (item: LandingProductItem) => {
+    const validSchedules = item.availableTimes
+      .map(schedule => ({
+        id: schedule.id,
+        date: schedule.date.trim(),
+        times: schedule.times.map(time => time.trim()).filter(Boolean)
+      }))
+      .filter(schedule => schedule.date || schedule.times.length > 0);
+    if (!validSchedules.length) return null;
+    const scheduleLabel = item.availableTimeLabel.trim() || 'Available time';
+    return (
+      <div className="space-y-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
+        <p className="inline-flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-[0.08em] text-[var(--accent-strong)]">
+          <Clock size={12} className="shrink-0" />
+          <span>{scheduleLabel}</span>
+        </p>
+        <div className="space-y-1.5">
+          {validSchedules.map((schedule, scheduleIndex) => (
+            <div key={`${schedule.id}-${scheduleIndex}`} className="flex flex-wrap items-center gap-1.5 text-xs">
+              {schedule.date && (
+                <span className="font-semibold text-[var(--text)]">
+                  {schedule.date}
+                  {schedule.times.length > 0 ? ' ·' : ''}
+                </span>
+              )}
+              {schedule.times.map((time, timeIndex) => (
+                <span
+                  key={`${schedule.id}-time-${timeIndex}`}
+                  className="inline-flex items-center rounded-md border border-[var(--border)] bg-[var(--surface)] px-2 py-0.5 text-[11px] font-semibold text-[var(--accent-strong)]"
+                >
+                  {time}
+                </span>
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   };
 
   const renderCta = (item: LandingProductItem) => {
@@ -2334,7 +2411,7 @@ const LandingProductsBlock: React.FC<{
       className={`relative grid overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:grid-cols-[minmax(180px,240px)_minmax(0,1fr)] ${draggedIndex === index ? 'opacity-60 ring-2 ring-[var(--accent)]' : ''}`}
     >
       <div className="relative min-h-[190px] bg-[var(--accent-soft)] sm:min-h-full">
-        {onReorderItems && items.length > 1 && (
+        {onReorderItems && (
           <div className="absolute left-2.5 top-2.5 z-10">
             {renderCardOrderControls(index, effectiveMode === 'slider')}
           </div>
@@ -2362,6 +2439,7 @@ const LandingProductsBlock: React.FC<{
           </p>
         )}
         {item.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
+        {renderAvailableTimes(item)}
         {renderCta(item)}
       </div>
     </article>
@@ -2433,7 +2511,7 @@ const LandingProductsBlock: React.FC<{
                   className={`flex w-[280px] shrink-0 snap-start flex-col overflow-hidden rounded-2xl border border-[var(--border)] bg-[var(--surface)] shadow-sm sm:w-[320px] ${draggedIndex === index ? 'opacity-60 ring-2 ring-[var(--accent)]' : ''}`}
                 >
                   <div className="relative aspect-square w-full overflow-hidden bg-[var(--accent-soft)]">
-                    {onReorderItems && items.length > 1 && (
+                    {onReorderItems && (
                       <div className="absolute left-2.5 top-2.5 z-10">
                         {renderCardOrderControls(index, true)}
                       </div>
@@ -2462,6 +2540,7 @@ const LandingProductsBlock: React.FC<{
                         </p>
                       )}
                       {item.description && <p className="whitespace-pre-wrap text-sm leading-relaxed text-[var(--muted)]">{item.description}</p>}
+                      {renderAvailableTimes(item)}
                     </div>
                     {renderCta(item)}
                   </div>
@@ -3079,42 +3158,39 @@ const CardItemOrderToolbar: React.FC<{
   onRemove: () => void;
 }> = ({ index, total, label, onMove, onRemove }) => (
   <div className="flex items-center gap-1">
-    {total > 1 && (
-      <>
-        <select
-          value={index}
-          aria-label={`Posisi ${label}`}
-          onChange={event => onMove(Number(event.target.value))}
-          className="h-7 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[11px] font-bold text-[var(--accent-strong)] outline-none focus:border-[var(--accent)]"
-        >
-          {Array.from({ length: total }, (_, optionIndex) => (
-            <option key={`${label}-pos-${optionIndex}`} value={optionIndex}>
-              #{optionIndex + 1}
-            </option>
-          ))}
-        </select>
-        <button
-          type="button"
-          disabled={index === 0}
-          onClick={() => onMove(index - 1)}
-          aria-label={`Naikkan ${label}`}
-          title={`Naikkan ${label}`}
-          className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:opacity-30"
-        >
-          <MoveUp size={15} />
-        </button>
-        <button
-          type="button"
-          disabled={index === total - 1}
-          onClick={() => onMove(index + 1)}
-          aria-label={`Turunkan ${label}`}
-          title={`Turunkan ${label}`}
-          className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:opacity-30"
-        >
-          <MoveDown size={15} />
-        </button>
-      </>
-    )}
+    <select
+      value={index}
+      disabled={total <= 1}
+      aria-label={`Posisi ${label}`}
+      onChange={event => onMove(Number(event.target.value))}
+      className="h-7 cursor-pointer rounded-lg border border-[var(--border)] bg-[var(--surface)] px-1.5 text-[11px] font-bold text-[var(--accent-strong)] outline-none focus:border-[var(--accent)] disabled:cursor-default disabled:opacity-60"
+    >
+      {Array.from({ length: total }, (_, optionIndex) => (
+        <option key={`${label}-pos-${optionIndex}`} value={optionIndex}>
+          #{optionIndex + 1}
+        </option>
+      ))}
+    </select>
+    <button
+      type="button"
+      disabled={total <= 1 || index === 0}
+      onClick={() => onMove(index - 1)}
+      aria-label={`Naikkan ${label}`}
+      title={`Naikkan ${label}`}
+      className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:opacity-30"
+    >
+      <MoveUp size={15} />
+    </button>
+    <button
+      type="button"
+      disabled={total <= 1 || index === total - 1}
+      onClick={() => onMove(index + 1)}
+      aria-label={`Turunkan ${label}`}
+      title={`Turunkan ${label}`}
+      className="rounded-lg p-1.5 text-[var(--muted)] transition-colors hover:bg-[var(--surface)] hover:text-[var(--text)] disabled:opacity-30"
+    >
+      <MoveDown size={15} />
+    </button>
     <button
       type="button"
       onClick={onRemove}
@@ -3911,6 +3987,111 @@ const LandingProductsEditor: React.FC<{
               <Input label="Detail produk" value={item.detail} onChange={event => updateItem(index, { detail: event.target.value })} placeholder="Contoh: Rp 150.000 · Template Canva & Notion" />
               <Input label="Tanggal / jadwal (opsional)" value={item.date} onChange={event => updateItem(index, { date: event.target.value })} placeholder="Contoh: 17 November 2026 · Promo Terbatas" />
               <Textarea label="Deskripsi produk" value={item.description} onChange={event => updateItem(index, { description: event.target.value })} placeholder="Jelaskan manfaat, fitur, dan isi produk ini." className="min-h-[110px]" />
+              <div className="space-y-3 rounded-xl border border-[var(--border)] bg-[var(--surface)] p-3">
+                <div className="flex items-center justify-between gap-2">
+                  <div>
+                    <p className="text-xs font-semibold text-[var(--text)]">Available time / jadwal penayangan</p>
+                    <p className="mt-0.5 text-[11px] text-[var(--muted)]">Tambahkan beberapa tanggal dan jam yang tersedia.</p>
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => updateItem(index, { availableTimes: [...item.availableTimes, createProductSchedule(item.availableTimes.length)] })}
+                    className="inline-flex shrink-0 items-center gap-1 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] px-2 py-1 text-[11px] font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
+                  >
+                    <Plus size={12} /> Jadwal
+                  </button>
+                </div>
+                {item.availableTimes.length > 0 && (
+                  <>
+                    <Input
+                      label="Label jadwal"
+                      value={item.availableTimeLabel}
+                      onChange={event => updateItem(index, { availableTimeLabel: event.target.value })}
+                      placeholder="Available time"
+                    />
+                    <div className="space-y-2.5">
+                      {item.availableTimes.map((schedule, scheduleIndex) => (
+                        <div key={`${schedule.id}-${scheduleIndex}`} className="space-y-2 rounded-lg border border-[var(--border)] bg-[var(--surface-soft)] p-2.5">
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="text-[11px] font-semibold text-[var(--muted)]">Jadwal {scheduleIndex + 1}</span>
+                            <button
+                              type="button"
+                              onClick={() => updateItem(index, {
+                                availableTimes: item.availableTimes.filter((_, sIdx) => sIdx !== scheduleIndex)
+                              })}
+                              aria-label={`Hapus jadwal ${scheduleIndex + 1}`}
+                              className="rounded-md p-1 text-[var(--danger-text)] hover:bg-[var(--surface)]"
+                            >
+                              <Trash2 size={13} />
+                            </button>
+                          </div>
+                          <Input
+                            label="Tanggal"
+                            value={schedule.date}
+                            onChange={event => updateItem(index, {
+                              availableTimes: item.availableTimes.map((entry, sIdx) =>
+                                sIdx === scheduleIndex ? { ...entry, date: event.target.value } : entry
+                              )
+                            })}
+                            placeholder="Contoh: 18 November 2026"
+                          />
+                          <div className="space-y-1.5">
+                            <div className="flex items-center justify-between gap-2">
+                              <span className="text-[11px] font-semibold text-[var(--muted)]">Jam tersedia</span>
+                              <button
+                                type="button"
+                                onClick={() => updateItem(index, {
+                                  availableTimes: item.availableTimes.map((entry, sIdx) =>
+                                    sIdx === scheduleIndex ? { ...entry, times: [...entry.times, ''] } : entry
+                                  )
+                                })}
+                                className="inline-flex items-center gap-1 rounded-md px-2 py-0.5 text-[11px] font-semibold text-[var(--accent-strong)] hover:bg-[var(--accent-soft)]"
+                              >
+                                <Plus size={11} /> Tambah jam
+                              </button>
+                            </div>
+                            <div className="space-y-1.5">
+                              {schedule.times.map((time, timeIndex) => (
+                                <div key={`${schedule.id}-time-input-${timeIndex}`} className="flex items-center gap-1.5">
+                                  <input
+                                    type="text"
+                                    value={time}
+                                    onChange={event => updateItem(index, {
+                                      availableTimes: item.availableTimes.map((entry, sIdx) =>
+                                        sIdx === scheduleIndex
+                                          ? { ...entry, times: entry.times.map((t, tIdx) => tIdx === timeIndex ? event.target.value : t) }
+                                          : entry
+                                      )
+                                    })}
+                                    placeholder="Contoh: 14.00 WITA"
+                                    className="min-w-0 flex-1 rounded-lg border border-[var(--border)] bg-[var(--surface)] px-2.5 py-1.5 text-xs outline-none focus:border-[var(--accent)]"
+                                  />
+                                  {schedule.times.length > 1 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => updateItem(index, {
+                                        availableTimes: item.availableTimes.map((entry, sIdx) =>
+                                          sIdx === scheduleIndex
+                                            ? { ...entry, times: entry.times.filter((_, tIdx) => tIdx !== timeIndex) }
+                                            : entry
+                                        )
+                                      })}
+                                      aria-label={`Hapus jam ${timeIndex + 1}`}
+                                      className="rounded-md p-1 text-[var(--muted)] hover:bg-[var(--surface)] hover:text-[var(--danger-text)]"
+                                    >
+                                      <X size={13} />
+                                    </button>
+                                  )}
+                                </div>
+                              ))}
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+              </div>
               <Input label="Teks tombol CTA" value={item.buttonLabel} onChange={event => updateItem(index, { buttonLabel: event.target.value })} placeholder="Contoh: Lihat Produk / Beli Sekarang" />
               <Input label="Link CTA produk" icon={LinkIcon} value={item.buttonUrl} onChange={event => updateItem(index, { buttonUrl: event.target.value })} placeholder="https://arunika.space/landing/..." />
             </>
