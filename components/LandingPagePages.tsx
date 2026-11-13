@@ -4475,15 +4475,38 @@ const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
   onCancelDelete,
   onConfirmDelete,
   onCloseInsight
-}) => (
-  <div className="mx-auto max-w-6xl space-y-8 p-4 md:p-8">
+}) => {
+  const [gridColumns, setGridColumns] = useState<3 | 4>(3);
+
+  return (
+  <div className="mx-auto max-w-7xl space-y-6 p-4 md:p-8">
     <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
       <div>
         <Link to="/admin" className="mb-3 inline-flex items-center gap-1 text-xs font-semibold text-[var(--muted)] hover:text-[var(--accent-strong)]"><ArrowLeft size={14} /> Semua Space</Link>
         <h1 className="text-3xl font-bold">{LANDING_PAGE_SPACE_LABEL}</h1>
         <p className="mt-1 max-w-2xl text-sm text-[var(--muted)]">Buat halaman promosi produk dengan blok drag-and-drop, CTA pendaftaran, dan informasi pembayaran.</p>
       </div>
-      <Button icon={Plus} onClick={() => void onCreate()} isLoading={isCreating}>Buat Landing Page</Button>
+      <div className="flex flex-wrap items-center gap-2.5">
+        {pages.length > 0 && (
+          <div className="hidden items-center rounded-xl border border-[var(--border)] bg-[var(--surface)] p-1 lg:inline-flex" role="group" aria-label="Jumlah kolom">
+            <button
+              type="button"
+              onClick={() => setGridColumns(3)}
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${gridColumns === 3 ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:text-[var(--text)]'}`}
+            >
+              3 Kolom
+            </button>
+            <button
+              type="button"
+              onClick={() => setGridColumns(4)}
+              className={`rounded-lg px-2.5 py-1.5 text-xs font-semibold transition-colors ${gridColumns === 4 ? 'bg-[var(--accent)] text-white' : 'text-[var(--muted)] hover:text-[var(--text)]'}`}
+            >
+              4 Kolom
+            </button>
+          </div>
+        )}
+        <Button icon={Plus} onClick={() => void onCreate()} isLoading={isCreating}>Buat Landing Page</Button>
+      </div>
     </div>
     <NoticeBanner notice={notice} />
     {isLoading ? (
@@ -4493,7 +4516,7 @@ const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
     ) : pages.length === 0 ? (
       <Card className="space-y-4 py-14 text-center"><Layout size={34} className="mx-auto text-[var(--muted)]" /><p className="font-semibold">Belum ada landing page</p><p className="text-sm text-[var(--muted)]">Buat halaman pertama untuk mempromosikan produk Anda.</p><Button onClick={() => void onCreate()} icon={Plus} className="mx-auto">Buat Landing Page Pertama</Button></Card>
     ) : (
-      <div className="grid gap-5 md:grid-cols-2">
+      <div className={`grid gap-4 sm:grid-cols-2 ${gridColumns === 4 ? 'lg:grid-cols-3 xl:grid-cols-4' : 'lg:grid-cols-3'}`}>
         {pages.map(page => {
           const insight = insights[page.id];
           const coverImage = getLandingPreviewImage(page);
@@ -4505,11 +4528,11 @@ const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
             asText(heroBlock?.data?.headline).trim() ||
             asText(textBlock?.data?.body).trim() ||
             'Belum ada deskripsi landing page.';
-          return <Card key={page.id} className="flex h-full flex-col gap-5 overflow-hidden">
+          return <Card key={page.id} className="flex h-full flex-col gap-3.5 overflow-hidden p-4">
             {coverImage && (
               <div
                 onClick={() => navigate(`/admin/landing-pages/${page.id}`)}
-                className="group relative -mx-6 -mt-6 mb-1 aspect-[16/8] cursor-pointer overflow-hidden border-b border-[var(--border)] bg-[var(--surface-soft)]"
+                className="group relative -mx-4 -mt-4 mb-0.5 aspect-[16/9] cursor-pointer overflow-hidden border-b border-[var(--border)] bg-[var(--surface-soft)]"
               >
                 <img
                   src={coverImage}
@@ -4518,29 +4541,34 @@ const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
                 />
               </div>
             )}
-            <div className="flex items-start justify-between gap-3">
+            <div className="flex items-start justify-between gap-2">
               <div className="min-w-0">
-                <div className="flex flex-wrap items-center gap-2"><Badge color="var(--accent-soft)">{LANDING_PAGE_SPACE_LABEL}</Badge><span className={`rounded-lg px-2 py-1 text-[10px] font-semibold ${page.status === 'published' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : page.status === 'archived' ? 'bg-[var(--danger-soft)] text-[var(--danger-text)]' : 'bg-[var(--surface-soft)] text-[var(--muted)]'}`}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</span></div>
-                <h2 className="mt-3 truncate text-xl font-bold">{page.title}</h2>
-                <p className="mt-1 break-all text-xs text-[var(--muted)]">/landing/{page.slug}</p>
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <Badge color="var(--accent-soft)">{LANDING_PAGE_SPACE_LABEL}</Badge>
+                  <span className={`rounded-lg px-2 py-0.5 text-[10px] font-semibold ${page.status === 'published' ? 'bg-[var(--success-soft)] text-[var(--success-text)]' : page.status === 'archived' ? 'bg-[var(--danger-soft)] text-[var(--danger-text)]' : 'bg-[var(--surface-soft)] text-[var(--muted)]'}`}>{page.status === 'published' ? 'Publik' : page.status === 'archived' ? 'Arsip' : 'Draft'}</span>
+                </div>
+                <h2 className="mt-2 truncate text-base font-bold">{page.title}</h2>
+                <p className="mt-0.5 truncate text-[11px] text-[var(--muted)]">/landing/{page.slug}</p>
               </div>
-              <Layout className="shrink-0 text-[var(--accent-strong)]" size={24} />
+              <Layout className="shrink-0 text-[var(--accent-strong)]" size={18} />
             </div>
-            <p className="line-clamp-2 text-sm leading-relaxed text-[var(--muted)]">{summaryDescription}</p>
-            <div className="grid grid-cols-3 gap-2 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-3">
-              <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><Eye size={13} /> Views</span><strong className="mt-1 block text-sm">{formatInsightCount(insight?.total_views)}</strong></div>
-              <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><Users size={13} /> Unik</span><strong className="mt-1 block text-sm">{formatInsightCount(insight?.unique_visitors)}</strong></div>
-              <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><MousePointerClick size={13} /> CTA</span><strong className="mt-1 block text-sm">{formatInsightCount(insight?.cta_clicks)}</strong></div>
+            <p className="line-clamp-2 text-xs leading-relaxed text-[var(--muted)]">{summaryDescription}</p>
+            <div className="grid grid-cols-3 gap-1.5 rounded-xl border border-[var(--border)] bg-[var(--surface-soft)] p-2.5">
+              <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><Eye size={11} /> Views</span><strong className="mt-0.5 block text-xs">{formatInsightCount(insight?.total_views)}</strong></div>
+              <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><Users size={11} /> Unik</span><strong className="mt-0.5 block text-xs">{formatInsightCount(insight?.unique_visitors)}</strong></div>
+              <div className="min-w-0"><span className="flex items-center gap-1 text-[10px] font-semibold text-[var(--muted)]"><MousePointerClick size={11} /> CTA</span><strong className="mt-0.5 block text-xs">{formatInsightCount(insight?.cta_clicks)}</strong></div>
             </div>
-            <p className="-mt-3 text-[10px] text-[var(--muted)]">Ringkasan 30 hari terakhir</p>
-            <div className="grid grid-cols-2 gap-3 text-xs text-[var(--muted)]"><span>{page.blocks.length} blok konten</span><span className="text-right">Tema {FORM_THEME_OPTIONS.find(option => option.value === page.theme)?.label || 'Navy'}</span></div>
-            <div className="mt-auto grid grid-cols-2 gap-2 pt-2 sm:grid-cols-3">
-              <Button variant="secondary" className="px-2 text-xs" onClick={() => navigate(`/admin/landing-pages/${page.id}`)}>Edit Page</Button>
-              <Button variant="secondary" className="px-2 text-xs" icon={BarChart3} onClick={() => onOpenInsight(page)}>Lihat insight</Button>
-              <Button variant={copiedSlug === page.slug ? 'green' : 'secondary'} className="px-2 text-xs" icon={copiedSlug === page.slug ? Check : Copy} onClick={() => void onCopy(page)}>{copiedSlug === page.slug ? 'Tersalin' : 'Copy Link'}</Button>
-              <Button variant="secondary" className="px-2 text-xs" icon={CopyPlus} isLoading={duplicatingId === page.id} onClick={() => void onDuplicate(page)}>Duplikat</Button>
-              <Button className="px-2 text-xs" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Buka Publik</Button>
-              <Button type="button" variant="danger" className="px-2 text-xs" icon={Trash2} onClick={() => onDeleteTarget(page)}>Hapus</Button>
+            <div className="flex items-center justify-between gap-2 text-[11px] text-[var(--muted)]">
+              <span>{page.blocks.length} blok · 30 hari</span>
+              <span>Tema {FORM_THEME_OPTIONS.find(option => option.value === page.theme)?.label || 'Navy'}</span>
+            </div>
+            <div className="mt-auto grid grid-cols-2 gap-1.5 pt-1">
+              <Button variant="secondary" className="min-h-8 px-2 py-1.5 text-[11px]" onClick={() => navigate(`/admin/landing-pages/${page.id}`)}>Edit Page</Button>
+              <Button variant="secondary" className="min-h-8 px-2 py-1.5 text-[11px]" icon={BarChart3} onClick={() => onOpenInsight(page)}>Insight</Button>
+              <Button variant={copiedSlug === page.slug ? 'green' : 'secondary'} className="min-h-8 px-2 py-1.5 text-[11px]" icon={copiedSlug === page.slug ? Check : Copy} onClick={() => void onCopy(page)}>{copiedSlug === page.slug ? 'Tersalin' : 'Copy Link'}</Button>
+              <Button variant="secondary" className="min-h-8 px-2 py-1.5 text-[11px]" icon={CopyPlus} isLoading={duplicatingId === page.id} onClick={() => void onDuplicate(page)}>Duplikat</Button>
+              <Button className="min-h-8 px-2 py-1.5 text-[11px]" icon={ExternalLink} disabled={page.status !== 'published'} onClick={() => window.open(createLandingShareLink(page.slug), '_blank', 'noopener,noreferrer')}>Buka</Button>
+              <Button type="button" variant="danger" className="min-h-8 px-2 py-1.5 text-[11px]" icon={Trash2} onClick={() => onDeleteTarget(page)}>Hapus</Button>
             </div>
           </Card>;
         })}
@@ -4549,7 +4577,8 @@ const LandingPagesPageView: React.FC<LandingPagesPageViewProps> = ({
     <LandingInsightModal page={insightTarget} client={client} onClose={onCloseInsight} />
     <ConfirmModal open={Boolean(deleteTarget)} title="Hapus landing page ini?" description={deleteTarget ? <>Landing page <strong className="text-[var(--text)]">{deleteTarget.title}</strong> akan dihapus permanen.</> : null} confirmLabel="Hapus Page" isLoading={isDeleting} onCancel={onCancelDelete} onConfirm={() => void onConfirmDelete()} />
   </div>
-);
+  );
+};
 
 export const LandingPagesPage: React.FC<{ client: any }> = ({ client }) => {
   const navigate = useNavigate();
